@@ -1,7 +1,7 @@
 # failure-review Specification
 
 ## Purpose
-TBD - created by archiving change add-failure-review. Update Purpose after archive.
+`nightowl review` cho dev xem lại các bản ghi lỗi và đánh dấu lỗi thật (`confirmed`) hay nhiễu (`dismissed`), để báo cáo và bộ test chỉ còn lỗi đáng tin, mà không gửi gì ra ngoài máy.
 
 ## Requirements
 
