@@ -203,11 +203,11 @@ export function listFailuresToExport(db: DatabaseSync, filter: ExportFilter): re
               f.ai_content, f.final_content, f.category, f.category_reason, f.category_confidence
        FROM failures f LEFT JOIN events p ON p.id = f.prompt_event_id
        WHERE f.status != 'dismissed'
-         AND (?1 IS NULL OR f.created_at >= ?1)
-         AND (?2 IS NULL OR COALESCE(f.category, 'unclassified') IN (SELECT value FROM json_each(?2)))
+         AND (? IS NULL OR f.created_at >= ?)
+         AND (? IS NULL OR COALESCE(f.category, 'unclassified') IN (SELECT value FROM json_each(?)))
        ORDER BY f.id`,
     )
-    .all(filter.since, categories) as unknown as Array<{
+    .all(filter.since, filter.since, categories, categories) as unknown as Array<{
     id: number;
     created_at: string;
     file_path: string;
