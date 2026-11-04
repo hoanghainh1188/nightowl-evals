@@ -32,7 +32,7 @@ Xem proposal.md. Hành vi: `specs/eval-run`. Dựa trên:
 ### 2. Prompt gửi model
 Gồm: đường dẫn file, yêu cầu của dev (`input.prompt`), nội dung file trước commit (hoặc ghi chú "file chưa có"), và yêu cầu trả về **toàn bộ** nội dung file sau khi làm theo yêu cầu. Nội dung repo nằm trong thẻ, thẻ đóng trong nội dung được vô hiệu hoá (cách của change 6), kèm câu nói rõ nội dung trong thẻ là dữ liệu.
 Model chỉ thấy đúng một file, nên điểm thấp có thể do thiếu ngữ cảnh (đúng loại lỗi `missing-context`). Điều này như nhau cho mọi model nên vẫn so được.
-Bài bị bỏ qua: không có prompt (không có yêu cầu để làm lại), hoặc `file_before` > 64 KB (tốn quota, đầu ra dễ bị cắt).
+Bài bị bỏ qua (đếm theo lý do): không có prompt (không có yêu cầu để làm lại); prompt hoặc `file_before` > 64 KB (tốn quota, đầu ra dễ bị cắt); file nhạy cảm (`isSensitivePath`, phòng bộ test sửa tay); không có dòng nào thay đổi (mọi đầu ra đều sẽ đạt); trùng `id`. File bộ test phải là file thường ≤ 32 MB. Phần chạy thử liệt kê các file có nội dung sẽ bị gửi.
 
 ### 3. Chấm điểm theo dòng thay đổi
 ```
@@ -42,12 +42,12 @@ coverage = |added ∩ output| / |added|      (added rỗng → 1)
 repeat   = |removed ∩ output| / |removed|  (removed rỗng → 0)
 score    = coverage × (1 − repeat);  pass ⇔ score ≥ 0.5
 ```
-Dòng được chuẩn hoá: bỏ khoảng trắng hai đầu, bỏ dòng trống. Phép giao trên multiset đếm số lần xuất hiện.
+Dòng được chuẩn hoá: bỏ khoảng trắng hai đầu, bỏ dòng trống. Phép giao trên multiset đếm số lần xuất hiện. Quyết định đạt được tính bằng số nguyên (`2 × trúng × (bỏ − còn) ≥ tổng_thêm × tổng_bỏ`) để không lệch ở đúng 0,5 vì sai số dấu phẩy động.
 Lý do: bản ghi lỗi chỉ cho biết dev đã đổi gì, nên tiêu chí "đạt" hợp lý nhất là model tự làm ra đúng những thay đổi đó và không lặp lại dòng dev đã bỏ. Cách này rẻ, tất định, giải thích được.
 Hạn chế: một cách sửa khác nhưng cũng đúng sẽ bị điểm thấp. Chấp nhận ở MVP, vì so *giữa* các model trên cùng thước đo vẫn có ý nghĩa.
 
 ### 4. Lưu kết quả
-Mỗi lần chạy `--yes` ghi `.nightowl/runs/<thời điểm UTC>.jsonl` (thư mục `0700`, file `0600`, ghi nguyên tử), mỗi dòng:
+Mỗi lần chạy `--yes` ghi `.nightowl/runs/<thời điểm UTC>-<6 ký tự ngẫu nhiên>.jsonl` (thư mục `0700`, file `0600`, ghi nguyên tử), mỗi dòng. Thư mục được chuẩn bị **trước** lời gọi đầu tiên, để lỗi thư mục không làm mất kết quả đã trả tiền; nếu ghi file thất bại, bảng so sánh vẫn được in:
 ```json
 { "run_at": "...", "case_id": "...", "model": "haiku", "output": "...", "coverage": 0.8,
   "repeat": 0, "score": 0.8, "pass": true, "error": null }
@@ -63,6 +63,8 @@ Ran 20 cases × 2 models (3 skipped: 2 without prompt, 1 too large)
 Different results (6): sonnet only: 3f2a9c1d8e07-12, …; haiku only: …
 Results saved to .nightowl/runs/2026-11-10T09-30-00Z.jsonl
 ```
+
+Bảng "khác nhau" chỉ so các model đã có câu trả lời được chấm cho bài đó; lời gọi lỗi được đếm ở cột riêng, không coi là không đạt.
 
 ### 6. Thứ tự và giới hạn
 Chạy tuần tự: bài theo thứ tự trong file, trong mỗi bài lần lượt từng model, để một bài lỗi không làm lệch so sánh. `--limit` tính theo số bài (không theo số lời gọi), tối đa 100. Kiểm tra `claude` có trong `PATH` trước khi đọc hay tạo gì.

@@ -71,6 +71,7 @@ describe('nightowl eval', () => {
       expect(result.code).toBe(0);
       expect(result.out).toContain('Would run 2 cases × 2 models (haiku, sonnet) = 4 calls');
       expect(result.out).toContain('skipped: 1 without prompt, 1 invalid lines');
+      expect(result.out).toContain('Files whose content would be sent:\n  src/age.ts\n');
       expect(result.out).toContain('nightowl eval --yes\n');
       expect(calls).toEqual([]);
       expect(await readdir(join(repo.path, '.nightowl'))).not.toContain('runs');
@@ -97,9 +98,10 @@ describe('nightowl eval', () => {
       expect(result.out).toMatch(/^ {2}sonnet +3 +3 +1\.00 +0$/m);
       expect(result.out).toContain('Different results (2):');
       expect(result.out).toContain('  b: passed by sonnet; not by haiku');
-      expect(result.out).toContain('Results saved to .nightowl/runs/2026-11-10T09-30-00-000Z.jsonl');
+      expect(result.out).toMatch(/Results saved to \.nightowl\/runs\/2026-11-10T09-30-00-000Z-[0-9a-f]{6}\.jsonl/);
 
-      const file = join(runsDir(), '2026-11-10T09-30-00-000Z.jsonl');
+      const [name] = await readdir(runsDir());
+      const file = join(runsDir(), name as string);
       const rows = (await readFile(file, 'utf8')).trim().split('\n').map((l) => JSON.parse(l));
       expect(rows).toHaveLength(6);
       expect(rows[0]).toEqual({
@@ -131,6 +133,35 @@ describe('nightowl eval', () => {
       expect(rows[0]).toMatchObject({ case_id: 'a', output: null, score: null, error: 'claude did not answer in time' });
     });
 
+    it('does not call a failed call a fail when comparing models', async () => {
+      await writeSuite([evalLine('a'), evalLine('b')]);
+      const result = await run(['--yes'], deps({ haiku: [new ClaudeError('claude exited with code 1', 'exit'), BAD], sonnet: [GOOD] }));
+      expect(result.out).not.toContain('  a: passed');
+      expect(result.out).toContain('Different results (1):\n  b: passed by sonnet; not by haiku');
+    });
+
+    it('stops before any call when the results folder cannot be prepared', async () => {
+      await writeSuite([evalLine('a')]);
+      await writeFile(join(repo.path, '.nightowl/runs'), 'not a folder');
+      const result = await run(['--yes'], deps({}));
+      expect(result.code).toBe(1);
+      expect(result.err).toContain('cannot prepare .nightowl/runs');
+      expect(calls).toEqual([]);
+    });
+
+    it('creates .nightowl/ privately for a suite read from elsewhere', async () => {
+      const elsewhere = await createTempDir();
+      try {
+        await writeFile(join(elsewhere.path, 'suite.jsonl'), `${evalLine('a')}\n`);
+        const result = await run(['--yes', '--model', 'haiku', '--input', join(elsewhere.path, 'suite.jsonl')], deps({}));
+        expect(result.code).toBe(0);
+        expect((await stat(join(repo.path, '.nightowl'))).mode & 0o777).toBe(0o700);
+        expect(await readdir(runsDir())).toHaveLength(1);
+      } finally {
+        await elsewhere.cleanup();
+      }
+    });
+
     it('counts an answer without content as a failed call, not as a zero score', async () => {
       await writeSuite([evalLine('a')]);
       const result = await run(['--yes', '--model', 'haiku'], deps({ haiku: [JSON.stringify({ structured_output: {} })] }));
@@ -158,6 +189,18 @@ describe('nightowl eval', () => {
     const result = await run([], deps({}));
     expect(result.code).toBe(1);
     expect(result.err).toContain("Run 'nightowl export' first");
+  });
+
+  it('quotes an odd --input path in the hint', async () => {
+    await writeSuite([evalLine('a')], 'my suite.jsonl');
+    expect((await run(['--input', 'my suite.jsonl'], deps({}))).out).toContain("--input 'my suite.jsonl'");
+  });
+
+  it('runs each id once', async () => {
+    await writeSuite([evalLine('a'), evalLine('a')]);
+    const result = await run([], deps({}));
+    expect(result.out).toContain('Would run 1 cases');
+    expect(result.out).toContain('1 duplicate ids');
   });
 
   it('says so when no case can run', async () => {

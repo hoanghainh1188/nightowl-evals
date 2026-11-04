@@ -66,6 +66,15 @@ describe('runClaude', () => {
     });
   });
 
+  it('stops claude as soon as its output passes 4 MB', async () => {
+    fake = await createFakeClaude({ body: 'head -c 5000000 /dev/zero; sleep 30' });
+    const started = Date.now();
+    await expect(runClaude('p', { model: 'haiku', schema: CLASSIFICATION_SCHEMA, env: { ...process.env, PATH: fake.path } })).rejects.toMatchObject({
+      reason: 'too_large',
+    });
+    expect(Date.now() - started).toBeLessThan(10_000);
+  });
+
   it('reports a failing claude', async () => {
     fake = await createFakeClaude({ body: 'exit 3' });
     await expect(runClaude('p', { model: 'haiku', schema: CLASSIFICATION_SCHEMA, env: { ...process.env, PATH: fake.path } })).rejects.toMatchObject({

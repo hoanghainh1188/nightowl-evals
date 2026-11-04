@@ -21,7 +21,7 @@ export type RunClaude = (prompt: string, options: RunClaudeOptions) => Promise<s
 export class ClaudeError extends Error {
   constructor(
     message: string,
-    readonly reason: 'not_found' | 'timeout' | 'exit',
+    readonly reason: 'not_found' | 'timeout' | 'exit' | 'too_large',
   ) {
     super(message);
     this.name = 'ClaudeError';
@@ -86,7 +86,12 @@ function spawnClaude(prompt: string, options: RunClaudeOptions, cwd: string): Pr
 
     child.stdout.on('data', (chunk: Buffer) => {
       size += chunk.length;
-      if (size <= MAX_STDOUT_BYTES) chunks.push(chunk);
+      if (size <= MAX_STDOUT_BYTES) {
+        chunks.push(chunk);
+        return;
+      }
+      killGroup(child.pid);
+      finish(() => reject(new ClaudeError('claude output is larger than 4 MB', 'too_large')));
     });
     child.on('error', (error: NodeJS.ErrnoException) =>
       finish(() =>

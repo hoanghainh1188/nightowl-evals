@@ -1,13 +1,19 @@
-import { lstat, mkdir } from 'node:fs/promises';
+import { chmod, lstat, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { DATA_DIR } from '../storage/data-dir.js';
+import { ensureDataDir } from '../storage/data-dir.js';
 
-// A folder inside .nightowl/ (git-ignored) that only the user can read. Refuses a symlink.
+const PRIVATE_MODE = 0o700;
+
+// A folder inside .nightowl/ (git-ignored) that only the user can read. Creates .nightowl/
+// with the same checks as the database, refuses symlinks, and narrows a wider folder.
 export async function ensurePrivateDir(root: string, name: string): Promise<string> {
-  const dir = join(root, DATA_DIR, name);
-  await mkdir(dir, { mode: 0o700 }).catch((error: NodeJS.ErrnoException) => {
+  const dir = join(ensureDataDir(root), name);
+  await mkdir(dir, { mode: PRIVATE_MODE }).catch((error: NodeJS.ErrnoException) => {
     if (error.code !== 'EEXIST') throw error;
   });
-  if ((await lstat(dir)).isSymbolicLink()) throw new Error(`${dir} is a symlink`);
+  const info = await lstat(dir);
+  if (info.isSymbolicLink()) throw new Error(`${dir} is a symlink`);
+  if (!info.isDirectory()) throw new Error(`${dir} is not a directory`);
+  if ((info.mode & 0o777) !== PRIVATE_MODE) await chmod(dir, PRIVATE_MODE);
   return dir;
 }

@@ -1,3 +1,4 @@
+// Fixed at one half: `pass` below is computed exactly as 2 × hits × misses ≥ totals.
 export const PASS_SCORE = 0.5;
 
 export interface Score {
@@ -36,14 +37,23 @@ function sharedWith(wanted: Map<string, number>, have: Map<string, number>): num
 }
 
 // Deterministic, no LLM: did the output make the developer's changes, and drop what they dropped?
+// True when the developer changed no line that counts: such a case cannot be scored.
+export function hasScorableChange(rejected: string, expected: string): boolean {
+  const r = lineCounts(rejected);
+  const e = lineCounts(expected);
+  return size(minus(e, r)) + size(minus(r, e)) > 0;
+}
+
 export function scoreOutput(input: { readonly rejected: string; readonly expected: string; readonly output: string }): Score {
   const rejected = lineCounts(input.rejected);
   const expected = lineCounts(input.expected);
   const output = lineCounts(input.output);
   const added = minus(expected, rejected);
   const removed = minus(rejected, expected);
-  const coverage = size(added) === 0 ? 1 : sharedWith(added, output) / size(added);
-  const repeat = size(removed) === 0 ? 0 : sharedWith(removed, output) / size(removed);
-  const score = coverage * (1 - repeat);
-  return { coverage, repeat, score, pass: score >= PASS_SCORE };
+  // Counts kept as integers so the pass decision is exact (6/7 × 7/12 is 0.5, not 0.4999…).
+  const [hit, total] = size(added) === 0 ? [1, 1] : [sharedWith(added, output), size(added)];
+  const [kept, gone] = size(removed) === 0 ? [0, 1] : [sharedWith(removed, output), size(removed)];
+  const coverage = hit / total;
+  const repeat = kept / gone;
+  return { coverage, repeat, score: coverage * (1 - repeat), pass: 2 * hit * (gone - kept) >= total * gone };
 }

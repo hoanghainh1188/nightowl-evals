@@ -1,9 +1,10 @@
+import { randomBytes } from 'node:crypto';
 import { join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { errorMessage } from '../cli/errors.js';
 import type { Io } from '../cli/io.js';
 import { type RunClaude, runClaude } from '../classify/run-claude.js';
-import { type EvalCase, type LoadedCases, loadCases } from '../eval/cases.js';
+import { type EvalCase, type LoadedCases, loadCases, type SkipReason } from '../eval/cases.js';
 import { parseGeneratedFile } from '../eval/parse.js';
 import { buildEvalPrompt, GENERATED_FILE_SCHEMA } from '../eval/prompt.js';
 import { type Score, scoreOutput } from '../eval/score.js';
@@ -80,26 +81,47 @@ function parseOptions(args: readonly string[]): Options | string {
   return { yes: values.yes === true, input: values.input ?? null, models, customModels: values.model !== undefined, limit };
 }
 
+const SKIP_LABELS: Readonly<Record<SkipReason, string>> = {
+  'no-prompt': 'without prompt',
+  'too-large': 'too large',
+  sensitive: 'sensitive files',
+  'no-change': 'no line changed',
+  duplicate: 'duplicate ids',
+  invalid: 'invalid lines',
+};
+
 function skippedNote(loaded: LoadedCases): string {
-  const parts = [
-    loaded.noPrompt > 0 ? `${loaded.noPrompt} without prompt` : null,
-    loaded.tooLarge > 0 ? `${loaded.tooLarge} with a file over 64 KB` : null,
-    loaded.invalid > 0 ? `${loaded.invalid} invalid lines` : null,
-  ].filter((part): part is string => part !== null);
+  const parts = (Object.keys(SKIP_LABELS) as SkipReason[])
+    .filter((reason) => loaded.skipped[reason] > 0)
+    .map((reason) => `${loaded.skipped[reason]} ${SKIP_LABELS[reason]}`);
   return parts.length === 0 ? '' : ` (skipped: ${parts.join(', ')})`;
+}
+
+// Quoted so the hint can be pasted into a shell as is.
+function shellQuote(value: string): string {
+  return /^[\w./-]+$/.test(value) ? value : `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+const MAX_LISTED_FILES = 20;
+
+function listFiles(cases: readonly EvalCase[]): string {
+  const files = [...new Set(cases.map((evalCase) => evalCase.filePath))];
+  const shown = files.slice(0, MAX_LISTED_FILES).map((file) => `  ${printable(file)}\n`);
+  return shown.join('') + (files.length > shown.length ? `  … and ${files.length - shown.length} more\n` : '');
 }
 
 function dryRun(cases: readonly EvalCase[], loaded: LoadedCases, options: Options, io: Io): number {
   const bytes = cases.reduce((sum, evalCase) => sum + Buffer.byteLength(buildEvalPrompt(evalCase)), 0) * options.models.length;
   const rerun = [
     'nightowl eval --yes',
-    ...(options.input === null ? [] : [`--input ${options.input}`]),
+    ...(options.input === null ? [] : [`--input ${shellQuote(options.input)}`]),
     ...(options.customModels ? options.models.map((model) => `--model ${model}`) : []),
     ...(options.limit === DEFAULT_EVAL_LIMIT ? [] : [`--limit ${options.limit}`]),
   ].join(' ');
   io.stdout(
     `Would run ${cases.length} cases × ${options.models.length} models (${options.models.join(', ')}) = ` +
       `${cases.length * options.models.length} calls to Claude Code, ${(bytes / 1024).toFixed(1)} KB${skippedNote(loaded)}.\n` +
+      `Files whose content would be sent:\n${listFiles(cases)}` +
       `Nothing was sent. The code leaves your machine only if you run:\n  ${printable(rerun)}\n`,
   );
   return 0;
@@ -136,25 +158,36 @@ function summary(results: readonly Result[], models: readonly string[]): string 
   return [format(header), ...rows.map(format)].join('\n');
 }
 
-function differences(results: readonly Result[], models: readonly string[]): string {
+interface CaseResults {
+  readonly caseId: string;
+  readonly results: readonly Result[];
+}
+
+// Cases where models that produced a scored answer disagree on pass/fail. Failed calls are not
+// a "fail": they say nothing about the model's answer.
+function differences(byCase: readonly CaseResults[], models: readonly string[]): string {
   if (models.length < 2) return '';
-  const byCase = new Map<string, Result[]>();
-  for (const r of results) byCase.set(r.caseId, [...(byCase.get(r.caseId) ?? []), r]);
   const lines: string[] = [];
-  for (const [caseId, list] of byCase) {
-    const passed = list.filter((r) => r.score?.pass).map((r) => r.model);
-    if (passed.length === 0 || passed.length === list.length) continue;
-    const failed = list.filter((r) => !r.score?.pass).map((r) => r.model);
+  for (const { caseId, results } of byCase) {
+    const scored = results.filter((r) => r.score !== null);
+    const passed = scored.filter((r) => r.score?.pass).map((r) => r.model);
+    if (scored.length < 2 || passed.length === 0 || passed.length === scored.length) continue;
+    const failed = scored.filter((r) => !r.score?.pass).map((r) => r.model);
     lines.push(`  ${printable(caseId)}: passed by ${passed.join(', ')}; not by ${failed.join(', ')}`);
   }
-  if (lines.length === 0) return 'Same pass/fail result for every case across models.\n';
+  if (lines.length === 0) return 'Same pass/fail result for every case the models answered.\n';
   const shown = lines.slice(0, MAX_LISTED_DIFFERENCES);
   const more = lines.length > shown.length ? `  … and ${lines.length - shown.length} more (see the results file)\n` : '';
   return `Different results (${lines.length}):\n${shown.join('\n')}\n${more}`;
 }
 
-async function saveResults(root: string, runAt: Date, results: readonly Result[]): Promise<string> {
-  const file = join(await ensurePrivateDir(root, RUNS_DIR), `${runAt.toISOString().replace(/[:.]/g, '-')}.jsonl`);
+// Created before any paid call, so a folder problem never throws away the answers.
+async function resultsFile(root: string, runAt: Date): Promise<string> {
+  const stamp = runAt.toISOString().replace(/[:.]/g, '-');
+  return join(await ensurePrivateDir(root, RUNS_DIR), `${stamp}-${randomBytes(3).toString('hex')}.jsonl`);
+}
+
+async function saveResults(file: string, runAt: Date, results: readonly Result[]): Promise<void> {
   const lines = results.map((r) =>
     JSON.stringify({
       run_at: runAt.toISOString(),
@@ -169,7 +202,6 @@ async function saveResults(root: string, runAt: Date, results: readonly Result[]
     }),
   );
   await writeFileAtomic(file, lines.map((line) => `${line}\n`).join(''), 0o600);
-  return file;
 }
 
 async function runAll(
@@ -181,24 +213,41 @@ async function runAll(
   io: Io,
 ): Promise<number> {
   const runAt = deps.now();
-  const results: Result[] = [];
+  let file: string;
+  try {
+    file = await resultsFile(root, runAt);
+  } catch (error) {
+    io.stderr(`nightowl eval: cannot prepare .nightowl/${RUNS_DIR}: ${printable(errorMessage(error))}\n`);
+    return 1;
+  }
+  const byCase: CaseResults[] = [];
   // Sequential, case by case, so every model sees the same cases in the same conditions.
   for (const evalCase of cases) {
+    const results: Result[] = [];
     for (const model of options.models) {
       const result = await runOne(evalCase, model, deps);
       if (result.error !== null) io.stderr(`nightowl eval: ${printable(evalCase.id)} with ${model}: ${printable(result.error)}\n`);
       results.push(result);
     }
+    byCase.push({ caseId: evalCase.id, results });
   }
-  const file = await saveResults(root, runAt, results);
+  const all = byCase.flatMap((c) => c.results);
+  let saved: string;
+  try {
+    await saveResults(file, runAt, all);
+    saved = `Results saved to ${printable(relative(deps.cwd(), file) || file)}\n`;
+  } catch (error) {
+    io.stderr(`nightowl eval: could not save the results: ${printable(errorMessage(error))}\n`);
+    saved = '';
+  }
   io.stdout(
     `Ran ${cases.length} cases × ${options.models.length} models${skippedNote(loaded)}\n` +
-      `${summary(results, options.models)}\n` +
-      differences(results, options.models) +
-      `Results saved to ${printable(relative(deps.cwd(), file) || file)}\n` +
+      `${summary(all, options.models)}\n` +
+      differences(byCase, options.models) +
+      saved +
       'Scores compare the lines each model changed with the lines the developer changed; a different but valid fix scores low.\n',
   );
-  return results.some((r) => r.error !== null) ? 1 : 0;
+  return saved === '' || all.some((r) => r.error !== null) ? 1 : 0;
 }
 
 export function createEvalCommand(deps: EvalDeps = defaultDeps): Command {
