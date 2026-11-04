@@ -9,7 +9,7 @@
 ## 2. nightowl precommit
 
 - [x] 2.1 Viết test cho đọc file staged (`git diff --cached`, `git cat-file --batch`), gồm tên file có dấu cách và ký tự Unicode; cài `src/hooks/git/staged.ts` để pass
-- [x] 2.2 Viết test truy vấn sự kiện `edit` chưa kiểm tra (một sự kiện, nhiều sự kiện cùng file, đã được tính bởi `commit-check` trước); cài `src/hooks/git/pending.ts` để pass
+- [x] 2.2 Viết test truy vấn sự kiện `edit` chưa kiểm tra (một sự kiện, nhiều sự kiện cùng file, đã được tính bởi `commit-check` trước); cài `listUncheckedEdits` trong `src/storage/events.ts` để pass
 - [x] 2.3 Viết test so sánh: `unchanged`, `modified` có đếm dòng, `whitespace_only`, nội dung staged > 512 KB bị bỏ; cài `src/hooks/git/compare.ts` để pass
 - [x] 2.4 Viết test cho lệnh `precommit`: chưa có `.nightowl/` (không tạo file), DB hỏng (ghi `nightowl.log`), luôn im lặng và thoát 0, dừng sau 2 giây với 500 file; cài `src/commands/precommit.ts` và đăng ký lệnh để pass
 - [x] 2.5 Viết test payload `commit-check` không chứa `user.name`/`user.email` của git
