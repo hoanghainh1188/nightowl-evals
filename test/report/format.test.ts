@@ -71,6 +71,7 @@ describe('formatJson', () => {
       'changed_rate',
       'by_category',
       'by_source',
+      'by_status',
       'by_module',
       'by_week',
     ]);
@@ -88,6 +89,16 @@ describe('formatJson', () => {
     });
     expect(formatText(report)).toMatch(/\nBy source\n {2}manual-fix +2 .*\n {2}ai-self-fix +1 /);
     expect(JSON.parse(formatJson(report)).by_source).toEqual({ 'manual-fix': 2, 'ai-self-fix': 1 });
+  });
+
+  it('shows how many failures were reviewed, in text and JSON', () => {
+    const report = buildReport({
+      ...base,
+      failures: [row('a.ts', null, '2026-11-02', 2), { ...row('b.ts', null, '2026-11-02'), status: 'confirmed' }],
+      checks: [],
+    });
+    expect(formatText(report)).toContain('Reviewed: 1 confirmed, 0 dismissed, 2 still flagged (nightowl review)');
+    expect(JSON.parse(formatJson(report)).by_status).toEqual({ confirmed: 1, dismissed: 0, flagged: 2 });
   });
 });
 

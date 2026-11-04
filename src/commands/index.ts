@@ -8,6 +8,7 @@ import { logCommand } from './log.js';
 import { postcommitCommand } from './postcommit.js';
 import { precommitCommand } from './precommit.js';
 import { reportCommand } from './report.js';
+import { reviewCommand } from './review.js';
 import { uninstallCommand } from './uninstall.js';
 
 export const commands: readonly Command[] = Object.freeze([
@@ -20,5 +21,6 @@ export const commands: readonly Command[] = Object.freeze([
   failuresCommand,
   classifyCommand,
   evalCommand,
+  reviewCommand,
   uninstallCommand,
 ]);

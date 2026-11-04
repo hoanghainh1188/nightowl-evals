@@ -35,6 +35,15 @@ import {
 } from './failures.js';
 import { CURRENT_SCHEMA_VERSION, migrate, SchemaTooNewError } from './migrations.js';
 import { type CheckCountRow, countChecksForReport, countFailuresForReport, type FailureCountRow } from './report-queries.js';
+import {
+  type FailureForReview,
+  type FailureStatus,
+  getFailureForReview,
+  listFailuresForReview,
+  type ReviewFilter,
+  setFailureStatus,
+  type StatusChange,
+} from './review-queries.js';
 import { findProjectRoot } from './project-root.js';
 import { loadSqlite } from './sqlite.js';
 
@@ -73,6 +82,9 @@ export interface Store {
   readonly listFailuresToExport: (filter: ExportFilter) => readonly FailureToExport[];
   readonly countFailuresForReport: (since: string | null) => readonly FailureCountRow[];
   readonly countChecksForReport: (since: string | null) => readonly CheckCountRow[];
+  readonly listFailuresForReview: (filter: ReviewFilter) => readonly FailureForReview[];
+  readonly getFailureForReview: (id: number) => FailureForReview | null;
+  readonly setFailureStatus: (ids: readonly number[], status: FailureStatus) => StatusChange;
   // Hooks shorten the lock wait to what is left of their budget before writing.
   readonly setBusyTimeout: (ms: number) => void;
   readonly pragma: (name: string) => unknown;
@@ -154,6 +166,9 @@ function storeApi(db: import('node:sqlite').DatabaseSync, root: string): Store {
     listFailuresToExport: (filter: ExportFilter) => listFailuresToExport(db, filter),
     countFailuresForReport: (since: string | null) => countFailuresForReport(db, since),
     countChecksForReport: (since: string | null) => countChecksForReport(db, since),
+    listFailuresForReview: (filter: ReviewFilter) => listFailuresForReview(db, filter),
+    getFailureForReview: (id: number) => getFailureForReview(db, id),
+    setFailureStatus: (ids: readonly number[], status: FailureStatus) => setFailureStatus(db, ids, status),
     setBusyTimeout: (ms: number) => db.exec(`PRAGMA busy_timeout = ${Math.max(1, Math.floor(ms))}`),
     pragma: (name: string) => {
       if (!READABLE_PRAGMAS.has(name)) throw new Error(`Unsupported pragma: ${name}`);

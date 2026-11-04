@@ -83,6 +83,20 @@ Failures grouped by type, source, module and ISO week, plus the share of committ
 | `--depth <1-5>` | How many folder levels make up a module (default 2) |
 | `--json` | Machine-readable output |
 
+### `nightowl review`
+
+Look at what was recorded and sort real AI mistakes from noise (for example, you simply changed your mind). Nothing is sent anywhere.
+
+| Command | Meaning |
+| --- | --- |
+| `nightowl review` | Failures still to look at, newest first: id, date, source, category, file, lines `+added -removed`, start of the prompt |
+| `nightowl review show <id>` | One failure: prompt, feedback, classification and the diff from the AI version to the final one |
+| `nightowl review confirm <id...>` | Mark as a real AI mistake |
+| `nightowl review dismiss <id...>` | Mark as noise; left out of `report` and `export` |
+| `nightowl review reset <id...>` | Back to flagged |
+
+Ids can be written `12` or `#12`. If one id does not exist, nothing is changed. `review` (list) takes `--status flagged|confirmed|dismissed|all`, `--source manual-fix|ai-self-fix` and `--limit <1-200>`; `nightowl report` shows how many failures are still flagged.
+
 ### `nightowl export`
 
 Writes one JSON line per failure (`nightowl.eval/v1`) to `.nightowl/export/evals.jsonl`, readable only by you. Each case holds the prompt, the file before the AI edit, the AI version (`rejected`), your version (`expected`), the `source`, and for `ai-self-fix` the prompt you used to correct the AI (`input.feedback`). `nightowl eval` never shows that feedback to the model under test.

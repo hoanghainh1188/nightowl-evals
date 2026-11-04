@@ -54,3 +54,10 @@ Với `--since <YYYY-MM-DD>`, báo cáo SHALL chỉ tính bản ghi lỗi và l�
 #### Scenario: Có cả hai nguồn
 - **WHEN** database có 2 lỗi `manual-fix` và 1 lỗi `ai-self-fix`, rồi chạy `nightowl report --json`
 - **THEN** `by_source` là `{"manual-fix": 2, "ai-self-fix": 1}`
+
+### Requirement: Đếm theo trạng thái xem lại
+`nightowl report` SHALL in số lỗi `confirmed`, `dismissed` và `flagged`. Bản `--json` SHALL có `by_status` với đủ ba khoá. Tổng số lỗi và các mục khác vẫn không tính lỗi `dismissed`.
+
+#### Scenario: Đã xem một phần
+- **WHEN** có 2 lỗi `confirmed`, 1 `dismissed` và 3 `flagged`, rồi chạy `nightowl report --json`
+- **THEN** `by_status` là `{"confirmed": 2, "dismissed": 1, "flagged": 3}` và `total` là 5

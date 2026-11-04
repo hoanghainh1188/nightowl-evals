@@ -110,8 +110,10 @@ export function unifiedDiff(ai: string, dev: string, options: DiffOptions = {}):
   const hunks: string[] = [];
   let i = 0;
   while (i < ops.length) {
-    const firstChange = ops.findIndex((op, j) => j >= i && op.kind !== ' ');
-    if (firstChange === -1) break;
+    // Scan from `i` only: restarting at 0 for every hunk is quadratic on files with many hunks.
+    let firstChange = i;
+    while (firstChange < ops.length && (ops[firstChange] as Op).kind === ' ') firstChange += 1;
+    if (firstChange === ops.length) break;
     const start = Math.max(i, firstChange - CONTEXT);
     let end = firstChange;
     // Extend while the next change is close enough to share context.
