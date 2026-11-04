@@ -25,8 +25,8 @@ Xem proposal.md. Hành vi: `specs/failure-records`, `specs/project-setup`. Dựa
 
 ### 2. Khớp `commit-check` với commit bằng blob
 `git cat-file --batch-check` (một tiến trình, đường dẫn qua stdin) với đầu vào `HEAD:<path>` cho sha blob của từng file trong commit vừa tạo. `commit-check` khớp khi sha này bằng `staged_blob`.
-Với mỗi file chỉ xét `commit-check` chưa xử lý mới nhất. Các `commit-check` chưa xử lý cũ hơn của cùng file được đánh dấu `superseded` (đã có lần kiểm tra mới hơn thay thế), nên không bị xét mãi.
-`commit-check` mới nhất không khớp thì để nguyên chưa xử lý: có thể commit bị huỷ, hoặc dev sẽ commit đúng bản đó ở lần sau.
+Với mỗi file, chọn `commit-check` chưa xử lý **mới nhất có blob khớp** `HEAD`. Các `commit-check` cũ hơn nó được đánh dấu `superseded`; các `commit-check` mới hơn nó để nguyên, vì có thể thuộc về commit kế tiếp (ví dụ khi `post-commit` lần trước không chạy).
+Không có `commit-check` nào khớp: nếu commit `HEAD` có sửa file đó (`git diff-tree`), các `commit-check` đó không bao giờ được commit nữa nên được đánh dấu `superseded`; nếu không, để nguyên chờ commit sau. Đường dẫn chứa ký tự xuống dòng (git không tra được) được đóng luôn.
 `commit-check` không có `staged_blob` (kết quả `skipped`) không bao giờ khớp được, nên được đóng ngay là `not-a-failure`. Bản dev commit quá 512 KB (`staged_content` rỗng) cũng thành `not-a-failure`, vì thiếu nội dung để lưu.
 
 ### 3. Schema v2
@@ -52,7 +52,7 @@ Lấy sự kiện `edit` đầu tiên trong `ai_event_ids` (id nhỏ nhất). Pr
 `installPreCommit` thành `installGitHook(root, name, command)`; `init` gọi cho `pre-commit` (`nightowl precommit`) và `post-commit` (`nightowl postcommit`). Cùng dấu `# nightowl-evals`, cùng quy tắc với symlink, `core.hooksPath` và hook không phải shell. Kết quả cài từng hook được báo riêng.
 
 ### 6. `postcommit` là lệnh hook
-Thêm vào `HOOK_COMMANDS`: luôn thoát 0, im lặng, không tạo `.nightowl/` nếu chưa có, ngân sách 2 giây (dùng chung cách tính thời gian còn lại với `precommit`).
+Thêm vào `HOOK_COMMANDS`: luôn thoát 0, im lặng, không tạo `.nightowl/` nếu chưa có, ngân sách 2 giây (dùng chung cách tính thời gian còn lại với `precommit`). Trước khi ghi, `busy_timeout` được đặt lại bằng thời gian còn lại, để database bị khoá không giữ `git commit` quá ngân sách.
 
 ### 7. `nightowl failures`
 In ra stdout, ví dụ:

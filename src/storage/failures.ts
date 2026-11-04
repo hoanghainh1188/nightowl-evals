@@ -4,6 +4,8 @@ import { rollbackQuietly } from './migrations.js';
 export interface UnattachedCheck {
   readonly id: number;
   readonly filePath: string;
+  // null for skipped checks, which have no staged blob.
+  readonly stagedBlob: string | null;
 }
 
 export interface NewFailure {
@@ -27,13 +29,21 @@ export interface FailureCounts {
 export function listUnattachedChecks(db: DatabaseSync): readonly UnattachedCheck[] {
   const rows = db
     .prepare(
-      `SELECT e.id, e.file_path FROM events e
+      `SELECT e.id, e.file_path, json_extract(e.payload, '$.staged_blob') AS staged_blob FROM events e
        WHERE e.source = 'git' AND e.kind = 'commit-check' AND e.file_path IS NOT NULL
          AND NOT EXISTS (SELECT 1 FROM checks_attached a WHERE a.check_id = e.id)
        ORDER BY e.id`,
     )
-    .all() as unknown as Array<{ id: number; file_path: string }>;
-  return Object.freeze(rows.map((row) => Object.freeze({ id: row.id, filePath: row.file_path })));
+    .all() as unknown as Array<{ id: number; file_path: string; staged_blob: unknown }>;
+  return Object.freeze(
+    rows.map((row) =>
+      Object.freeze({
+        id: row.id,
+        filePath: row.file_path,
+        stagedBlob: typeof row.staged_blob === 'string' ? row.staged_blob : null,
+      }),
+    ),
+  );
 }
 
 export function getEventPayload(db: DatabaseSync, id: number): unknown {
@@ -120,14 +130,15 @@ export interface SavedClassification {
   readonly classifiedAt: string;
 }
 
-// Oldest first; with `redo`, failures that already have a category are included too.
+// Fewest failed attempts first, then oldest, so failures that keep failing do not block the rest.
+// With `redo`, failures that already have a category are included too.
 export function listFailuresToClassify(db: DatabaseSync, limit: number, redo: boolean): readonly FailureToClassify[] {
   const rows = db
     .prepare(
       `SELECT f.id, f.file_path, f.ai_content, f.final_content, json_extract(p.payload, '$.prompt') AS prompt
        FROM failures f LEFT JOIN events p ON p.id = f.prompt_event_id
        WHERE ? OR f.category IS NULL
-       ORDER BY f.id LIMIT ?`,
+       ORDER BY f.classify_attempts, f.id LIMIT ?`,
     )
     .all(redo ? 1 : 0, limit) as unknown as Array<{
     id: number;
@@ -151,7 +162,15 @@ export function listFailuresToClassify(db: DatabaseSync, limit: number, redo: bo
 
 export function saveClassification(db: DatabaseSync, failureId: number, value: SavedClassification): void {
   db.prepare(
-    `UPDATE failures SET category = ?, category_reason = ?, category_confidence = ?, classifier = ?, classified_at = ?
+    `UPDATE failures SET category = ?, category_reason = ?, category_confidence = ?, classifier = ?, classified_at = ?,
+       classify_error = NULL
      WHERE id = ?`,
   ).run(value.category, value.reason, value.confidence, value.classifier, value.classifiedAt, failureId);
+}
+
+export function recordClassifyError(db: DatabaseSync, failureId: number, error: string): void {
+  db.prepare('UPDATE failures SET classify_attempts = classify_attempts + 1, classify_error = ? WHERE id = ?').run(
+    error.slice(0, 200),
+    failureId,
+  );
 }

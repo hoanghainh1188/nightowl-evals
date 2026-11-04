@@ -5,13 +5,15 @@ import { parseClaudeOutput } from '../classify/parse.js';
 import { buildPrompt } from '../classify/prompt.js';
 import { type RunClaude, runClaude } from '../classify/run-claude.js';
 import { isOnPath } from '../setup/path.js';
+import { printable } from '../shared/printable.js';
 import type { FailureToClassify } from '../storage/failures.js';
 import { openStore, ProjectNotFoundError, type Store } from '../storage/store.js';
 import type { Command } from './command.js';
 
 export const DEFAULT_LIMIT = 20;
 export const DEFAULT_MODEL = 'haiku';
-const MAX_LIMIT = 1000;
+// Each call may take up to two minutes; keep a run bounded.
+const MAX_LIMIT = 100;
 // Plain model names or ids only: never something claude could read as a flag.
 const MODEL_NAME = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 const INSTALL_HINT = 'Install Claude Code (https://docs.claude.com/claude-code) and make sure `claude` is on your PATH.';
@@ -69,7 +71,7 @@ function dryRun(failures: readonly FailureToClassify[], options: Options, io: Io
   const prompts = failures.map((failure) => ({ failure, prompt: buildPrompt(failure) }));
   const lines = prompts.map(({ failure, prompt }) => {
     const cut = prompt.truncated.length > 0 ? `, truncated: ${prompt.truncated.join(', ')}` : '';
-    return `  #${failure.id} ${failure.filePath} (${kilobytes(prompt.bytes)}${cut})\n`;
+    return `  #${failure.id} ${printable(failure.filePath)} (${kilobytes(prompt.bytes)}${cut})\n`;
   });
   const total = prompts.reduce((sum, { prompt }) => sum + prompt.bytes, 0);
   const rerun = [
@@ -107,7 +109,8 @@ async function classifyAll(store: Store, failures: readonly FailureToClassify[],
       error = errorMessage(caught);
     }
     failed += 1;
-    io.stderr(`nightowl classify: #${failure.id} ${failure.filePath}: ${error}\n`);
+    store.recordClassifyError(failure.id, error);
+    io.stderr(`nightowl classify: #${failure.id} ${printable(failure.filePath)}: ${printable(error)}\n`);
   }
 
   const classified = failures.length - failed;

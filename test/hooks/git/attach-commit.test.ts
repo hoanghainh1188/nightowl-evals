@@ -142,6 +142,38 @@ describe('attachCommit', () => {
     expect(failures()).toEqual([]);
   });
 
+  it('judges the check that matches HEAD even when a newer one is pending', async () => {
+    await aiWrote('src/a.ts', 'ai\n');
+    await writeFiles(repo.path, { 'src/a.ts': 'dev\n' });
+    git(repo.path, ['add', '-A']);
+    await checkStagedChanges(repo.path, far());
+    // post-commit did not run for this commit (timeout, hook skipped).
+    git(repo.path, ['commit', '-q', '-m', 'first']);
+    await aiWrote('src/a.ts', 'ai again\n');
+    await writeFiles(repo.path, { 'src/a.ts': 'dev again\n' });
+    git(repo.path, ['add', '-A']);
+    await checkStagedChanges(repo.path, far());
+
+    expect(await attachCommit(repo.path, far())).toBe(1);
+    expect(failures()).toEqual([expect.objectContaining({ final_content: 'dev\n' })]);
+    expect(attachedOutcomes()).toEqual(['failure']);
+  });
+
+  it('closes checks of a version that a commit of the same file replaced', async () => {
+    await aiWrote('src/a.ts', 'ai\n');
+    await writeFiles(repo.path, { 'src/a.ts': 'dev\n' });
+    git(repo.path, ['add', '-A']);
+    await checkStagedChanges(repo.path, far());
+    git(repo.path, ['reset', '-q']);
+    // The commit was aborted; the developer then commits yet another version, untracked by AI edits.
+    await writeFiles(repo.path, { 'src/a.ts': 'final\n' });
+    git(repo.path, ['add', '-A']);
+    git(repo.path, ['commit', '-q', '-m', 'final']);
+    await attachCommit(repo.path, far());
+    expect(failures()).toEqual([]);
+    expect(attachedOutcomes()).toEqual(['superseded']);
+  });
+
   it('does not create the same failure twice', async () => {
     await aiWrote('src/a.ts', 'ai\n');
     await commit({ 'src/a.ts': 'dev\n' });

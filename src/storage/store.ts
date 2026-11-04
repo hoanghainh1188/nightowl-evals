@@ -23,6 +23,7 @@ import {
   listFailuresToClassify,
   listUnattachedChecks,
   type SavedClassification,
+  recordClassifyError,
   saveClassification,
   type UnattachedCheck,
 } from './failures.js';
@@ -58,6 +59,9 @@ export interface Store {
   readonly countFailures: () => FailureCounts;
   readonly listFailuresToClassify: (limit: number, redo: boolean) => readonly FailureToClassify[];
   readonly saveClassification: (failureId: number, value: SavedClassification) => void;
+  readonly recordClassifyError: (failureId: number, error: string) => void;
+  // Hooks shorten the lock wait to what is left of their budget before writing.
+  readonly setBusyTimeout: (ms: number) => void;
   readonly pragma: (name: string) => unknown;
   readonly close: () => void;
 }
@@ -103,6 +107,8 @@ export async function openStore(options: OpenStoreOptions = {}): Promise<Store> 
     countFailures: () => countFailures(db),
     listFailuresToClassify: (limit: number, redo: boolean) => listFailuresToClassify(db, limit, redo),
     saveClassification: (failureId: number, value: SavedClassification) => saveClassification(db, failureId, value),
+    recordClassifyError: (failureId: number, error: string) => recordClassifyError(db, failureId, error),
+    setBusyTimeout: (ms: number) => db.exec(`PRAGMA busy_timeout = ${Math.max(1, Math.floor(ms))}`),
     pragma: (name: string) => {
       if (!READABLE_PRAGMAS.has(name)) throw new Error(`Unsupported pragma: ${name}`);
       const row = db.prepare(`PRAGMA ${name}`).get() as Record<string, unknown> | undefined;

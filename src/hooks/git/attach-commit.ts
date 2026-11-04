@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Attachment, UnattachedCheck } from '../../storage/failures.js';
 import { DATA_DIR, openStore, type Store } from '../../storage/store.js';
-import { readBlobIds, resolveHead } from './head-blobs.js';
+import { listCommitFiles, readBlobIds, resolveHead } from './head-blobs.js';
 
 interface CheckPayload {
   readonly ai_event_ids?: unknown;
@@ -22,13 +22,9 @@ function editIds(payload: CheckPayload): readonly number[] {
   return Array.isArray(payload.ai_event_ids) ? payload.ai_event_ids.filter((id): id is number => Number.isInteger(id)) : [];
 }
 
-// Decides what the latest check of a file becomes, or null to leave it for a later commit.
-function attachLatest(store: Store, check: UnattachedCheck, headBlob: string | undefined): Attachment | null {
+// Judges a check whose staged blob is the one now in HEAD.
+function judge(store: Store, check: UnattachedCheck): Attachment {
   const payload = (store.getEventPayload(check.id) ?? {}) as CheckPayload;
-  // Skipped checks carry no blob: they can never match, so close them now.
-  if (typeof payload.staged_blob !== 'string') return { checkId: check.id, outcome: 'not-a-failure' };
-  if (payload.staged_blob !== headBlob) return null;
-
   const ids = editIds(payload);
   const latestEdit = ids.length > 0 ? Math.max(...ids) : undefined;
   const aiContent = latestEdit === undefined ? null : store.getSnapshot(latestEdit);
@@ -53,8 +49,34 @@ function attachLatest(store: Store, check: UnattachedCheck, headBlob: string | u
   };
 }
 
-// Turns the commit-checks matching what HEAD now holds into failure records. Older checks of
-// the same file are superseded. Returns the number of failures created; stops at `deadline`.
+interface FileState {
+  readonly headBlob: string | undefined;
+  // HEAD changed this file, so a check of another version of it can never be committed now.
+  readonly touched: boolean;
+}
+
+// What the pending checks of one file become. Checks left out stay pending for a later commit.
+function attachFile(store: Store, checks: readonly UnattachedCheck[], file: FileState): Attachment[] {
+  // Skipped checks carry no blob: they can never match, so close them now.
+  const closed: Attachment[] = checks
+    .filter((check) => check.stagedBlob === null)
+    .map((check) => ({ checkId: check.id, outcome: 'not-a-failure' }));
+  const comparable = checks.filter((check) => check.stagedBlob !== null);
+  const match = comparable.findLastIndex((check) => check.stagedBlob === file.headBlob);
+  if (match === -1) {
+    if (!file.touched) return closed;
+    return [...closed, ...comparable.map((check) => ({ checkId: check.id, outcome: 'superseded' as const }))];
+  }
+  // Only checks older than the committed one are replaced; newer ones may belong to the next commit.
+  return [
+    ...closed,
+    ...comparable.slice(0, match).map((check) => ({ checkId: check.id, outcome: 'superseded' as const })),
+    judge(store, comparable[match] as UnattachedCheck),
+  ];
+}
+
+// Turns the commit-checks matching what HEAD now holds into failure records. Returns the
+// number of failures created; stops at `deadline`.
 export async function attachCommit(root: string, deadline: number): Promise<number> {
   // No .nightowl/ means init never ran here: create nothing.
   if (!existsSync(join(root, DATA_DIR)) || Date.now() >= deadline) return 0;
@@ -66,16 +88,18 @@ export async function attachCommit(root: string, deadline: number): Promise<numb
     if (pending.size === 0) return 0;
     const head = await resolveHead(root, remaining());
     const blobs = await readBlobIds(root, head, [...pending.keys()], remaining());
+    const touched = await listCommitFiles(root, head, remaining());
 
     const attachments: Attachment[] = [];
     for (const [filePath, checks] of pending) {
-      if (Date.now() >= deadline) break;
-      const latest = checks[checks.length - 1] as UnattachedCheck;
-      for (const older of checks.slice(0, -1)) attachments.push({ checkId: older.id, outcome: 'superseded' });
-      const attachment = attachLatest(store, latest, blobs.get(filePath));
-      if (attachment !== null) attachments.push(attachment);
+      if (Date.now() >= deadline) return 0;
+      // git cannot look such a path up, so its checks could never be closed otherwise.
+      const unreadable = filePath.includes('\n');
+      attachments.push(...attachFile(store, checks, { headBlob: blobs.get(filePath), touched: unreadable || touched.has(filePath) }));
     }
-    return attachments.length === 0 ? 0 : store.attachChecks(head, attachments);
+    if (attachments.length === 0 || Date.now() >= deadline) return 0;
+    store.setBusyTimeout(remaining());
+    return store.attachChecks(head, attachments);
   } finally {
     store.close();
   }

@@ -18,7 +18,7 @@ NightOwl SHALL NOT gửi bản ghi lỗi tới bất kỳ LLM nào, trừ khi ng
 - **THEN** không tiến trình `claude` nào được chạy
 
 ### Requirement: Phân loại và lưu kết quả
-Với `--yes`, cho mỗi bản ghi lỗi chưa có loại (tối đa `--limit`, mặc định 20, cũ nhất trước), NightOwl SHALL gửi prompt (nếu có), bản AI viết và bản dev commit cho LLM, và lưu loại lỗi (một trong `logic`, `convention`, `misread-requirement`, `missing-context`), lý do ngắn, độ tin cậy từ 0 tới 1, tên model và thời điểm phân loại.
+Với `--yes`, cho mỗi bản ghi lỗi chưa có loại (tối đa `--limit`, mặc định 20, tối đa 100; bản ghi ít lần phân loại thất bại hơn trước, rồi cũ nhất trước), NightOwl SHALL gửi prompt (nếu có), bản AI viết và bản dev commit cho LLM, và lưu loại lỗi (một trong `logic`, `convention`, `misread-requirement`, `missing-context`), lý do ngắn, độ tin cậy từ 0 tới 1, tên model và thời điểm phân loại.
 
 #### Scenario: Phân loại thành công
 - **WHEN** chạy `nightowl classify --yes` với 2 lỗi chưa phân loại và LLM trả về loại hợp lệ
@@ -43,7 +43,7 @@ Mỗi phần nội dung gửi đi (prompt, bản AI viết, bản dev commit) SH
 - **THEN** chỉ 20 KB đầu được gửi kèm ghi chú đã bị cắt
 
 ### Requirement: Lời gọi LLM tách biệt
-Mỗi lời gọi SHALL chạy Claude Code CLI ở chế độ không tương tác, không cho dùng tool, không lưu phiên, đầu ra JSON theo schema, với biến môi trường `NIGHTOWL_INTERNAL=1`, và bị huỷ nếu quá 120 giây.
+Mỗi lời gọi SHALL chạy Claude Code CLI ở chế độ không tương tác, không có tool nào (kể cả tool của MCP server và skill trong cấu hình của người dùng), không lưu phiên, đầu ra JSON theo schema, với biến môi trường `NIGHTOWL_INTERNAL=1`, và bị huỷ nếu quá 120 giây.
 
 #### Scenario: Lời gọi treo
 - **WHEN** `claude` không trả kết quả sau 120 giây

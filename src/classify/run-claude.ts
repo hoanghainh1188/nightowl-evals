@@ -33,13 +33,29 @@ export function claudeArgs(model: string): readonly string[] {
     'json',
     '--json-schema',
     JSON.stringify(CLASSIFICATION_SCHEMA),
-    // No tools: the model only sees what NightOwl sends.
+    // No built-in tools, no MCP servers, no skills: the model only sees what NightOwl sends
+    // and can do nothing but answer, whatever the user's own Claude Code settings allow.
     '--tools',
     '',
+    '--strict-mcp-config',
+    '--mcp-config',
+    '{"mcpServers":{}}',
+    '--disable-slash-commands',
+    '--permission-mode',
+    'dontAsk',
     '--no-session-persistence',
     '--model',
     model,
   ];
+}
+
+function killGroup(pid: number | undefined): void {
+  if (pid === undefined) return;
+  try {
+    process.kill(-pid, 'SIGKILL');
+  } catch {
+    // Already gone.
+  }
 }
 
 function spawnClaude(prompt: string, options: RunClaudeOptions, cwd: string): Promise<string> {
@@ -48,6 +64,8 @@ function spawnClaude(prompt: string, options: RunClaudeOptions, cwd: string): Pr
       cwd,
       env: { ...(options.env ?? process.env), [INTERNAL_ENV]: '1' },
       stdio: ['pipe', 'pipe', 'ignore'],
+      // Own process group, so a timeout also kills what claude started (MCP servers, hooks).
+      detached: true,
     });
     const chunks: Buffer[] = [];
     let size = 0;
@@ -60,7 +78,7 @@ function spawnClaude(prompt: string, options: RunClaudeOptions, cwd: string): Pr
     };
     // Kill and give up at once: a grandchild may keep stdout open long after.
     const timer = setTimeout(() => {
-      child.kill('SIGKILL');
+      killGroup(child.pid);
       finish(() => reject(new ClaudeError('claude did not answer in time', 'timeout')));
     }, options.timeoutMs ?? CLAUDE_TIMEOUT_MS);
 

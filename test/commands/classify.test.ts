@@ -176,6 +176,13 @@ describe('nightowl classify', () => {
       expect(result.err).toContain('did not answer in time');
     });
 
+    it('tries failures that failed before last, so they do not block newer ones', async () => {
+      await addFailures(3);
+      await run(['--yes', '--limit', '1'], deps([JSON.stringify({ structured_output: { category: 'typo' } })]));
+      await run(['--yes', '--limit', '1'], deps([answer('logic')]));
+      expect(rows().map((row) => row.category)).toEqual([null, 'logic', null]);
+    });
+
     it('fails without touching the database when claude is not installed', async () => {
       await addFailures(1);
       const before = rows();
@@ -195,6 +202,7 @@ describe('nightowl classify', () => {
   it.each([
     [['--limit', '0']],
     [['--limit', 'abc']],
+    [['--limit', '101']],
     [['--model', '--dangerous']],
     [['--model=-x']],
     [['--unknown']],
@@ -215,5 +223,13 @@ describe('nightowl classify', () => {
     } finally {
       await outside.cleanup();
     }
+  });
+});
+
+describe('printable', () => {
+  it('replaces terminal control characters in repository paths', async () => {
+    const { printable } = await import('../../src/shared/printable.js');
+    expect(printable('src/\u001b[2Jevil\n.ts')).toBe('src/?[2Jevil?.ts');
+    expect(printable('src/đơn hàng.ts')).toBe('src/đơn hàng.ts');
   });
 });

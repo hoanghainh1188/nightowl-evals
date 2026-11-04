@@ -33,8 +33,8 @@ describe('failure records storage', () => {
     event('edit', 's1', 'a.ts');
     const c2 = event('commit-check', null, 'b.ts');
     expect(store.listUnattachedChecks()).toEqual([
-      { id: c1.id, filePath: 'a.ts' },
-      { id: c2.id, filePath: 'b.ts' },
+      { id: c1.id, filePath: 'a.ts', stagedBlob: null },
+      { id: c2.id, filePath: 'b.ts', stagedBlob: null },
     ]);
     expect(store.getEventPayload(c1.id)).toEqual({ n: 1 });
     expect(store.getEventPayload(9999)).toBeNull();
@@ -83,6 +83,11 @@ describe('failure records storage', () => {
     expect(store.findPromptBefore(event('edit', 's1', 'a.ts').id)).toBeNull();
     expect(store.findPromptBefore(event('edit', null, 'a.ts').id)).toBeNull();
     expect(store.findPromptBefore(9999)).toBeNull();
+  });
+
+  it('reads the staged blob of each check', () => {
+    const check = store.insertEvent({ source: 'git', kind: 'commit-check', filePath: 'a.ts', payload: { staged_blob: 'abc' } });
+    expect(store.listUnattachedChecks()).toEqual([{ id: check.id, filePath: 'a.ts', stagedBlob: 'abc' }]);
   });
 
   it('counts failures by status', () => {

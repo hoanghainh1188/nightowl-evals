@@ -49,6 +49,8 @@ export const migrations: readonly string[] = Object.freeze([
   ALTER TABLE failures ADD COLUMN category_confidence REAL CHECK (category_confidence BETWEEN 0 AND 1);
   ALTER TABLE failures ADD COLUMN classified_at       TEXT;
   ALTER TABLE failures ADD COLUMN classifier          TEXT;
+  ALTER TABLE failures ADD COLUMN classify_attempts   INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE failures ADD COLUMN classify_error      TEXT;
   `,
 ]);
 

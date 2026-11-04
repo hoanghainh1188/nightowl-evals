@@ -25,3 +25,12 @@ export async function readBlobIds(
   });
   return blobs;
 }
+
+// Files `commit` added or modified compared with its first parent (all files for a root commit).
+export async function listCommitFiles(root: string, commit: string, timeoutMs?: number): Promise<ReadonlySet<string>> {
+  const out = await runGit(['diff-tree', '--root', '--no-commit-id', '-r', '-z', '--name-only', '--no-renames', commit], {
+    cwd: root,
+    timeoutMs,
+  });
+  return new Set(out.toString('utf8').split('\0').filter(Boolean));
+}

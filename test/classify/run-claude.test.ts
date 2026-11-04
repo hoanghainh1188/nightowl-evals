@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { CLASSIFICATION_SCHEMA } from '../../src/classify/parse.js';
 import { ClaudeError, runClaude } from '../../src/classify/run-claude.js';
@@ -24,6 +25,12 @@ describe('runClaude', () => {
       JSON.stringify(CLASSIFICATION_SCHEMA),
       '--tools',
       '',
+      '--strict-mcp-config',
+      '--mcp-config',
+      '{"mcpServers":{}}',
+      '--disable-slash-commands',
+      '--permission-mode',
+      'dontAsk',
       '--no-session-persistence',
       '--model',
       'haiku',
@@ -57,14 +64,18 @@ describe('runClaude', () => {
     });
   });
 
-  it('kills claude when it takes too long', async () => {
-    fake = await createFakeClaude({ body: 'sleep 5' });
+  it('kills claude and what it started when it takes too long', async () => {
+    fake = await createFakeClaude({ body: `sleep 30 & echo $! > "${'$'}base.child"; wait` });
     const started = Date.now();
-    const error = await runClaude('p', { model: 'haiku', timeoutMs: 200, env: { ...process.env, PATH: fake.path } }).catch(
+    const error = await runClaude('p', { model: 'haiku', timeoutMs: 1_500, env: { ...process.env, PATH: fake.path } }).catch(
       (e: unknown) => e,
     );
     expect(error).toBeInstanceOf(ClaudeError);
     expect((error as ClaudeError).reason).toBe('timeout');
-    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(Date.now() - started).toBeLessThan(4_000);
+    const { readFile } = await import('node:fs/promises');
+    const childPid = Number(await readFile(join(fake.dir.path, 'call-0.child'), 'utf8'));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(() => process.kill(childPid, 0)).toThrow();
   });
 });
