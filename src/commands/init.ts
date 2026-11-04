@@ -1,4 +1,5 @@
 import { relative } from 'node:path';
+import { renderCommandHelp } from '../cli/help.js';
 import { ensureClaudeHooks } from '../setup/claude-settings.js';
 import { SetupError } from '../setup/fs-utils.js';
 import { GIT_HOOKS, type GitHookSpec, hookLine, type InstallResult, installGitHook } from '../setup/git-hook.js';
@@ -7,6 +8,7 @@ import { isOnPath } from '../setup/path.js';
 import { findProjectRoot } from '../storage/project-root.js';
 import { DataDirError, openStore } from '../storage/store.js';
 import type { Command } from './command.js';
+import { acceptsNoArguments } from './no-arguments.js';
 
 export interface InitDeps {
   readonly cwd: () => string;
@@ -36,7 +38,21 @@ export function createInitCommand(deps: InitDeps = defaultDeps): Command {
   return {
     name: 'init',
     summary: 'Set up NightOwl hooks in this project',
-    run: async (_args, io) => {
+    help: renderCommandHelp({
+      name: 'init',
+      usage: '',
+      description: [
+        'Adds, without removing anything already there:',
+        '  .claude/settings.json   Claude Code hooks that run nightowl log',
+        '  .git/hooks/pre-commit   runs nightowl precommit',
+        '  .git/hooks/post-commit  runs nightowl postcommit',
+        '  .gitignore              the .nightowl/ entry',
+        'and creates the local database in .nightowl/. Safe to run again.',
+      ],
+      options: [],
+    }),
+    run: async (args, io) => {
+      if (!acceptsNoArguments('init', args, io)) return 1;
       const root = findProjectRoot(deps.cwd());
       if (root === null) {
         io.stderr(`nightowl init: no git repository found at or above ${deps.cwd()}\n`);

@@ -2,10 +2,12 @@ import { parseArgs } from 'node:util';
 import pkg from '../../package.json' with { type: 'json' };
 import type { Command } from '../commands/command.js';
 import { commands as defaultCommands } from '../commands/index.js';
+import { printable } from '../shared/printable.js';
 import { renderHelp } from './help.js';
 import type { Io } from './io.js';
 
 const HELP_HINT = "Run 'nightowl --help' to see available commands.";
+const HELP_FLAGS: ReadonlySet<string> = new Set(['-h', '--help']);
 
 function parseGlobal(argv: readonly string[]) {
   return parseArgs({
@@ -38,7 +40,7 @@ export async function run(
   try {
     flags = parseGlobal(globals).values;
   } catch (error) {
-    io.stderr(`nightowl: ${(error as Error).message}\n${HELP_HINT}\n`);
+    io.stderr(`nightowl: ${printable((error as Error).message)}\n${HELP_HINT}\n`);
     return 1;
   }
 
@@ -47,16 +49,26 @@ export async function run(
     return 0;
   }
 
-  const [name, ...args] = rest;
-  if (flags.help || name === undefined) {
+  const [first, ...afterFirst] = rest;
+  // `nightowl help <command>` is the same as `nightowl <command> --help`.
+  const isHelpCommand = first === 'help';
+  const [name, ...args] = isHelpCommand ? afterFirst : rest;
+  // `help --help` and `help help` mean the general help too.
+  const wantsGeneralHelp = isHelpCommand && (name === 'help' || (name !== undefined && HELP_FLAGS.has(name)));
+  if (flags.help || name === undefined || wantsGeneralHelp) {
     io.stdout(renderHelp(commands));
     return 0;
   }
 
   const command = commands.find((candidate) => candidate.name === name);
   if (!command) {
-    io.stderr(`nightowl: unknown command '${name}'.\n${HELP_HINT}\n`);
+    io.stderr(`nightowl: unknown command '${printable(name)}'.\n${HELP_HINT}\n`);
     return 1;
+  }
+  // Checked here, before the command runs, so asking for help never changes anything.
+  if (isHelpCommand || args.some((arg) => HELP_FLAGS.has(arg))) {
+    io.stdout(command.help);
+    return 0;
   }
   return command.run(args, io);
 }

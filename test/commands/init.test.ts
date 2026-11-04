@@ -42,6 +42,17 @@ describe('nightowl init', () => {
     expect(fake.err()).toBe('');
   });
 
+  it.each([[['--force']], [['now']]])('rejects %j and changes nothing', async (args) => {
+    const fake = createFakeIo();
+    expect(await createInitCommand({ cwd: () => repo.path, ...ON_PATH }).run(args, fake.io)).toBe(1);
+    expect(fake.out()).toBe('');
+    expect(fake.err()).toMatch(/^nightowl init: .*/);
+    expect(fake.err()).toContain(args[0] as string);
+    expect(fake.err()).toContain("Run 'nightowl init --help'");
+    expect((await readdir(repo.path)).filter((name) => name !== '.git')).toEqual([]);
+    expect((await readdir(join(repo.path, '.git/hooks'))).filter((name) => !name.endsWith('.sample'))).toEqual([]);
+  });
+
   it('explains how to add the hook when core.hooksPath is set, and still succeeds', async () => {
     git(repo.path, ['config', 'core.hooksPath', '.husky']);
     const fake = createFakeIo();

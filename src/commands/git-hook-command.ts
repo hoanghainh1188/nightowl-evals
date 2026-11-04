@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { appendErrorLog } from '../hooks/error-log.js';
 import { findProjectRoot } from '../storage/project-root.js';
 import { DATA_DIR } from '../storage/store.js';
+import { renderCommandHelp } from '../cli/help.js';
 import type { Command } from './command.js';
 
 export const GIT_HOOK_BUDGET_MS = 2_000;
@@ -15,6 +16,7 @@ export interface GitHookDeps {
 interface GitHookAction {
   readonly name: string;
   readonly summary: string;
+  readonly description: readonly string[];
   readonly run: (root: string, deadline: number) => Promise<unknown>;
 }
 
@@ -23,6 +25,7 @@ export function createGitHookCommand(action: GitHookAction, deps: GitHookDeps): 
   return {
     name: action.name,
     summary: action.summary,
+    help: renderCommandHelp({ name: action.name, usage: '', description: action.description, options: [] }),
     run: async () => {
       const deadline = Date.now() + (deps.budgetMs ?? GIT_HOOK_BUDGET_MS);
       let root: string | null = null;

@@ -1,5 +1,6 @@
 import { parseArgs } from 'node:util';
 import { errorMessage } from '../cli/errors.js';
+import { renderCommandHelp } from '../cli/help.js';
 import type { Io } from '../cli/io.js';
 import { CLASSIFICATION_SCHEMA, parseClaudeOutput } from '../classify/parse.js';
 import { buildPrompt } from '../classify/prompt.js';
@@ -126,6 +127,20 @@ export function createClassifyCommand(deps: ClassifyDeps = defaultDeps): Command
   return {
     name: 'classify',
     summary: 'Classify failures with Claude Code (dry run unless --yes)',
+    help: renderCommandHelp({
+      name: 'classify',
+      usage: '[options]',
+      description: [
+        'Asks Claude to sort failures into: logic, convention, misread-requirement, missing-context.',
+        'Without --yes it only says what would be sent. With --yes it sends each failure to `claude -p`.',
+      ],
+      options: [
+        ['--yes', 'Actually call Claude (default: dry run)'],
+        [`--limit <1-${MAX_LIMIT}>`, `At most this many failures (default: ${DEFAULT_LIMIT})`],
+        ['--model <name>', `Claude model (default: ${DEFAULT_MODEL})`],
+        ['--redo', 'Classify again failures already classified'],
+      ],
+    }),
     run: async (args, io) => {
       const options = parseOptions(args);
       if (typeof options === 'string') {

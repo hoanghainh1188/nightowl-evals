@@ -1,5 +1,6 @@
 import { parseArgs } from 'node:util';
 import { errorMessage } from '../cli/errors.js';
+import { renderCommandHelp } from '../cli/help.js';
 import { buildReport } from '../report/build.js';
 import { formatJson, formatText } from '../report/format.js';
 import { parseDateOption } from '../shared/date-option.js';
@@ -43,6 +44,16 @@ export function createReportCommand(deps: ReportDeps = { cwd: () => process.cwd(
   return {
     name: 'report',
     summary: 'Summarize recorded failures by type, module and week',
+    help: renderCommandHelp({
+      name: 'report',
+      usage: '[options]',
+      description: ['Summarizes recorded failures by type, module and ISO week. Reads only; changes nothing.'],
+      options: [
+        ['--since <YYYY-MM-DD>', 'Only failures from this date on'],
+        [`--depth <1-${MAX_DEPTH}>`, `Folder levels that make up a module (default: ${DEFAULT_DEPTH})`],
+        ['--json', 'Print the same data as JSON'],
+      ],
+    }),
     run: async (args, io) => {
       const options = parseOptions(args);
       if (typeof options === 'string') {

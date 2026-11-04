@@ -1,4 +1,5 @@
 import { recordClaudeCodeEvent } from '../hooks/claude-code/record.js';
+import { renderCommandHelp } from '../cli/help.js';
 import type { StdinRead } from '../cli/io.js';
 import { INTERNAL_ENV } from '../shared/internal-env.js';
 import type { Command } from './command.js';
@@ -20,6 +21,15 @@ export function createLogCommand(deps: LogDeps = defaultDeps): Command {
   return {
     name: 'log',
     summary: 'Record a hook event read from stdin (used by hooks)',
+    help: renderCommandHelp({
+      name: 'log',
+      usage: '',
+      description: [
+        'Records a Claude Code hook event (prompt or file edit) read from stdin.',
+        'Called by the Claude Code hooks; you do not run it yourself. Always exits 0 and prints nothing.',
+      ],
+      options: [],
+    }),
     run: async (_args, io) => {
       try {
         if (!io.stdin.isTTY) {
