@@ -171,6 +171,28 @@ npm run spec:validate
 
 Changes follow [OpenSpec](https://github.com/Fission-AI/OpenSpec): current behaviour is specified in [`openspec/specs`](openspec/specs). The product plan is in [`docs/nightowl-evals.md`](docs/nightowl-evals.md).
 
+## Releasing
+
+Releases are published to npm by [`.github/workflows/release.yml`](.github/workflows/release.yml) when a tag `v<version>` is pushed. It checks that the tag matches `package.json` and that its commit is on `main`, runs the same checks as CI and packs the tarball; a separate job that runs no package code publishes exactly that tarball with [trusted publishing](https://docs.npmjs.com/trusted-publishers) (no npm token, with provenance); a third job creates the GitHub Release with generated notes. A version with a suffix such as `0.2.0-beta.1` is published under the `next` dist-tag and marked as a pre-release. Running the workflow again skips what is already done.
+
+**Once, before the first release:**
+
+1. npm only lets you configure a trusted publisher for a package that exists, so publish `0.1.0` by hand from a clean, up-to-date `main` (`prepack` builds `dist/`):
+
+   ```bash
+   npm ci && npm test
+   npm login
+   npm publish --access public
+   ```
+
+2. On npmjs.com, in the package settings, add a trusted publisher: GitHub Actions, owner `hoanghainh1188`, repository `nightowl-evals`, workflow `release.yml`, environment `npm`, with `npm publish` allowed. Then set publishing access to trusted publishers only, so no token can publish it.
+3. On GitHub, create the environment `npm` (Settings → Environments). Adding yourself as a required reviewer makes every release wait for your approval before publishing. A tag ruleset on `v*` (Settings → Rules) can also limit who may create release tags.
+
+**Each release:**
+
+1. On a new branch: `npm version minor --no-git-tag-version` (or `patch`, `major`, `prerelease --preid beta`), commit, open a PR and merge it. `main` only takes changes through PRs, so `npm version` must not commit or tag there itself.
+2. On the updated `main`: `git tag v<version>` and `git push origin v<version>`.
+
 ## License
 
 [Apache-2.0](LICENSE)

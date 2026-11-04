@@ -4,6 +4,14 @@
   "description": "Record every time AI writes wrong code and turn those failures into a project-specific eval suite. Local-only.",
   "license": "Apache-2.0",
   "author": "Hoang Hai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hoanghainh1188/nightowl-evals.git"
+  },
+  "homepage": "https://github.com/hoanghainh1188/nightowl-evals#readme",
+  "bugs": {
+    "url": "https://github.com/hoanghainh1188/nightowl-evals/issues"
+  },
   "type": "module",
   "bin": {
     "nightowl": "dist/bin.js"
@@ -21,7 +29,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "spec:validate": "openspec validate --all --strict"
+    "spec:validate": "openspec validate --all --strict",
+    "prepack": "npm run build"
   },
   "publishConfig": {
     "access": "public"
