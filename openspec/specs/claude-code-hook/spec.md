@@ -65,3 +65,10 @@ Khi payload không đọc được, stdin không đóng kịp, thiếu trường
 #### Scenario: Payload Write 1 MB
 - **WHEN** payload `Write` 1 MB được pipe vào `nightowl log`
 - **THEN** lệnh thoát mã 0 trong vòng 1 giây
+
+### Requirement: Bỏ qua sự kiện do NightOwl tạo ra
+Khi biến môi trường `NIGHTOWL_INTERNAL` bằng `1`, `nightowl log` SHALL NOT lưu sự kiện nào và SHALL NOT ghi vào `.nightowl/nightowl.log`, nhưng vẫn đọc hết stdin, im lặng và thoát mã 0.
+
+#### Scenario: Lời gọi phân loại kích hoạt hook
+- **WHEN** payload `UserPromptSubmit` được pipe vào `nightowl log` với `NIGHTOWL_INTERNAL=1`
+- **THEN** database không có sự kiện mới, mã thoát 0, stdout và stderr rỗng
