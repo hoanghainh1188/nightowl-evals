@@ -72,6 +72,6 @@ Chạy tuần tự: bài theo thứ tự trong file, trong mỗi bài lần lư�
 ## Risks / Trade-offs
 
 - [Code rời khỏi máy, nhiều hơn `classify`] → Chỉ với `--yes`; chạy thử cho thấy số bài, số lời gọi, dung lượng; bỏ bài lớn hơn 64 KB.
-- [Tốn quota: bài × model lời gọi] → `--limit` mặc định 20; mặc định 2 model.
+- [Tốn quota: bài × model lời gọi] → `--limit` mặc định 20; mặc định 2 model. Đo thật (task 6.3): khoảng 0,006 USD/lần với `haiku` và 0,10 USD/lần với `sonnet` (phần lớn là system prompt của Claude Code), nên 20 bài × 2 model ≈ 2 USD mỗi lần chạy.
 - [Điểm theo dòng phạt cách sửa khác mà đúng] → Ghi rõ trong output và README; chấm bằng test của dự án để sau.
 - [Model trả về file bị cắt hoặc kèm giải thích] → Schema JSON với một trường `content`; đầu ra không hợp lệ tính là thất bại, không phải điểm 0.

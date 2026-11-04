@@ -26,4 +26,4 @@
 
 - [x] 6.1 Test e2e với `claude` giả trả lời khác nhau theo `--model`: commit thật → `export` → `eval` (chạy thử) → `eval --yes`, kiểm tra bảng và file kết quả
 - [x] 6.2 Chạy `npm run test:coverage` đạt ≥ 80% và `npm run spec:validate`
-- [ ] 6.3 Thử với `claude` thật: 1 bài mẫu vô hại × 2 model (cần người dùng đồng ý vì có gửi dữ liệu)
+- [x] 6.3 Thử với `claude` thật: 1 bài mẫu vô hại × 2 model (cần người dùng đồng ý vì có gửi dữ liệu) — đã thử 2026-11-04 với claude 2.1.311: haiku và sonnet đều trả về đúng file đã sửa (`age >= 18`), điểm 1,00, 9 giây cho cả hai; chi phí khoảng 0,006 USD/lần với haiku và 0,10 USD/lần với sonnet
