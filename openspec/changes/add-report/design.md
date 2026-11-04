@@ -29,8 +29,8 @@ Hàm thuần `buildReport(rows, options) → Report` tách khỏi phần in, đ�
 ### 3. Tuần ISO theo UTC
 `created_at` lưu dạng ISO UTC. Tuần được tính theo UTC để kết quả giống nhau trên mọi máy và trong test. Lệch vài giờ quanh nửa đêm thứ Hai là chấp nhận được ở MVP.
 
-### 4. Không tạo `.nightowl/`
-Kiểm tra `.nightowl/` tồn tại trước khi gọi `openStore`, vì `openStore` tạo thư mục và database khi chưa có. `openStore` vẫn chạy migration nếu database cũ hơn; việc đó không đổi dữ liệu đã ghi.
+### 4. Mở chỉ đọc, không tạo `.nightowl/`
+Kiểm tra `.nightowl/nightowl.db` tồn tại, rồi mở bằng `openStore({ readOnly: true })`: `DatabaseSync` chế độ `readOnly`, không tạo thư mục, không migrate, không đổi `journal_mode`. Database cũ hơn thì báo chạy `nightowl init` (lệnh này migrate). Với database ở chế độ WAL, SQLite có thể tạo file phụ `-wal`/`-shm` khi đọc; nội dung dữ liệu không đổi. Dùng chung cho `report` và `export` (`src/commands/existing-store.ts`).
 
 ### 5. Định dạng chữ
 ```
@@ -63,7 +63,7 @@ Thanh dài tối đa 30 ký tự, tỷ lệ với giá trị lớn nhất trong 
   "by_module": [ { "module": "src/hooks", "failures": 6 } ],
   "by_week": [ { "week": "2026-W45", "failures": 8, "checked": 24, "rate": 0.33 } ] }
 ```
-`by_module` sắp theo số lỗi giảm dần rồi theo tên; `by_week` sắp theo thời gian.
+`by_module` sắp theo số lỗi giảm dần rồi theo tên (so sánh theo mã ký tự, không theo locale, để giống nhau trên mọi máy); `by_week` sắp theo thời gian. Trong một tuần, số lỗi tính theo ngày tạo bản ghi lỗi, còn tỷ lệ tính theo ngày của lần kiểm tra lúc commit; hai ngày này thường trùng nhau (cùng một commit).
 
 ## Risks / Trade-offs
 

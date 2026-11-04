@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { evalIds, toEvalCase } from '../../src/export/eval-case.js';
+import { evalId, toEvalCase } from '../../src/export/eval-case.js';
 import type { FailureToExport } from '../../src/storage/failures.js';
 
 const failure = (overrides: Partial<FailureToExport> = {}): FailureToExport => ({
@@ -55,15 +55,10 @@ describe('toEvalCase', () => {
   });
 });
 
-describe('evalIds', () => {
-  it('builds ids from the commit and file, unique and stable', () => {
-    const list = [
-      failure({ id: 1 }),
-      failure({ id: 2, filePath: 'src/b.ts' }),
-      failure({ id: 3 }),
-      failure({ id: 4, commitSha: null }),
-    ];
-    expect(evalIds(list)).toEqual(['3f2a9c1d8e07-src/a.ts', '3f2a9c1d8e07-src/b.ts', '3f2a9c1d8e07-src/a.ts-3', 'failure-4']);
-    expect(evalIds(list)).toEqual(evalIds(list));
+describe('evalId', () => {
+  it('is built from the commit and the failure, so it never depends on what else is exported', () => {
+    expect(evalId(failure({ id: 3 }))).toBe('3f2a9c1d8e07-3');
+    expect(evalId(failure({ id: 4, commitSha: null }))).toBe('failure-4');
+    expect(evalId(failure({ id: 3, filePath: 'other.ts' }))).toBe('3f2a9c1d8e07-3');
   });
 });

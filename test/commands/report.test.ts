@@ -90,6 +90,31 @@ describe('nightowl report', () => {
     expect(await readdir(repo.path)).toEqual(['.git']);
   });
 
+  it('creates nothing when .nightowl/ exists without a database', async () => {
+    const { mkdir } = await import('node:fs/promises');
+    await mkdir(join(repo.path, '.nightowl'));
+    const result = await run();
+    expect(result.code).toBe(1);
+    expect(result.err).toContain("Run 'nightowl init' first");
+    expect(await readdir(join(repo.path, '.nightowl'))).toEqual([]);
+  });
+
+  it('does not migrate an older database, and asks for nightowl init', async () => {
+    await seed(repo.path, spec);
+    const { DatabaseSync } = await import('node:sqlite');
+    const file = join(repo.path, '.nightowl/nightowl.db');
+    const db = new DatabaseSync(file);
+    db.exec('PRAGMA user_version = 2');
+    db.close();
+    const before = await readFile(file);
+    const result = await run();
+    expect(result.code).toBe(1);
+    expect(result.err).toContain("Run 'nightowl init' to upgrade it");
+    expect((await readFile(file)).equals(before)).toBe(true);
+    // SQLite may add its own -wal/-shm index files when reading a WAL database; nothing else.
+    expect((await readdir(join(repo.path, '.nightowl'))).every((name) => name.startsWith('nightowl.db'))).toBe(true);
+  });
+
   it('fails outside a git repository', async () => {
     const outside = await createTempDir();
     try {

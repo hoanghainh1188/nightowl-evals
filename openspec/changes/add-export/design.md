@@ -18,7 +18,7 @@ Xem proposal.md. Hành vi: `specs/eval-export`. Dựa trên bảng `failures` (s
 ### 1. Một dòng = một bài test
 ```json
 { "schema": "nightowl.eval/v1",
-  "id": "3f2a9c1d8e07-src/a.ts",
+  "id": "3f2a9c1d8e07-42",
   "file_path": "src/a.ts",
   "commit_sha": "3f2a9c1…",
   "created_at": "2026-11-04T10:00:00.000Z",
@@ -29,11 +29,11 @@ Xem proposal.md. Hành vi: `specs/eval-export`. Dựa trên bảng `failures` (s
   "criteria": { "type": "reference",
                 "description": "The output should match the intent of `expected` and must not repeat the defect in `rejected`." } }
 ```
-- `id` = 12 ký tự đầu của `commit_sha` + `-` + `file_path`. Thông thường một commit chỉ sinh một lỗi cho mỗi file (change 5). Nếu hiếm khi có trùng, các bản sau thêm hậu tố `-<id bản ghi lỗi>`, nên `id` luôn duy nhất và vẫn ổn định. Thiếu `commit_sha` (không xảy ra với dữ liệu từ change 5) thì dùng `failure-<id>`.
+- `id` = 12 ký tự đầu của `commit_sha` + `-` + số của bản ghi lỗi (`failure-<số>` khi thiếu `commit_sha`). Chỉ phụ thuộc vào chính bản ghi, nên không đổi khi lọc khác hay khi bản ghi khác bị loại. (Bản đầu dùng đường dẫn file, nhưng cách chống trùng phụ thuộc vào thứ tự xuất nên `id` đổi theo bộ lọc; review đã chỉ ra.)
 - Khoá được ghi theo thứ tự cố định ở trên; JSON không thụt dòng.
 
 ### 2. File trước commit lấy từ git
-Một tiến trình `git cat-file --batch`, đầu vào là các dòng `<commit_sha>^:<file_path>`, giống cách change 4 đọc file đã stage. File thiếu, commit thiếu (đã rebase hoặc gc), commit gốc không có cha, đường dẫn chứa xuống dòng, hoặc nội dung lớn hơn 512 KB → `null`.
+Đầu vào là các dòng `<commit_sha>^:<file_path>` (bỏ trùng; `commit_sha` phải là chuỗi hex để git không hiểu thành biểu thức khác). Trước hết `git cat-file --batch-check` lấy kích thước, rồi một `git cat-file --batch` chỉ đọc các blob ≤ 512 KB, nên file lớn không bao giờ được nạp vào bộ nhớ. Mỗi lệnh git bị huỷ sau 30 giây. Nội dung phải là UTF-8 hợp lệ và không có byte `0`. File thiếu, commit thiếu (đã rebase hoặc gc), commit gốc không có cha, đường dẫn chứa xuống dòng, file nhị phân hoặc quá lớn → `null`.
 *Phương án khác:* lưu bản trước lúc `post-commit`. Cần thêm cột, tốn thời gian trong hook, và vẫn không có cho dữ liệu đã ghi; git đã giữ sẵn bản này.
 `file_before` là trạng thái commit trước, không phải đúng lúc AI bắt đầu sửa; giữa hai thời điểm có thể có thay đổi chưa commit. Chấp nhận ở MVP.
 
@@ -43,11 +43,14 @@ Bản v1 chỉ có `type: "reference"`. Change 9 đọc `type` để chọn các
 ### 4. Ghi file an toàn
 Dùng lại `writeFileAtomic` (`src/setup/fs-utils.ts`): file tạm cùng thư mục, cờ `wx`, không ghi xuyên symlink, rồi đổi tên. Bổ sung tuỳ chọn quyền `0o600`. Thư mục `.nightowl/export/` được tạo với quyền `0o700`. Đường dẫn `--out` tương đối tính từ thư mục hiện tại; thư mục cha phải tồn tại sẵn (không tạo cây thư mục theo tham số).
 
-### 5. Đọc theo lô
+### 5. Không xuất file nhạy cảm, không ghi đè file lạ
+Bản ghi của file thuộc nhóm bí mật (`isSensitivePath`, cùng quy tắc với hook) bị bỏ ngay cả khi database có sẵn, phòng dữ liệu từ bản NightOwl cũ. `--out` chỉ thay được file rỗng hoặc file xuất trước đó (dòng đầu bắt đầu bằng `{"schema":"nightowl.eval/`); file khác cần `--force`. Đích là symlink luôn bị từ chối. Nếu `git check-ignore` cho biết file đích không bị bỏ qua, stderr cảnh báo file có thể bị commit.
+
+### 6. Đọc theo lô
 Bản ghi lỗi được đọc theo thứ tự `id`, lọc bằng SQL (`status != 'dismissed'`, `--since`, `--category`). Nội dung được ghép thành chuỗi rồi ghi một lần; với mốc MVP vài trăm lỗi, mỗi lỗi tối đa vài MB, là đủ. Đọc theo luồng để sau nếu cần.
 
-### 6. Kiểm tra trước khi mở database
-Giống `report`: kiểm tra `.nightowl/` trước `openStore`, và kiểm tra tuỳ chọn trước khi đọc gì.
+### 7. Kiểm tra trước khi mở database
+Giống `report`: kiểm tra tuỳ chọn trước, rồi mở database chỉ đọc qua `openExistingStore` (design `add-report` mục 4).
 
 ## Risks / Trade-offs
 

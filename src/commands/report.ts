@@ -49,12 +49,7 @@ export function createReportCommand(deps: ReportDeps = { cwd: () => process.cwd(
         io.stderr(`nightowl report: ${options}\n`);
         return 1;
       }
-      let store;
-      try {
-        store = await openExistingStore(deps.cwd());
-      } catch (error) {
-        store = errorMessage(error);
-      }
+      const store = await openExistingStore(deps.cwd());
       if (typeof store === 'string') {
         io.stderr(`nightowl report: ${store}\n`);
         return 1;

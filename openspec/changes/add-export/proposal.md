@@ -12,6 +12,7 @@ Mục tiêu của NightOwl là "mỗi lỗi thành một bài test chạy lại 
   - loại lỗi, lý do, độ tin cậy (nếu đã phân loại), mã commit, đường dẫn file;
   - tiêu chí chấm ở dạng mô tả, kiểu `reference` (đối chiếu với `expected`, không lặp lại lỗi trong `rejected`). Change 9 quyết định cách chấm điểm cụ thể.
 - Mỗi dòng có trường `schema: "nightowl.eval/v1"` và `id` ổn định, để chạy lại nhiều lần vẫn so được.
+- Không bao giờ xuất bản ghi của file nhạy cảm (`.env`, khoá, …); không ghi đè file không phải file xuất trước đó (trừ khi `--force`); cảnh báo nếu git không bỏ qua file đích.
 - Mặc định ghi vào `.nightowl/export/evals.jsonl`: thư mục đã nằm trong `.gitignore`, nên code không vô tình bị commit. File được ghi với quyền `0600`, ghi nguyên tử, không ghi xuyên symlink.
 - Tuỳ chọn: `--out <file>` (hoặc `--out -` để in ra stdout), `--since <YYYY-MM-DD>`, `--category <loại>` (lặp lại được, có thêm giá trị `unclassified`).
 - In ra stderr số bài test đã ghi và đường dẫn file.

@@ -21,15 +21,9 @@ export interface EvalCase {
   readonly criteria: typeof REFERENCE_CRITERIA;
 }
 
-// Stable across exports: derived from the commit and the file, made unique in export order.
-export function evalIds(failures: readonly FailureToExport[]): readonly string[] {
-  const used = new Set<string>();
-  return failures.map((failure) => {
-    const base = failure.commitSha === null ? `failure-${failure.id}` : `${failure.commitSha.slice(0, 12)}-${failure.filePath}`;
-    const id = used.has(base) ? `${base}-${failure.id}` : base;
-    used.add(id);
-    return id;
-  });
+// Depends on the failure alone, so filters, dismissals and new failures never change it.
+export function evalId(failure: FailureToExport): string {
+  return failure.commitSha === null ? `failure-${failure.id}` : `${failure.commitSha.slice(0, 12)}-${failure.id}`;
 }
 
 // Keys are written in this order, so the same failure always gives the same line.

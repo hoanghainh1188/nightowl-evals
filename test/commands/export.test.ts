@@ -71,6 +71,35 @@ describe('nightowl export', () => {
     expect((await lines(join(repo.path, 'evals.jsonl'))).length).toBe(1);
   });
 
+  it('replaces an earlier export but not another file, unless --force', async () => {
+    await seed(repo.path, [{ filePath: 'a.ts' }]);
+    await writeFile(join(repo.path, 'notes.txt'), 'my notes\n');
+    const refused = await run(['--out', 'notes.txt']);
+    expect(refused.code).toBe(1);
+    expect(refused.err).toContain('is not a NightOwl export; use --force');
+    expect(await readFile(join(repo.path, 'notes.txt'), 'utf8')).toBe('my notes\n');
+    expect((await run(['--out', 'notes.txt', '--force'])).code).toBe(0);
+    expect((await run(['--out', 'notes.txt'])).code).toBe(0);
+    await writeFile(join(repo.path, 'empty.jsonl'), '');
+    expect((await run(['--out', 'empty.jsonl'])).code).toBe(0);
+  });
+
+  it('warns when git would not ignore the file', async () => {
+    await seed(repo.path, [{ filePath: 'a.ts' }]);
+    expect((await run(['--out', 'evals.jsonl'])).err).toContain('git does not ignore this file');
+    await writeFile(join(repo.path, '.gitignore'), '.nightowl/\n*.jsonl\n');
+    expect((await run(['--out', 'evals.jsonl'])).err).not.toContain('git does not ignore');
+    expect((await run()).err).not.toContain('git does not ignore');
+  });
+
+  it('never exports failures in sensitive files', async () => {
+    await seed(repo.path, [{ filePath: 'a.ts' }, { filePath: '.env', aiContent: 'API_KEY=1\n' }, { filePath: 'keys/id_rsa' }]);
+    const result = await run();
+    expect(result.err).toContain('exported 1 eval cases');
+    expect(result.err).toContain('Left out 2 failures in sensitive files');
+    expect(await readFile(defaultFile(), 'utf8')).not.toContain('API_KEY');
+  });
+
   it('filters by --since and repeated --category', async () => {
     await seed(repo.path, [
       { filePath: 'a.ts', category: 'logic', createdAt: '2026-11-01T00:00:00.000Z' },
@@ -99,7 +128,7 @@ describe('nightowl export', () => {
     await run();
     const [a, created] = await lines();
     expect(a?.input).toEqual({ prompt: null, file_before: 'v0\n' });
-    expect(a?.id).toBe(`${sha.slice(0, 12)}-a.ts`);
+    expect(a?.id).toMatch(new RegExp(`^${sha.slice(0, 12)}-\\d+$`));
     expect(created?.input).toEqual({ prompt: null, file_before: null });
   });
 
@@ -119,6 +148,17 @@ describe('nightowl export', () => {
     const result = await run(['--out', 'missing/dir/evals.jsonl']);
     expect(result.code).toBe(1);
     expect(await readdir(repo.path)).not.toContain('missing');
+  });
+
+  it('keeps every id when a filter leaves other failures out', async () => {
+    await seed(repo.path, [
+      { filePath: 'a.ts', category: 'logic' },
+      { filePath: 'a.ts', category: 'convention' },
+    ]);
+    await run();
+    const all = await lines();
+    await run(['--category', 'convention']);
+    expect((await lines()).map((c) => c.id)).toEqual([all[1]?.id]);
   });
 
   it('does not change the database', async () => {

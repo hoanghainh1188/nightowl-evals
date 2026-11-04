@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { retryWhileBusy } from './busy.js';
-import { ensureDataDir } from './data-dir.js';
+import { DATA_DIR, ensureDataDir } from './data-dir.js';
 import {
   type EventFilter,
   getSnapshot,
@@ -30,7 +30,7 @@ import {
   saveClassification,
   type UnattachedCheck,
 } from './failures.js';
-import { migrate } from './migrations.js';
+import { CURRENT_SCHEMA_VERSION, migrate, SchemaTooNewError } from './migrations.js';
 import { type CheckCountRow, countChecksForReport, countFailuresForReport, type FailureCountRow } from './report-queries.js';
 import { findProjectRoot } from './project-root.js';
 import { loadSqlite } from './sqlite.js';
@@ -77,6 +77,29 @@ export interface OpenStoreOptions {
   readonly cwd?: string;
   // Upper bound on waiting for other writers; hooks pass what is left of their budget.
   readonly timeoutMs?: number;
+  // Opens an existing, up-to-date database without creating, migrating or writing anything.
+  readonly readOnly?: boolean;
+}
+
+export class SchemaOutdatedError extends Error {
+  constructor(readonly found: number) {
+    super(`NightOwl database schema v${found} is older than v${CURRENT_SCHEMA_VERSION}. Run 'nightowl init' to upgrade it.`);
+    this.name = 'SchemaOutdatedError';
+  }
+}
+
+function openReadOnly(DatabaseSync: typeof import('node:sqlite').DatabaseSync, path: string, waitMs: number) {
+  const db = new DatabaseSync(path, { readOnly: true });
+  try {
+    db.exec(`PRAGMA busy_timeout = ${waitMs}`);
+    const version = (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
+    if (version > CURRENT_SCHEMA_VERSION) throw new SchemaTooNewError(version);
+    if (version < CURRENT_SCHEMA_VERSION) throw new SchemaOutdatedError(version);
+    return db;
+  } catch (error) {
+    db.close();
+    throw error;
+  }
 }
 
 export async function openStore(options: OpenStoreOptions = {}): Promise<Store> {
@@ -86,6 +109,7 @@ export async function openStore(options: OpenStoreOptions = {}): Promise<Store> 
   if (root === null) throw new ProjectNotFoundError(cwd);
 
   const { DatabaseSync } = await loadSqlite();
+  if (options.readOnly) return storeApi(openReadOnly(DatabaseSync, join(root, DATA_DIR, DB_FILE), waitMs), root);
   const db = new DatabaseSync(join(ensureDataDir(root), DB_FILE));
   try {
     db.exec(`PRAGMA busy_timeout = ${waitMs}`);
@@ -99,7 +123,10 @@ export async function openStore(options: OpenStoreOptions = {}): Promise<Store> 
     db.close();
     throw error;
   }
+  return storeApi(db, root);
+}
 
+function storeApi(db: import('node:sqlite').DatabaseSync, root: string): Store {
   return Object.freeze({
     root,
     insertEvent: (event: NewEvent) => insertEvent(db, event),

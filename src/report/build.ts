@@ -76,7 +76,7 @@ export function buildReport(input: ReportInput): Report {
     byModule: Object.freeze(
       [...byModule]
         .map(([module, failures]) => ({ module, failures }))
-        .sort((a, b) => b.failures - a.failures || a.module.localeCompare(b.module)),
+        .sort((a, b) => b.failures - a.failures || (a.module < b.module ? -1 : a.module > b.module ? 1 : 0)),
     ),
     byWeek: Object.freeze(
       weeks.map((week) => ({

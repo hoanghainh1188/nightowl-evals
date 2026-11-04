@@ -44,6 +44,22 @@ describe('readFilesBefore', () => {
     expect([...files.values()]).toEqual(['a\n']);
   });
 
+  it('leaves out binary and non-UTF-8 files, and reads a repeated item once', async () => {
+    const { writeFile } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    await writeFile(join(repo.path, 'logo.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 1]));
+    await writeFile(join(repo.path, 'latin1.txt'), Buffer.from([0x63, 0x61, 0x66, 0xe9, 0x0a]));
+    await commit({ 'a.ts': 'v0\n' });
+    const sha = await commit({ 'logo.png': 'x', 'latin1.txt': 'y', 'a.ts': 'v1\n' });
+    const files = await readFilesBefore(repo.path, [
+      { commitSha: sha, filePath: 'logo.png' },
+      { commitSha: sha, filePath: 'latin1.txt' },
+      { commitSha: sha, filePath: 'a.ts' },
+      { commitSha: sha, filePath: 'a.ts' },
+    ]);
+    expect([...files.entries()]).toEqual([[fileBeforeKey({ commitSha: sha, filePath: 'a.ts' }), 'v0\n']]);
+  });
+
   it('returns nothing for no items', async () => {
     expect((await readFilesBefore(repo.path, [])).size).toBe(0);
   });

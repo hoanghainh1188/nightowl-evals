@@ -43,7 +43,7 @@ Với `--since <YYYY-MM-DD>`, báo cáo SHALL chỉ tính bản ghi lỗi và l�
 - **THEN** stderr báo ngày không hợp lệ, mã thoát 1
 
 ### Requirement: Chỉ đọc, không tự khởi tạo
-`nightowl report` SHALL NOT thay đổi dữ liệu đã ghi. Khi dự án chưa có `.nightowl/`, lệnh SHALL báo cần chạy `nightowl init`, thoát mã 1 và SHALL NOT tạo file hay thư mục nào. Ngoài repo git, lệnh SHALL báo lỗi và thoát mã 1.
+`nightowl report` SHALL mở database chỉ đọc và SHALL NOT thay đổi hay nâng cấp nó; database cũ hơn phiên bản hiện tại SHALL làm lệnh gợi ý `nightowl init` và thoát mã 1. Khi dự án chưa có `.nightowl/nightowl.db`, lệnh SHALL báo cần chạy `nightowl init`, thoát mã 1 và SHALL NOT tạo file hay thư mục nào. Ngoài repo git, lệnh SHALL báo lỗi và thoát mã 1.
 
 #### Scenario: Chưa chạy init
 - **WHEN** chạy `nightowl report` trong một repo git chưa có `.nightowl/`
