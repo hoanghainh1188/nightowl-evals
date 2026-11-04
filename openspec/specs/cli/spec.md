@@ -38,7 +38,7 @@ Khi lệnh con không có trong danh sách đăng ký, `nightowl` SHALL in ra st
 - **THEN** stderr chứa `reprot` và `--help`, stdout rỗng, mã thoát là 1
 
 ### Requirement: Lệnh con chưa triển khai
-Các lệnh `init`, `report`, `export` SHALL được đăng ký. Khi chưa có logic, mỗi lệnh SHALL in ra stderr một dòng báo lệnh chưa được triển khai, không thay đổi file nào, và thoát mã 0.
+Các lệnh `report`, `export` SHALL được đăng ký. Khi chưa có logic, mỗi lệnh SHALL in ra stderr một dòng báo lệnh chưa được triển khai, không thay đổi file nào, và thoát mã 0.
 
 #### Scenario: Gọi lệnh report khi chưa triển khai
 - **WHEN** người dùng chạy `nightowl report`
