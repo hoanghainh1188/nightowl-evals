@@ -19,3 +19,16 @@ export async function openExistingStore(cwd: string): Promise<Store | string> {
     return printable(errorMessage(error));
   }
 }
+
+// Writes only to a database `nightowl init` created and brought up to date: never creates
+// .nightowl/ or upgrades the schema behind the user's back.
+export async function openExistingStoreForWrite(cwd: string): Promise<Store | string> {
+  const check = await openExistingStore(cwd);
+  if (typeof check === 'string') return check;
+  check.close();
+  try {
+    return await openStore({ cwd: check.root });
+  } catch (error) {
+    return printable(errorMessage(error));
+  }
+}

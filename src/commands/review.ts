@@ -6,9 +6,9 @@ import { formatDetail, formatList } from '../review/format.js';
 import { printable } from '../shared/printable.js';
 import type { FailureSource } from '../storage/failures.js';
 import type { FailureStatus } from '../storage/review-queries.js';
-import { openStore, type Store } from '../storage/store.js';
+import type { Store } from '../storage/store.js';
 import type { Command } from './command.js';
-import { openExistingStore } from './existing-store.js';
+import { openExistingStore, openExistingStoreForWrite } from './existing-store.js';
 
 export const DEFAULT_REVIEW_LIMIT = 20;
 const MAX_LIMIT = 200;
@@ -84,19 +84,6 @@ function parseAction(args: readonly string[]): Action {
 const plural = (n: number) => (n === 1 ? 'failure' : 'failures');
 const idList = (ids: readonly number[]) => ids.map((id) => `#${id}`).join(', ');
 
-// Writes only to a database `nightowl init` created and brought up to date: never creates
-// .nightowl/ or upgrades the schema behind the user's back.
-async function openForWrite(cwd: string): Promise<Store | string> {
-  const check = await openExistingStore(cwd);
-  if (typeof check === 'string') return check;
-  check.close();
-  try {
-    return await openStore({ cwd: check.root });
-  } catch (error) {
-    return printable(errorMessage(error));
-  }
-}
-
 function runMark(store: Store, action: Extract<Action, { kind: 'mark' }>, io: Io): number {
   const [status, verb] = MARKS[action.mark];
   const result = store.setFailureStatus(action.ids, status);
@@ -161,7 +148,7 @@ export function createReviewCommand(deps: ReviewDeps = { cwd: () => process.cwd(
         io.stderr(`nightowl review: ${printable(errorMessage(error))}\nRun 'nightowl review --help'.\n`);
         return 1;
       }
-      const store = action.kind === 'mark' ? await openForWrite(deps.cwd()) : await openExistingStore(deps.cwd());
+      const store = action.kind === 'mark' ? await openExistingStoreForWrite(deps.cwd()) : await openExistingStore(deps.cwd());
       if (typeof store === 'string') {
         io.stderr(`nightowl review: ${store}\n`);
         return 1;

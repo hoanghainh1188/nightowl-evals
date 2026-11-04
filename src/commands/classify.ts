@@ -4,12 +4,14 @@ import { renderCommandHelp } from '../cli/help.js';
 import type { Io } from '../cli/io.js';
 import { CLASSIFICATION_SCHEMA, parseClaudeOutput } from '../classify/parse.js';
 import { buildPrompt } from '../classify/prompt.js';
+import { acquireClassifyLock, ClassifyLockError } from '../classify/lock.js';
 import { type RunClaude, runClaude } from '../classify/run-claude.js';
 import { isOnPath } from '../setup/path.js';
 import { printable } from '../shared/printable.js';
 import type { FailureToClassify } from '../storage/failures.js';
-import { openStore, ProjectNotFoundError, type Store } from '../storage/store.js';
+import type { Store } from '../storage/store.js';
 import type { Command } from './command.js';
+import { openExistingStoreForWrite } from './existing-store.js';
 
 export const DEFAULT_LIMIT = 20;
 export const DEFAULT_MODEL = 'haiku';
@@ -153,22 +155,28 @@ export function createClassifyCommand(deps: ClassifyDeps = defaultDeps): Command
         return 1;
       }
 
-      let store: Store;
-      try {
-        store = await openStore({ cwd: deps.cwd() });
-      } catch (error) {
-        const message = error instanceof ProjectNotFoundError ? `no git repository found at or above ${error.cwd}` : errorMessage(error);
-        io.stderr(`nightowl classify: ${message}\n`);
+      // Never creates .nightowl/ or upgrades the schema: that is what nightowl init is for.
+      const store = await openExistingStoreForWrite(deps.cwd());
+      if (typeof store === 'string') {
+        io.stderr(`nightowl classify: ${store}\n`);
         return 1;
       }
+      let release: (() => Promise<void>) | null = null;
       try {
+        // Taken before the list is read, so two runs never pick the same failures.
+        if (options.yes) release = await acquireClassifyLock(store.root);
         const failures = store.listFailuresToClassify(options.limit, options.redo);
         if (failures.length === 0) {
           io.stdout('No failures to classify.\n');
           return 0;
         }
         return options.yes ? await classifyAll(store, failures, options, deps, io) : dryRun(failures, options, io);
+      } catch (error) {
+        if (!(error instanceof ClassifyLockError)) throw error;
+        io.stderr(`nightowl classify: ${printable(error.message)}\n`);
+        return 1;
       } finally {
+        await release?.();
         store.close();
       }
     },

@@ -43,7 +43,8 @@ function part(tag: string, content: string, truncated: string[]): string {
 
 export function buildPrompt(failure: FailureForPrompt): BuiltPrompt {
   const truncated: string[] = [];
-  const diff = unifiedDiff(failure.aiContent, failure.finalContent) ?? '(diff omitted: the versions differ too much)';
+  // `\r` is invisible: a CRLF-to-LF change would look like identical lines to the model.
+  const diff = unifiedDiff(failure.aiContent, failure.finalContent)?.replace(/\r/g, '␍') ?? '(diff omitted: the versions differ too much)';
   const definitions = Object.entries(CATEGORIES)
     .map(([name, meaning]) => `- ${name}: ${meaning}`)
     .join('\n');

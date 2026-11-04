@@ -26,6 +26,15 @@ describe('buildPrompt', () => {
     expect(buildPrompt(base).text).not.toContain('<feedback>');
   });
 
+  it('shows carriage returns in the diff, leaving the versions as they are', () => {
+    const { text } = buildPrompt({ ...base, aiContent: 'a\r\nb\r\n', finalContent: 'a\nb\n' });
+    const diff = /<diff>\n([\s\S]*?)\n<\/diff>/.exec(text)?.[1] ?? '';
+    expect(diff).toContain('-a␍');
+    expect(diff).toMatch(/^\+a$/m);
+    expect(diff).not.toContain('\r');
+    expect(text).toContain('<ai_version>\na\r\nb\r\n');
+  });
+
   it('says when no prompt was recorded', () => {
     expect(buildPrompt({ ...base, userPrompt: null }).text).toContain('<developer_prompt>(not recorded)</developer_prompt>');
   });

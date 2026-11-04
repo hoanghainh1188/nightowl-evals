@@ -50,11 +50,15 @@ Bản ghi `failures` SHALL tham chiếu sự kiện `prompt` gần nhất của 
 - **THEN** commit thành công, không có gì in ra terminal, `.nightowl/nightowl.log` có một dòng lỗi
 
 ### Requirement: Đếm bản ghi lỗi
-`nightowl failures` SHALL in ra stdout tổng số bản ghi lỗi và số theo từng trạng thái, rồi thoát mã 0. Ngoài repo git, lệnh SHALL báo lỗi và thoát mã 1.
+`nightowl failures` SHALL in ra stdout tổng số bản ghi lỗi và số theo từng trạng thái, rồi thoát mã 0. Lệnh SHALL chỉ đọc. Ngoài repo git, hoặc khi chưa chạy `nightowl init`, hoặc khi database cũ hơn phiên bản NightOwl, lệnh SHALL báo lỗi (gợi ý `nightowl init` khi phù hợp), thoát mã 1, và SHALL NOT tạo hay sửa file nào.
 
 #### Scenario: Có 3 lỗi
 - **WHEN** database có 3 bản ghi `failures` trạng thái `flagged`
 - **THEN** stdout có tổng `3` và `flagged: 3`
+
+#### Scenario: Repo chưa cài
+- **WHEN** chạy `nightowl failures` trong repo git chưa chạy `nightowl init`
+- **THEN** stderr gợi ý `nightowl init`, mã thoát là 1, và `.nightowl/` không được tạo
 
 ### Requirement: Lỗi AI tự sửa theo phản hồi
 Khi commit-check khớp HEAD có bản bị phản hồi, và database xác nhận prompt phản hồi là prompt cùng phiên nằm giữa lần sửa đó và một lần AI sửa file sau nó, post-commit SHALL tạo một bản ghi lỗi nguồn `ai-self-fix`: nội dung AI là ảnh chụp bản bị phản hồi, nội dung cuối là bản commit, kèm prompt ban đầu và prompt phản hồi. Mỗi file trong mỗi commit có tối đa một lỗi `ai-self-fix`. Lỗi sửa tay (`manual-fix`) vẫn được tạo như trước, và có thể cùng tồn tại.

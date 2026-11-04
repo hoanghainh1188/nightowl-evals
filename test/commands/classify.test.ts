@@ -1,3 +1,4 @@
+import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -101,6 +102,7 @@ describe('nightowl classify', () => {
       expect(result.out).toMatch(/Nothing was sent/);
       expect(prompts).toEqual([]);
       expect(rows()).toEqual(before);
+      expect(await readdir(join(repo.path, '.nightowl'))).not.toContain('classify.lock');
     });
 
     it('carries the chosen options into the command to run for real', async () => {
@@ -183,6 +185,25 @@ describe('nightowl classify', () => {
       expect(rows().map((row) => row.category)).toEqual([null, 'logic', null]);
     });
 
+    it('refuses while another classify holds the lock, sending nothing', async () => {
+      await addFailures(1);
+      const { writeFile } = await import('node:fs/promises');
+      // The parent of the test worker is alive and is not this process.
+      await writeFile(join(repo.path, '.nightowl/classify.lock'), JSON.stringify({ pid: process.ppid }));
+      const before = rows();
+      const result = await run(['--yes'], deps([answer('logic')]));
+      expect(result.code).toBe(1);
+      expect(result.err).toContain(`another classify is running (pid ${process.ppid})`);
+      expect(prompts).toEqual([]);
+      expect(rows()).toEqual(before);
+    });
+
+    it('releases the lock when done, even after failed calls', async () => {
+      await addFailures(2);
+      await run(['--yes'], deps([answer('logic'), new ClaudeError('claude exited with code 1', 'exit')]));
+      expect(await readdir(join(repo.path, '.nightowl'))).not.toContain('classify.lock');
+    });
+
     it('fails without touching the database when claude is not installed', async () => {
       await addFailures(1);
       const before = rows();
@@ -196,7 +217,33 @@ describe('nightowl classify', () => {
   });
 
   it('says so when there is nothing to classify', async () => {
+    await addFailures(0);
     expect(await run([], deps([answer('logic')]))).toEqual({ code: 0, out: 'No failures to classify.\n', err: '' });
+  });
+
+  it.each([[[]], [['--yes']]])('needs nightowl init, creating nothing and sending nothing (%j)', async (args) => {
+    const result = await run(args, deps([answer('logic')]));
+    expect(result.code).toBe(1);
+    expect(result.err).toContain('nightowl init');
+    expect(prompts).toEqual([]);
+    expect(await readdir(repo.path)).toEqual(['.git']);
+  });
+
+  it('refuses a database older than this NightOwl without upgrading it', async () => {
+    await addFailures(1);
+    const db = new DatabaseSync(join(repo.path, '.nightowl/nightowl.db'));
+    db.exec('PRAGMA user_version = 3');
+    db.close();
+    const result = await run(['--yes'], deps([answer('logic')]));
+    expect(result.code).toBe(1);
+    expect(result.err).toContain('nightowl init');
+    expect(prompts).toEqual([]);
+    const check = new DatabaseSync(join(repo.path, '.nightowl/nightowl.db'), { readOnly: true });
+    try {
+      expect((check.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(3);
+    } finally {
+      check.close();
+    }
   });
 
   it.each([
