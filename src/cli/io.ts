@@ -1,7 +1,12 @@
+export interface StdinRead {
+  readonly text: string;
+  // False when the timeout fired before EOF, so `text` may be cut short.
+  readonly complete: boolean;
+}
+
 export interface StdinSource {
   readonly isTTY: boolean;
-  // Resolves with what was read so far once `timeoutMs` passes without EOF.
-  readonly readAll: (timeoutMs?: number) => Promise<string>;
+  readonly readAll: (timeoutMs?: number) => Promise<StdinRead>;
 }
 
 export interface Io {
@@ -12,13 +17,13 @@ export interface Io {
 
 type ReadableSource = NodeJS.ReadableStream & { destroy?: () => void };
 
-export function readStream(stream: ReadableSource, timeoutMs?: number): Promise<string> {
+export function readStream(stream: ReadableSource, timeoutMs?: number): Promise<StdinRead> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    const finish = () => {
+    const finish = (complete: boolean) => {
       if (timer) clearTimeout(timer);
       stream.removeListener('data', onData);
-      resolve(Buffer.concat(chunks).toString('utf8'));
+      resolve({ text: Buffer.concat(chunks).toString('utf8'), complete });
     };
     const onData = (chunk: string | Buffer) => {
       chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
@@ -28,12 +33,12 @@ export function readStream(stream: ReadableSource, timeoutMs?: number): Promise<
         ? undefined
         : setTimeout(() => {
             stream.destroy?.();
-            finish();
+            finish(false);
           }, timeoutMs);
     timer?.unref();
 
     stream.on('data', onData);
-    stream.once('end', finish);
+    stream.once('end', () => finish(true));
     stream.once('error', (error) => {
       if (timer) clearTimeout(timer);
       reject(error);

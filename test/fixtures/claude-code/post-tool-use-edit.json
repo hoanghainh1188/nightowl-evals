@@ -1,0 +1,15 @@
+{
+  "session_id": "s1",
+  "transcript_path": "/tmp/transcript.jsonl",
+  "cwd": "__ROOT__",
+  "permission_mode": "default",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "__ROOT__/src/a.ts",
+    "old_string": "return true;",
+    "new_string": "return EMAIL.test(value);",
+    "replace_all": false
+  },
+  "tool_response": { "filePath": "__ROOT__/src/a.ts", "success": true }
+}

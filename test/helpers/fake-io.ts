@@ -4,6 +4,8 @@ export interface FakeIoOptions {
   readonly stdin?: string;
   readonly isTTY?: boolean;
   readonly readError?: Error;
+  // Simulate the stdin timeout firing before EOF.
+  readonly timedOut?: boolean;
 }
 
 export interface FakeIo {
@@ -33,7 +35,7 @@ export function createFakeIo(options: FakeIoOptions = {}): FakeIo {
         reads += 1;
         timeouts.push(timeoutMs);
         if (options.readError) throw options.readError;
-        return options.stdin ?? '';
+        return { text: options.stdin ?? '', complete: !options.timedOut };
       },
     },
   };

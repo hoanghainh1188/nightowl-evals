@@ -1,0 +1,85 @@
+import { join } from 'node:path';
+import { retryWhileBusy } from './busy.js';
+import { ensureDataDir } from './data-dir.js';
+import {
+  type EventFilter,
+  getSnapshot,
+  insertEvent,
+  listEvents,
+  listUncheckedEdits,
+  type NewEvent,
+  type PendingEdit,
+  recordCommitCheck,
+  type StoredEvent,
+} from './events.js';
+import { migrate } from './migrations.js';
+import { findProjectRoot } from './project-root.js';
+import { loadSqlite } from './sqlite.js';
+
+export { SchemaTooNewError } from './migrations.js';
+
+export { DATA_DIR, DataDirError } from './data-dir.js';
+export const DB_FILE = 'nightowl.db';
+const BUSY_TIMEOUT_MS = 2000;
+const READABLE_PRAGMAS = new Set(['journal_mode', 'busy_timeout', 'foreign_keys', 'user_version', 'synchronous']);
+
+export class ProjectNotFoundError extends Error {
+  constructor(readonly cwd: string) {
+    super(`No git repository found at or above ${cwd}`);
+    this.name = 'ProjectNotFoundError';
+  }
+}
+
+export interface Store {
+  readonly root: string;
+  readonly insertEvent: (event: NewEvent) => StoredEvent;
+  readonly listEvents: (filter?: EventFilter) => readonly StoredEvent[];
+  readonly listUncheckedEdits: (filePaths: readonly string[]) => readonly PendingEdit[];
+  readonly getSnapshot: (editId: number) => string | null;
+  readonly recordCommitCheck: (event: NewEvent, editIds: readonly number[]) => StoredEvent;
+  readonly pragma: (name: string) => unknown;
+  readonly close: () => void;
+}
+
+export interface OpenStoreOptions {
+  readonly cwd?: string;
+  // Upper bound on waiting for other writers; hooks pass what is left of their budget.
+  readonly timeoutMs?: number;
+}
+
+export async function openStore(options: OpenStoreOptions = {}): Promise<Store> {
+  const cwd = options.cwd ?? process.cwd();
+  const waitMs = Math.max(1, Math.min(BUSY_TIMEOUT_MS, Math.floor(options.timeoutMs ?? BUSY_TIMEOUT_MS)));
+  const root = findProjectRoot(cwd);
+  if (root === null) throw new ProjectNotFoundError(cwd);
+
+  const { DatabaseSync } = await loadSqlite();
+  const db = new DatabaseSync(join(ensureDataDir(root), DB_FILE));
+  try {
+    db.exec(`PRAGMA busy_timeout = ${waitMs}`);
+    db.exec('PRAGMA foreign_keys = ON');
+    await retryWhileBusy(() => {
+      db.exec('PRAGMA journal_mode = WAL');
+      db.exec('PRAGMA synchronous = NORMAL');
+      migrate(db);
+    }, waitMs);
+  } catch (error) {
+    db.close();
+    throw error;
+  }
+
+  return Object.freeze({
+    root,
+    insertEvent: (event: NewEvent) => insertEvent(db, event),
+    listEvents: (filter?: EventFilter) => listEvents(db, filter),
+    listUncheckedEdits: (filePaths: readonly string[]) => listUncheckedEdits(db, filePaths),
+    getSnapshot: (editId: number) => getSnapshot(db, editId),
+    recordCommitCheck: (event: NewEvent, editIds: readonly number[]) => recordCommitCheck(db, event, editIds),
+    pragma: (name: string) => {
+      if (!READABLE_PRAGMAS.has(name)) throw new Error(`Unsupported pragma: ${name}`);
+      const row = db.prepare(`PRAGMA ${name}`).get() as Record<string, unknown> | undefined;
+      return row === undefined ? undefined : Object.values(row)[0];
+    },
+    close: () => db.close(),
+  });
+}

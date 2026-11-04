@@ -3,11 +3,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { exportCommand } from '../../src/commands/export.js';
-import { initCommand } from '../../src/commands/init.js';
 import { reportCommand } from '../../src/commands/report.js';
 import { createFakeIo } from '../helpers/fake-io.js';
 
-describe.each([initCommand, reportCommand, exportCommand])('$name (not implemented)', (command) => {
+describe.each([reportCommand, exportCommand])('$name (not implemented)', (command) => {
   let dir: string;
 
   beforeEach(async () => {
