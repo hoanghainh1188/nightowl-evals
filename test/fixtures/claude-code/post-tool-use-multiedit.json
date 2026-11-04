@@ -1,0 +1,12 @@
+{
+  "session_id": "s1",
+  "transcript_path": "/tmp/transcript.jsonl",
+  "cwd": "__ROOT__",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "MultiEdit",
+  "tool_input": {
+    "file_path": "src/a.ts",
+    "edits": [{ "old_string": "a", "new_string": "b" }]
+  },
+  "tool_response": {}
+}
