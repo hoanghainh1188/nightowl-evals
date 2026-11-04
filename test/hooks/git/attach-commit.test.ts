@@ -17,6 +17,8 @@ interface FailureRow {
   commit_sha: string;
   status: string;
   category: string | null;
+  source: string;
+  feedback_event_id: number | null;
 }
 
 describe('attachCommit', () => {
@@ -210,5 +212,103 @@ describe('attachCommit', () => {
     git(repo.path, ['commit', '-q', '-m', 'x']);
     expect(await attachCommit(repo.path, Date.now())).toBe(0);
     expect(failures()).toEqual([]);
+  });
+
+  describe('AI redoing its edit after feedback', () => {
+    it('records the edit the developer pushed back on, once, against the commit', async () => {
+      const ask = await prompt('s1', 'isAdult is true from 18');
+      const wrong = await aiWrote('src/age.ts', 'const isAdult = (age) => age > 18;\n');
+      const feedback = await prompt('s1', 'wrong, 18 counts');
+      await aiWrote('src/age.ts', 'const isAdult = (age) => age >= 18;\n');
+      const sha = await commit();
+      expect(failures()).toEqual([
+        expect.objectContaining({
+          file_path: 'src/age.ts',
+          source: 'ai-self-fix',
+          ai_event_id: wrong,
+          prompt_event_id: ask,
+          feedback_event_id: feedback,
+          ai_content: 'const isAdult = (age) => age > 18;\n',
+          final_content: 'const isAdult = (age) => age >= 18;\n',
+          commit_sha: sha,
+        }),
+      ]);
+      expect(attachedOutcomes()).toEqual(['failure']);
+    });
+
+    it('records both when the developer also edits by hand', async () => {
+      await prompt('s1', 'write it');
+      await aiWrote('a.ts', 'x = 1\ny = 1\n');
+      await prompt('s1', 'x must be 2');
+      const latest = await aiWrote('a.ts', 'x = 2\ny = 1\n');
+      await commit({ 'a.ts': 'x = 2\ny = 3\n' });
+      expect(failures().map((row) => [row.source, row.ai_event_id === latest])).toEqual([
+        ['manual-fix', true],
+        ['ai-self-fix', false],
+      ]);
+      expect(attachedOutcomes()).toEqual(['failure']);
+    });
+
+    it.each([
+      ['the AI only added lines', 'a = 1\n', 'a = 1\nb = 2\n'],
+      ['only whitespace changed', 'a = 1\n', 'a  =  1\n'],
+    ])('records nothing when %s', async (_label, before, after) => {
+      await aiWrote('a.ts', before);
+      await prompt('s1', 'and more');
+      await aiWrote('a.ts', after);
+      await commit();
+      expect(failures()).toEqual([]);
+      expect(attachedOutcomes()).toEqual(['not-a-failure']);
+    });
+
+    it('records only the manual fix when the AI added code and the developer removed a line', async () => {
+      await aiWrote('a.ts', 'a\nb\nc\n');
+      await prompt('s1', 'also add d');
+      await aiWrote('a.ts', 'a\nb\nc\nd\n');
+      await commit({ 'a.ts': 'a\nc\nd\n' });
+      expect(failures().map((row) => row.source)).toEqual(['manual-fix']);
+    });
+
+    it('records the self-fix when an earlier commit attempt did not go through', async () => {
+      const wrong = await aiWrote('a.ts', 'x = 1\n');
+      await prompt('s1', 'x must be 2');
+      await aiWrote('a.ts', 'x = 2\n');
+      git(repo.path, ['add', '-A']);
+      await checkStagedChanges(repo.path, far());
+      await aiWrote('a.ts', 'x = 2;\n');
+      await commit();
+      expect(failures()).toEqual([expect.objectContaining({ source: 'ai-self-fix', ai_event_id: wrong })]);
+    });
+
+    it('ignores a self_fix whose feedback is not a prompt between the edits', async () => {
+      await aiWrote('a.ts', 'x = 1\n');
+      await prompt('s1', 'x must be 2');
+      await aiWrote('a.ts', 'x = 2\n');
+      git(repo.path, ['add', '-A']);
+      await checkStagedChanges(repo.path, far());
+      const db = new DatabaseSync(join(repo.path, '.nightowl/nightowl.db'));
+      try {
+        const other = db.prepare(`INSERT INTO events (created_at, source, kind, session_id, payload) VALUES ('t', 'claude-code', 'prompt', 's9', '{"prompt":"secret"}') RETURNING id`).get() as { id: number };
+        db.prepare(`UPDATE events SET payload = json_set(payload, '$.self_fix.feedback_event_id', ?) WHERE kind = 'commit-check'`).run(other.id);
+      } finally {
+        db.close();
+      }
+      git(repo.path, ['commit', '-q', '-m', 'x']);
+      await attachCommit(repo.path, far());
+      expect(failures()).toEqual([]);
+    });
+
+    it('records nothing when the commit does not hold the checked version', async () => {
+      await aiWrote('a.ts', 'a = 1\n');
+      await prompt('s1', 'no');
+      await aiWrote('a.ts', 'a = 2\n');
+      git(repo.path, ['add', '-A']);
+      await checkStagedChanges(repo.path, far());
+      await writeFiles(repo.path, { 'a.ts': 'a = 3\n' });
+      git(repo.path, ['add', '-A']);
+      git(repo.path, ['commit', '-q', '-m', 'other']);
+      await attachCommit(repo.path, far());
+      expect(failures()).toEqual([]);
+    });
   });
 });

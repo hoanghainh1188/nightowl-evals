@@ -15,17 +15,26 @@ describe('nightowl precommit', () => {
   });
   afterEach(() => repo.cleanup());
 
-  async function aiWrote(file: string, content: string): Promise<number> {
+  async function aiWrote(file: string, content: string, sessionId = 's1', snapshot: string | null = content): Promise<number> {
     await writeFiles(repo.path, { [file]: content });
     const store = await openStore({ cwd: repo.path });
     try {
       return store.insertEvent({
         source: 'claude-code',
         kind: 'edit',
-        sessionId: 's1',
+        sessionId,
         filePath: file,
-        payload: { tool: 'Write', snapshot: content, snapshot_skipped: null },
+        payload: { tool: 'Write', snapshot, snapshot_skipped: snapshot === null ? 'too_large' : null },
       }).id;
+    } finally {
+      store.close();
+    }
+  }
+
+  async function devSaid(prompt: string, sessionId = 's1'): Promise<number> {
+    const store = await openStore({ cwd: repo.path });
+    try {
+      return store.insertEvent({ source: 'claude-code', kind: 'prompt', sessionId, payload: { prompt } }).id;
     } finally {
       store.close();
     }
@@ -193,4 +202,112 @@ describe('nightowl precommit', () => {
     expect(Date.now() - started).toBeLessThan(3_000);
     expect((await checks()).length).toBeGreaterThan(0);
   }, 30_000);
+
+  describe('AI redoing its edit after feedback', () => {
+    const selfFix = async () => (await checks())[0]?.payload.self_fix;
+
+    it('records the edit the developer pushed back on', async () => {
+      await devSaid('isAdult is true from 18');
+      const wrong = await aiWrote('src/age.ts', 'const isAdult = (age) => age > 18;\n');
+      const feedback = await devSaid('wrong, 18 counts');
+      await aiWrote('src/age.ts', 'const isAdult = (age) => age >= 18;\n');
+      git(repo.path, ['add', '-A']);
+      await precommit();
+      expect(await selfFix()).toEqual({
+        edit_id: wrong,
+        feedback_event_id: feedback,
+        lines_added: 1,
+        lines_removed: 1,
+        whitespace_only: false,
+      });
+    });
+
+    it('takes the first edit the developer pushed back on', async () => {
+      const first = await aiWrote('a.ts', 'one\n');
+      const feedback = await devSaid('no');
+      await aiWrote('a.ts', 'two\n');
+      await devSaid('still no');
+      await aiWrote('a.ts', 'three\n');
+      git(repo.path, ['add', '-A']);
+      await precommit();
+      expect(await selfFix()).toMatchObject({ edit_id: first, feedback_event_id: feedback });
+    });
+
+    it('pairs edits within one session when another session edits in between', async () => {
+      const first = await aiWrote('a.ts', 'x = 1\n', 's1');
+      await aiWrote('a.ts', 'x = 1\ny = 1\n', 's2');
+      const feedback = await devSaid('x must be 2', 's1');
+      await aiWrote('a.ts', 'x = 2\ny = 1\n', 's1');
+      git(repo.path, ['add', '-A']);
+      await precommit();
+      expect(await selfFix()).toMatchObject({ edit_id: first, feedback_event_id: feedback });
+    });
+
+    it('keeps edits from a commit attempt that did not go through', async () => {
+      const first = await aiWrote('a.ts', 'x = 1\n');
+      const feedback = await devSaid('x must be 2');
+      await aiWrote('a.ts', 'x = 2\n');
+      git(repo.path, ['add', '-A']);
+      await precommit();
+      await aiWrote('a.ts', 'x = 2;\n');
+      git(repo.path, ['add', '-A']);
+      await precommit();
+      expect((await checks())[1]?.payload.self_fix).toMatchObject({ edit_id: first, feedback_event_id: feedback });
+    });
+
+    it('tries a later pair when the first one cannot be used', async () => {
+      await aiWrote('a.ts', 'one\n', 's1', null);
+      await devSaid('no');
+      const second = await aiWrote('a.ts', 'two\n');
+      const feedback = await devSaid('still no');
+      await aiWrote('a.ts', 'three\n');
+      git(repo.path, ['add', '-A']);
+      await precommit();
+      expect(await selfFix()).toMatchObject({ edit_id: second, feedback_event_id: feedback });
+    });
+
+    it.each([
+      ['edits in a row without a prompt', async () => {
+        await aiWrote('a.ts', 'one\n');
+        await aiWrote('a.ts', 'two\n');
+      }],
+      ['a prompt from another session', async () => {
+        await aiWrote('a.ts', 'one\n');
+        await devSaid('elsewhere', 's2');
+        await aiWrote('a.ts', 'two\n');
+      }],
+      ['the earlier edit without a snapshot', async () => {
+        await aiWrote('a.ts', 'one\n', 's1', null);
+        await devSaid('no');
+        await aiWrote('a.ts', 'two\n');
+      }],
+      ['the AI only adding lines while the developer removed one', async () => {
+        await aiWrote('a.ts', 'a\nb\nc\n');
+        await devSaid('also add d');
+        await aiWrote('a.ts', 'a\nb\nc\nd\n');
+        await writeFiles(repo.path, { 'a.ts': 'a\nc\nd\n' });
+      }],
+      ['the AI only reformatting', async () => {
+        await aiWrote('a.ts', 'a = 1\n');
+        await devSaid('format it');
+        await aiWrote('a.ts', 'a  =  1\n');
+      }],
+      ['a staged file too large to keep', async () => {
+        await aiWrote('a.ts', 'x\n');
+        await devSaid('no');
+        await aiWrote('a.ts', `${'y'.repeat(600 * 1024)}\n`);
+      }],
+      ['the earlier edit identical to what is staged', async () => {
+        await aiWrote('a.ts', 'one\n');
+        await devSaid('try something');
+        await aiWrote('a.ts', 'two\n');
+        await writeFiles(repo.path, { 'a.ts': 'one\n' });
+      }],
+    ])('records none for %s', async (_label, setUp) => {
+      await setUp();
+      git(repo.path, ['add', '-A']);
+      await precommit();
+      expect(await selfFix()).toBeNull();
+    });
+  });
 });

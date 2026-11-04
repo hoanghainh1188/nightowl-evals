@@ -8,6 +8,7 @@ const row = (filePath: string, category: string | null, day: string, count = 1):
   filePath,
   category,
   status: 'flagged',
+  source: 'manual-fix',
   day,
   count,
 });
@@ -69,6 +70,7 @@ describe('formatJson', () => {
       'dismissed',
       'changed_rate',
       'by_category',
+      'by_source',
       'by_module',
       'by_week',
     ]);
@@ -77,4 +79,15 @@ describe('formatJson', () => {
     expect(json.by_week[0]).toEqual({ week: '2026-W03', failures: 2, checked: 0, changed: 0, rate: null });
     expect(json.changed_rate).toEqual({ failures: 0, checked: 0, rate: null });
   });
+
+  it('shows failures by source, in text and JSON', () => {
+    const report = buildReport({
+      ...base,
+      failures: [row('a.ts', null, '2026-11-02', 2), { ...row('b.ts', null, '2026-11-02'), source: 'ai-self-fix' }],
+      checks: [],
+    });
+    expect(formatText(report)).toMatch(/\nBy source\n {2}manual-fix +2 .*\n {2}ai-self-fix +1 /);
+    expect(JSON.parse(formatJson(report)).by_source).toEqual({ 'manual-fix': 2, 'ai-self-fix': 1 });
+  });
 });
+

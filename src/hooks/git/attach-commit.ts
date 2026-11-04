@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Attachment, UnattachedCheck } from '../../storage/failures.js';
+import type { Attachment, NewFailure, UnattachedCheck } from '../../storage/failures.js';
 import { DATA_DIR, openStore, type Store } from '../../storage/store.js';
 import { listCommitFiles, readBlobIds, resolveHead } from './head-blobs.js';
 
@@ -10,6 +10,7 @@ interface CheckPayload {
   readonly whitespace_only?: unknown;
   readonly staged_blob?: unknown;
   readonly staged_content?: unknown;
+  readonly self_fix?: unknown;
 }
 
 function groupByFile(checks: readonly UnattachedCheck[]): ReadonlyMap<string, readonly UnattachedCheck[]> {
@@ -22,31 +23,49 @@ function editIds(payload: CheckPayload): readonly number[] {
   return Array.isArray(payload.ai_event_ids) ? payload.ai_event_ids.filter((id): id is number => Number.isInteger(id)) : [];
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+
+// The developer changed the AI's latest version before committing.
+function manualFix(store: Store, check: UnattachedCheck, payload: CheckPayload, ids: readonly number[], finalContent: string): NewFailure | null {
+  if (payload.outcome !== 'modified' || payload.whitespace_only === true || ids.length === 0) return null;
+  const latestEdit = Math.max(...ids);
+  const aiContent = store.getSnapshot(latestEdit);
+  if (aiContent === null) return null;
+  return { filePath: check.filePath, aiEventId: latestEdit, promptEventId: store.findPromptBefore(Math.min(...ids)), aiContent, finalContent };
+}
+
+// The developer answered an AI edit with a prompt and the AI changed or dropped lines it had written.
+function aiSelfFix(store: Store, check: UnattachedCheck, payload: CheckPayload, _ids: readonly number[], finalContent: string): NewFailure | null {
+  const fix = payload.self_fix;
+  if (!isRecord(fix) || !Number.isInteger(fix.edit_id) || !Number.isInteger(fix.feedback_event_id)) return null;
+  const editId = fix.edit_id as number;
+  const feedbackId = fix.feedback_event_id as number;
+  // The AI only adding code is a new request, not a correction.
+  if (typeof fix.lines_removed !== 'number' || fix.lines_removed <= 0 || fix.whitespace_only !== false) return null;
+  // Re-checked here: the payload alone is not trusted to point at the right events.
+  if (!store.isFeedbackFor(editId, feedbackId, check.filePath)) return null;
+  const aiContent = store.getSnapshot(editId);
+  if (aiContent === null) return null;
+  return {
+    filePath: check.filePath,
+    aiEventId: editId,
+    promptEventId: store.findPromptBefore(editId),
+    aiContent,
+    finalContent,
+    source: 'ai-self-fix',
+    feedbackEventId: feedbackId,
+  };
+}
+
 // Judges a check whose staged blob is the one now in HEAD.
 function judge(store: Store, check: UnattachedCheck): Attachment {
   const payload = (store.getEventPayload(check.id) ?? {}) as CheckPayload;
+  if (typeof payload.staged_content !== 'string') return { checkId: check.id, outcome: 'not-a-failure' };
   const ids = editIds(payload);
-  const latestEdit = ids.length > 0 ? Math.max(...ids) : undefined;
-  const aiContent = latestEdit === undefined ? null : store.getSnapshot(latestEdit);
-  const isFailure =
-    payload.outcome === 'modified' &&
-    payload.whitespace_only !== true &&
-    typeof payload.staged_content === 'string' &&
-    aiContent !== null &&
-    latestEdit !== undefined;
-  if (!isFailure) return { checkId: check.id, outcome: 'not-a-failure' };
-
-  return {
-    checkId: check.id,
-    outcome: 'failure',
-    failure: {
-      filePath: check.filePath,
-      aiEventId: latestEdit,
-      promptEventId: store.findPromptBefore(Math.min(...ids)),
-      aiContent,
-      finalContent: payload.staged_content as string,
-    },
-  };
+  const failures = [manualFix, aiSelfFix]
+    .map((find) => find(store, check, payload, ids, payload.staged_content as string))
+    .filter((failure): failure is NewFailure => failure !== null);
+  return failures.length === 0 ? { checkId: check.id, outcome: 'not-a-failure' } : { checkId: check.id, outcome: 'failure', failures };
 }
 
 interface FileState {

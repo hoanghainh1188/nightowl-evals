@@ -13,6 +13,46 @@ function groupByFile(edits: readonly PendingEdit[]): ReadonlyMap<string, readonl
   return groups;
 }
 
+// Consecutive AI edits of one session, oldest pair first. Edits of other sessions in between
+// do not break a pair: the developer answers the AI of their own session.
+function sessionPairs(edits: readonly PendingEdit[]): ReadonlyArray<readonly [PendingEdit, PendingEdit]> {
+  const last = new Map<string, PendingEdit>();
+  const pairs: Array<readonly [PendingEdit, PendingEdit]> = [];
+  for (const edit of edits) {
+    if (edit.sessionId === null) continue;
+    const previous = last.get(edit.sessionId);
+    if (previous !== undefined) pairs.push([previous, edit]);
+    last.set(edit.sessionId, edit);
+  }
+  return pairs.sort((a, b) => a[0].id - b[0].id);
+}
+
+// The first edit of this file that the developer answered with a prompt, after which the AI
+// itself dropped or changed lines of it. `final` is the AI's latest version of the file.
+function findSelfFix(store: Store, filePath: string, final: string, staged: string): Record<string, unknown> | null {
+  for (const [edit, next] of sessionPairs(store.listOpenEdits(filePath))) {
+    const feedback = store.findPromptBetween(edit.id, next.id);
+    if (feedback === null) continue;
+    const snapshot = store.getSnapshot(edit.id);
+    // The developer committed exactly what they pushed back on: nothing was fixed.
+    if (snapshot === null || snapshot === staged) continue;
+    // Compared with the AI's own final version, so lines only the developer removed do not count.
+    const { outcome, ...byAi } = compareContent(snapshot, final);
+    if (outcome === 'unchanged' || byAi.lines_removed === 0 || byAi.whitespace_only) continue;
+    return { edit_id: edit.id, feedback_event_id: feedback, ...byAi };
+  }
+  return null;
+}
+
+// Never lets the extra lookup cost the check itself.
+function safeSelfFix(store: Store, filePath: string, final: string, staged: string): Record<string, unknown> | null {
+  try {
+    return findSelfFix(store, filePath, final, staged);
+  } catch {
+    return null;
+  }
+}
+
 function commitCheck(store: Store, filePath: string, edits: readonly PendingEdit[], staged: StagedFile): NewEvent {
   const latest = edits[edits.length - 1] as PendingEdit;
   const base = { source: 'git', kind: 'commit-check', sessionId: latest.sessionId, filePath } as const;
@@ -31,6 +71,7 @@ function commitCheck(store: Store, filePath: string, edits: readonly PendingEdit
       staged_blob: staged.blob,
       staged_content: tooLarge ? null : staged.content,
       staged_skipped: tooLarge ? 'too_large' : null,
+      self_fix: tooLarge ? null : safeSelfFix(store, filePath, snapshot, staged.content),
     },
   };
 }

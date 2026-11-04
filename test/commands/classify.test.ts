@@ -44,7 +44,7 @@ describe('nightowl classify', () => {
           {
             checkId: check.id,
             outcome: 'failure',
-            failure: { filePath: `f${i}.ts`, aiEventId: edit.id, promptEventId: promptId, aiContent: 'ai\n', finalContent: 'dev\n' },
+            failures: [{ filePath: `f${i}.ts`, aiEventId: edit.id, promptEventId: promptId, aiContent: 'ai\n', finalContent: 'dev\n' }],
           },
         ]);
       }

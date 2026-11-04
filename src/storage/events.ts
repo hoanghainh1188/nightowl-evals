@@ -95,6 +95,24 @@ export interface PendingEdit {
   readonly sessionId: string | null;
 }
 
+// AI edits of one file that no commit has closed: not counted by any commit-check yet, or counted
+// by a check post-commit has not handled (a commit attempt that did not go through). Oldest first.
+export function listOpenEdits(db: DatabaseSync, filePath: string): readonly PendingEdit[] {
+  const rows = db
+    .prepare(
+      `SELECT e.id, e.file_path, e.session_id FROM events e
+       WHERE e.file_path = ? AND e.source = 'claude-code' AND e.kind = 'edit'
+         AND NOT EXISTS (
+           SELECT 1 FROM checked_edits k JOIN checks_attached a ON a.check_id = k.check_id WHERE k.edit_id = e.id
+         )
+       ORDER BY e.id`,
+    )
+    .all(filePath) as unknown as Array<{ id: number; file_path: string; session_id: string | null }>;
+  return Object.freeze(
+    rows.map((row) => Object.freeze({ id: row.id, filePath: row.file_path, sessionId: row.session_id })),
+  );
+}
+
 // AI edits of the given files that no commit-check has counted yet, oldest first.
 // Reads only indexed columns: payloads (with snapshots) are fetched one by one later.
 export function listUncheckedEdits(db: DatabaseSync, filePaths: readonly string[]): readonly PendingEdit[] {

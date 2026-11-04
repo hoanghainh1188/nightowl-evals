@@ -13,6 +13,8 @@ const failure = (overrides: Partial<FailureToExport> = {}): FailureToExport => (
   category: 'logic',
   categoryReason: 'wrong condition',
   categoryConfidence: 0.8,
+  source: 'manual-fix',
+  feedback: null,
   ...overrides,
 });
 
@@ -24,8 +26,9 @@ describe('toEvalCase', () => {
       id: 'id-1',
       file_path: 'src/a.ts',
       commit_sha: '3f2a9c1d8e07aa55',
+      source: 'manual-fix',
       created_at: '2026-11-04T10:00:00.000Z',
-      input: { prompt: 'add email validation', file_before: 'v0\n' },
+      input: { prompt: 'add email validation', file_before: 'v0\n', feedback: null },
       rejected: 'v1\n',
       expected: 'v2\n',
       category: 'logic',
@@ -38,6 +41,7 @@ describe('toEvalCase', () => {
       'id',
       'file_path',
       'commit_sha',
+      'source',
       'created_at',
       'input',
       'rejected',
@@ -47,6 +51,13 @@ describe('toEvalCase', () => {
       'category_confidence',
       'criteria',
     ]);
+  });
+
+  it('carries the feedback prompt of an AI self-fix', () => {
+    const c = toEvalCase(failure({ source: 'ai-self-fix', feedback: 'wrong, 18 counts' }), 'x', null);
+    expect(c.source).toBe('ai-self-fix');
+    expect(Object.keys(c.input)).toEqual(['prompt', 'file_before', 'feedback']);
+    expect(c.input.feedback).toBe('wrong, 18 counts');
   });
 
   it('keeps nulls for unclassified failures without prompt or previous file', () => {

@@ -14,7 +14,7 @@ describe('report queries', () => {
       [
         { filePath: 'src/a.ts', category: 'logic', createdAt: '2026-11-02T09:00:00.000Z' },
         { filePath: 'src/a.ts', category: 'logic', createdAt: '2026-11-02T18:00:00.000Z' },
-        { filePath: 'src/b.ts', status: 'dismissed', createdAt: '2026-11-03T09:00:00.000Z' },
+        { filePath: 'src/b.ts', status: 'dismissed', createdAt: '2026-11-03T09:00:00.000Z', source: 'ai-self-fix' },
       ],
       [
         { createdAt: '2026-11-01T09:00:00.000Z', outcome: 'not-a-failure' },
@@ -29,10 +29,10 @@ describe('report queries', () => {
     await repo.cleanup();
   });
 
-  it('groups failures by file, category, status and UTC day', () => {
+  it('groups failures by file, category, status, source and UTC day', () => {
     expect(store.countFailuresForReport(null)).toEqual([
-      { filePath: 'src/a.ts', category: 'logic', status: 'flagged', day: '2026-11-02', count: 2 },
-      { filePath: 'src/b.ts', category: null, status: 'dismissed', day: '2026-11-03', count: 1 },
+      { filePath: 'src/a.ts', category: 'logic', status: 'flagged', source: 'manual-fix', day: '2026-11-02', count: 2 },
+      { filePath: 'src/b.ts', category: null, status: 'dismissed', source: 'ai-self-fix', day: '2026-11-03', count: 1 },
     ]);
   });
 

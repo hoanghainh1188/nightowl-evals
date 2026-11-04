@@ -29,13 +29,14 @@ describe('moduleOf', () => {
   });
 });
 
-const row = (filePath: string, category: string | null, day: string, count = 1, status = 'flagged'): FailureCountRow => ({
-  filePath,
-  category,
-  status,
-  day,
-  count,
-});
+const row = (
+  filePath: string,
+  category: string | null,
+  day: string,
+  count = 1,
+  status = 'flagged',
+  source = 'manual-fix',
+): FailureCountRow => ({ filePath, category, status, source, day, count });
 
 describe('buildReport', () => {
   const base = { depth: 2, since: null, generatedAt: '2026-11-04T12:00:00.000Z' };
@@ -93,4 +94,19 @@ describe('buildReport', () => {
     });
     expect(report.byModule.map((m) => m.module)).toEqual(['c', 'a', 'b']);
   });
+
+  it('counts by source with both keys, without dismissed failures', () => {
+    const report = buildReport({
+      ...base,
+      failures: [
+        row('a.ts', null, '2026-11-02', 2),
+        row('b.ts', null, '2026-11-02', 1, 'flagged', 'ai-self-fix'),
+        row('c.ts', null, '2026-11-02', 5, 'dismissed', 'ai-self-fix'),
+      ],
+      checks: [],
+    });
+    expect(report.bySource).toEqual({ 'manual-fix': 2, 'ai-self-fix': 1 });
+    expect(buildReport({ ...base, failures: [], checks: [] }).bySource).toEqual({ 'manual-fix': 0, 'ai-self-fix': 0 });
+  });
 });
+

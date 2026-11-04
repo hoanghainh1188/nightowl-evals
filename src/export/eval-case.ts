@@ -11,8 +11,11 @@ export interface EvalCase {
   readonly id: string;
   readonly file_path: string;
   readonly commit_sha: string | null;
+  // 'manual-fix' or 'ai-self-fix'.
+  readonly source: string;
   readonly created_at: string;
-  readonly input: { readonly prompt: string | null; readonly file_before: string | null };
+  // `feedback`: what the developer told the AI when asking it to redo the edit. Not for the model under test.
+  readonly input: { readonly prompt: string | null; readonly file_before: string | null; readonly feedback: string | null };
   readonly rejected: string;
   readonly expected: string;
   readonly category: string | null;
@@ -33,8 +36,9 @@ export function toEvalCase(failure: FailureToExport, id: string, fileBefore: str
     id,
     file_path: failure.filePath,
     commit_sha: failure.commitSha,
+    source: failure.source,
     created_at: failure.createdAt,
-    input: { prompt: failure.prompt, file_before: fileBefore },
+    input: { prompt: failure.prompt, file_before: fileBefore, feedback: failure.feedback },
     rejected: failure.aiContent,
     expected: failure.finalContent,
     category: failure.category,

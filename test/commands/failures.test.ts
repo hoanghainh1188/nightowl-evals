@@ -22,7 +22,7 @@ describe('nightowl failures', () => {
           {
             checkId: check.id,
             outcome: 'failure',
-            failure: { filePath: 'a.ts', aiEventId: edit.id, promptEventId: null, aiContent: 'x', finalContent: 'y' },
+            failures: [{ filePath: 'a.ts', aiEventId: edit.id, promptEventId: null, aiContent: 'x', finalContent: 'y' }],
           },
         ]);
       }

@@ -72,4 +72,17 @@ describe('pending AI edits', () => {
     expect(store.listUncheckedEdits(files)).toHaveLength(500);
     expect(Date.now() - started).toBeLessThan(200);
   }, 60_000);
+
+  it('lists open edits: unchecked ones and those of checks no commit has closed yet', () => {
+    const a1 = edit('a.ts', 'v1');
+    const a2 = edit('a.ts', 'v2');
+    const closed = edit('a.ts', 'v0');
+    const open = check('a.ts', [a1.id]);
+    const done = check('a.ts', [closed.id]);
+    store.attachChecks('sha', [{ checkId: done.id, outcome: 'not-a-failure' }]);
+    expect(open.id).toBeGreaterThan(0);
+    expect(store.listOpenEdits('a.ts').map((e) => e.id)).toEqual([a1.id, a2.id]);
+    expect(store.listOpenEdits('b.ts')).toEqual([]);
+  });
 });
+
