@@ -4,8 +4,23 @@ import { GitError, runGit } from '../hooks/git/run-git.js';
 import { isSymlink, readTextIfExists } from './fs-utils.js';
 
 const MARKER = '# nightowl-evals';
+
 // `|| true` keeps the commit going even if nightowl is missing or crashes.
-export const HOOK_LINE = `command -v nightowl >/dev/null 2>&1 && nightowl precommit >/dev/null 2>&1 || true  ${MARKER}`;
+export function hookLine(command: string): string {
+  return `command -v nightowl >/dev/null 2>&1 && nightowl ${command} >/dev/null 2>&1 || true  ${MARKER}`;
+}
+
+export const HOOK_LINE = hookLine('precommit');
+
+export interface GitHookSpec {
+  readonly name: 'pre-commit' | 'post-commit';
+  readonly command: string;
+}
+
+export const GIT_HOOKS: readonly GitHookSpec[] = Object.freeze([
+  { name: 'pre-commit', command: 'precommit' },
+  { name: 'post-commit', command: 'postcommit' },
+]);
 const SHELL_SHEBANG = /^#!\s*\S*(?:\/|\benv\s+)(?:sh|bash|zsh|dash|ksh)(?:\s|$)/;
 
 export type HookEdit =
@@ -13,16 +28,16 @@ export type HookEdit =
   | { readonly status: 'unchanged' }
   | { readonly status: 'manual'; readonly reason: string };
 
-export function addHookLine(existing: string | null): HookEdit {
-  if (existing === null) return { status: 'created', content: `#!/bin/sh\n${HOOK_LINE}\n` };
+export function addHookLine(existing: string | null, line: string = HOOK_LINE): HookEdit {
+  if (existing === null) return { status: 'created', content: `#!/bin/sh\n${line}\n` };
   if (existing.split('\n').some((line) => line.trimEnd().endsWith(MARKER))) return { status: 'unchanged' };
-  if (!existing.startsWith('#!')) return { status: 'updated', content: `#!/bin/sh\n${HOOK_LINE}\n${existing}` };
+  if (!existing.startsWith('#!')) return { status: 'updated', content: `#!/bin/sh\n${line}\n${existing}` };
 
   const newline = existing.indexOf('\n');
   const shebang = newline === -1 ? existing : existing.slice(0, newline);
   if (!SHELL_SHEBANG.test(shebang)) return { status: 'manual', reason: 'non-shell hook' };
   const rest = newline === -1 ? '' : existing.slice(newline + 1);
-  return { status: 'updated', content: `${shebang}\n${HOOK_LINE}\n${rest}` };
+  return { status: 'updated', content: `${shebang}\n${line}\n${rest}` };
 }
 
 export type InstallResult =
@@ -39,17 +54,17 @@ async function gitText(root: string, args: readonly string[]): Promise<string | 
   }
 }
 
-export async function installPreCommit(root: string): Promise<InstallResult> {
+export async function installGitHook(root: string, hook: GitHookSpec): Promise<InstallResult> {
   const hooksPath = await gitText(root, ['config', '--get', 'core.hooksPath']);
   if (hooksPath) return { status: 'manual', reason: `core.hooksPath is set to ${hooksPath}` };
 
-  const relative = await gitText(root, ['rev-parse', '--git-path', 'hooks/pre-commit']);
+  const relative = await gitText(root, ['rev-parse', '--git-path', `hooks/${hook.name}`]);
   if (!relative) throw new Error('could not locate the git hooks directory');
   const path = resolve(root, relative);
   // Writing through a symlink would change a script shared with other repositories.
-  if (await isSymlink(path)) return { status: 'manual', reason: 'pre-commit hook is a symlink' };
+  if (await isSymlink(path)) return { status: 'manual', reason: `${hook.name} hook is a symlink` };
 
-  const edit = addHookLine(await readTextIfExists(path));
+  const edit = addHookLine(await readTextIfExists(path), hookLine(hook.command));
   if (edit.status === 'manual') return edit;
   if (edit.status === 'unchanged') return { status: 'unchanged', path };
   if (edit.status === 'created') {

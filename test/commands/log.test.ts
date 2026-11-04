@@ -46,6 +46,28 @@ describe('log', () => {
     expect(fake.stdinReads()).toBe(0);
   });
 
+  it('records nothing for Claude Code processes NightOwl started itself', async () => {
+    const internal = createLogCommand({ cwd: () => repo.path, record: recordClaudeCodeEvent, isInternal: () => true });
+    const fake = createFakeIo({ stdin: hookFixture('user-prompt-submit', repo.path) });
+    expect(await internal.run([], fake.io)).toBe(0);
+    expect([fake.out(), fake.err(), fake.stdinReads()]).toEqual(['', '', 1]);
+    const { readdir } = await import('node:fs/promises');
+    expect(await readdir(repo.path)).not.toContain('.nightowl');
+  });
+
+  it('reads NIGHTOWL_INTERNAL from the environment by default', async () => {
+    const calls: string[] = [];
+    const command = createLogCommand({ cwd: () => repo.path, record: async () => void calls.push('x') });
+    process.env.NIGHTOWL_INTERNAL = '1';
+    try {
+      await command.run([], createFakeIo({ stdin: '{}' }).io);
+    } finally {
+      delete process.env.NIGHTOWL_INTERNAL;
+    }
+    await command.run([], createFakeIo({ stdin: '{}' }).io);
+    expect(calls).toEqual(['x']);
+  });
+
   it('exits 0 silently even if recording throws', async () => {
     const failing = createLogCommand({
       cwd: () => repo.path,

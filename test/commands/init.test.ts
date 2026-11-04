@@ -6,9 +6,9 @@ import { createFakeIo } from '../helpers/fake-io.js';
 import { createGitRepo, git } from '../helpers/git-repo.js';
 import { createTempDir, type TempDir } from '../helpers/temp-repo.js';
 
-import { installPreCommit } from '../../src/setup/git-hook.js';
+import { hookLine, installGitHook } from '../../src/setup/git-hook.js';
 
-const ON_PATH = { isOnPath: () => true, installPreCommit };
+const ON_PATH = { isOnPath: () => true, installGitHook };
 
 async function snapshot(root: string): Promise<Record<string, string>> {
   const result: Record<string, string> = {};
@@ -37,6 +37,8 @@ describe('nightowl init', () => {
     expect(fake.out()).toContain('.claude/settings.json');
     expect(fake.out()).toContain('.git/hooks/pre-commit');
     expect(await readFile(join(repo.path, '.git/hooks/pre-commit'), 'utf8')).toContain('nightowl precommit');
+    expect(fake.out()).toContain('.git/hooks/post-commit');
+    expect(await readFile(join(repo.path, '.git/hooks/post-commit'), 'utf8')).toContain('nightowl postcommit');
     expect(fake.err()).toBe('');
   });
 
@@ -46,6 +48,8 @@ describe('nightowl init', () => {
     expect(await createInitCommand({ cwd: () => repo.path, ...ON_PATH }).run([], fake.io)).toBe(0);
     expect(fake.err()).toContain('core.hooksPath');
     expect(fake.err()).toContain('nightowl precommit');
+    expect(fake.err()).toContain('post-commit');
+    expect(fake.err()).toContain('nightowl postcommit');
     expect((await readdir(repo.path)).includes('.husky')).toBe(false);
   });
 
@@ -54,7 +58,7 @@ describe('nightowl init', () => {
     const init = createInitCommand({
       cwd: () => repo.path,
       ...ON_PATH,
-      installPreCommit: async () => {
+      installGitHook: async () => {
         throw new Error('git not found');
       },
     });
@@ -80,6 +84,28 @@ describe('nightowl init', () => {
     expect(fake.out()).toMatch(/already/i);
   });
 
+  it('only adds the post-commit hook to a repository set up in week 1', async () => {
+    const preCommit = join(repo.path, '.git/hooks/pre-commit');
+    await writeFile(preCommit, `#!/bin/sh\n${hookLine('precommit')}\n`, { mode: 0o755 });
+    const before = await readFile(preCommit, 'utf8');
+    const fake = createFakeIo();
+    expect(await createInitCommand({ cwd: () => repo.path, ...ON_PATH }).run([], fake.io)).toBe(0);
+    expect(await readFile(preCommit, 'utf8')).toBe(before);
+    expect(fake.out()).not.toContain('pre-commit');
+    expect(fake.out()).toContain('created .git/hooks/post-commit (runs nightowl postcommit)');
+  });
+
+  it('reports each hook on its own when only one needs a manual step', async () => {
+    const { symlink } = await import('node:fs/promises');
+    await writeFile(join(repo.path, 'shared.sh'), '#!/bin/sh\n');
+    await symlink(join(repo.path, 'shared.sh'), join(repo.path, '.git/hooks/post-commit'));
+    const fake = createFakeIo();
+    expect(await createInitCommand({ cwd: () => repo.path, ...ON_PATH }).run([], fake.io)).toBe(0);
+    expect(fake.out()).toContain('.git/hooks/pre-commit');
+    expect(fake.err()).toContain('post-commit hook not installed (post-commit hook is a symlink)');
+    expect(fake.err()).not.toContain('pre-commit hook not installed');
+  });
+
   it('fails outside a git repository without creating files', async () => {
     const outside = await createTempDir();
     try {
@@ -102,11 +128,12 @@ describe('nightowl init', () => {
     expect(fake.err()).toContain('settings.json');
     expect((await readdir(repo.path)).sort()).toEqual(['.claude', '.git']);
     expect(await readdir(join(repo.path, '.git/hooks'))).not.toContain('pre-commit');
+    expect(await readdir(join(repo.path, '.git/hooks'))).not.toContain('post-commit');
   });
 
   it('warns when nightowl is not on PATH but still succeeds', async () => {
     const fake = createFakeIo();
-    const code = await createInitCommand({ cwd: () => repo.path, isOnPath: () => false, installPreCommit }).run([], fake.io);
+    const code = await createInitCommand({ cwd: () => repo.path, isOnPath: () => false, installGitHook }).run([], fake.io);
     expect(code).toBe(0);
     expect(fake.err()).toContain('npm i -g @hoanghainh/nightowl-evals');
   });

@@ -1,7 +1,7 @@
 import { relative } from 'node:path';
 import { ensureClaudeHooks } from '../setup/claude-settings.js';
 import { SetupError } from '../setup/fs-utils.js';
-import { HOOK_LINE, type InstallResult, installPreCommit } from '../setup/git-hook.js';
+import { GIT_HOOKS, type GitHookSpec, hookLine, type InstallResult, installGitHook } from '../setup/git-hook.js';
 import { ensureGitignoreEntry, type FileChange } from '../setup/gitignore.js';
 import { isOnPath } from '../setup/path.js';
 import { findProjectRoot } from '../storage/project-root.js';
@@ -11,18 +11,18 @@ import type { Command } from './command.js';
 export interface InitDeps {
   readonly cwd: () => string;
   readonly isOnPath: (command: string) => boolean;
-  readonly installPreCommit: (root: string) => Promise<InstallResult>;
+  readonly installGitHook: (root: string, hook: GitHookSpec) => Promise<InstallResult>;
 }
 
 const defaultDeps: InitDeps = {
   cwd: () => process.cwd(),
   isOnPath: (command) => isOnPath(command, process.env.PATH),
-  installPreCommit,
+  installGitHook,
 };
 
-async function tryInstallPreCommit(deps: InitDeps, root: string): Promise<InstallResult> {
+async function tryInstallHook(deps: InitDeps, root: string, hook: GitHookSpec): Promise<InstallResult> {
   try {
-    return await deps.installPreCommit(root);
+    return await deps.installGitHook(root, hook);
   } catch (error) {
     return { status: 'manual', reason: error instanceof Error ? error.message : String(error) };
   }
@@ -55,14 +55,17 @@ export function createInitCommand(deps: InitDeps = defaultDeps): Command {
         io.stderr(`nightowl init: ${error.message}\nFix it and run 'nightowl init' again.\n`);
         return 1;
       }
-      const preCommit = await tryInstallPreCommit(deps, root);
+      const gitHooks: Array<{ hook: GitHookSpec; result: InstallResult }> = [];
+      for (const hook of GIT_HOOKS) gitHooks.push({ hook, result: await tryInstallHook(deps, root, hook) });
 
       const lines = [
         describeChange('.claude/settings.json', hooks.status, `hooks: ${hooks.added.join(', ')}`),
         describeChange('.gitignore', gitignore, 'added .nightowl/'),
-        preCommit.status === 'manual'
-          ? null
-          : describeChange(relative(root, preCommit.path), preCommit.status, 'runs nightowl precommit'),
+        ...gitHooks.map(({ hook, result }) =>
+          result.status === 'manual'
+            ? null
+            : describeChange(relative(root, result.path), result.status, `runs nightowl ${hook.command}`),
+        ),
       ].filter((line): line is string => line !== null);
       io.stdout(
         lines.length === 0
@@ -70,10 +73,11 @@ export function createInitCommand(deps: InitDeps = defaultDeps): Command {
           : `NightOwl is set up in ${root}\n${lines.join('\n')}\n`,
       );
 
-      if (preCommit.status === 'manual') {
+      for (const { hook, result } of gitHooks) {
+        if (result.status !== 'manual') continue;
         io.stderr(
-          `nightowl init: git pre-commit hook not installed (${preCommit.reason}).\n` +
-            `  Add this line to your pre-commit hook yourself:\n  ${HOOK_LINE}\n`,
+          `nightowl init: git ${hook.name} hook not installed (${result.reason}).\n` +
+            `  Add this line to your ${hook.name} hook yourself:\n  ${hookLine(hook.command)}\n`,
         );
       }
       if (!deps.isOnPath('nightowl')) {

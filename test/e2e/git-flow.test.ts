@@ -71,9 +71,48 @@ describe('Claude Code edit → real git commit', () => {
     expect(await outcomes()).toEqual(['unchanged']);
   });
 
+  async function failures(): Promise<Array<{ file_path: string; commit_sha: string }>> {
+    const { DatabaseSync } = await import('node:sqlite');
+    const db = new DatabaseSync(join(repo.path, '.nightowl/nightowl.db'));
+    try {
+      return db.prepare('SELECT file_path, commit_sha FROM failures').all() as unknown as Array<{ file_path: string; commit_sha: string }>;
+    } finally {
+      db.close();
+    }
+  }
+
+  it('records one failure for the commit that was actually made', async () => {
+    nightowl(['init']);
+    await writeFiles(repo.path, { 'src/a.ts': 'export const a = 1;\n' });
+    nightowl(['log'], hookFixture('post-tool-use-write', repo.path));
+    await writeFiles(repo.path, { 'src/a.ts': 'export const a = 2;\n' });
+    expect(commitAll(withNightowl)).toBe(0);
+    expect(await failures()).toEqual([{ file_path: 'src/a.ts', commit_sha: git(repo.path, ['rev-parse', 'HEAD']).trim() }]);
+  });
+
+  it('records no failure when the commit is aborted after pre-commit', async () => {
+    nightowl(['init']);
+    await writeFile(join(repo.path, '.git/hooks/commit-msg'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+    await writeFiles(repo.path, { 'src/a.ts': 'export const a = 1;\n' });
+    nightowl(['log'], hookFixture('post-tool-use-write', repo.path));
+    await writeFiles(repo.path, { 'src/a.ts': 'export const a = 2;\n' });
+    expect(commitAll(withNightowl)).not.toBe(0);
+    expect(await outcomes()).toEqual(['modified']);
+    expect(await failures()).toEqual([]);
+  });
+
+  it('records no failure when the AI version is committed as is', async () => {
+    nightowl(['init']);
+    await writeFiles(repo.path, { 'src/a.ts': 'export const a = 1;\n' });
+    nightowl(['log'], hookFixture('post-tool-use-write', repo.path));
+    expect(commitAll(withNightowl)).toBe(0);
+    expect(await failures()).toEqual([]);
+  });
+
   it('lets the commit through when nightowl is not on PATH', async () => {
     nightowl(['init']);
     await writeFiles(repo.path, { 'src/a.ts': 'x\n' });
+    expect(spawnSync('sh', ['-c', 'command -v nightowl'], { env: { PATH: BARE_PATH } }).status).not.toBe(0);
     expect(commitAll({ ...process.env, PATH: BARE_PATH })).toBe(0);
     expect(git(repo.path, ['log', '--oneline']).trim().split('\n')).toHaveLength(2);
   });

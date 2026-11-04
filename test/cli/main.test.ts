@@ -19,7 +19,7 @@ describe('main', () => {
     expect(await main(['--version'], fake.io)).toBe(0);
   });
 
-  it.each(['log', 'precommit'])('exits 0 silently when the %s hook command throws', async (name) => {
+  it.each(['log', 'precommit', 'postcommit'])('exits 0 silently when the %s hook command throws', async (name) => {
     const fake = createFakeIo();
     const code = await main([name], fake.io, [throwing(name, new Error('boom'))]);
     expect(code).toBe(0);
