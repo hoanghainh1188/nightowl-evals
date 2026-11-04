@@ -9,10 +9,12 @@ import { createTempDir, type TempDir } from '../helpers/temp-repo.js';
 import { hookLine, installGitHook } from '../../src/setup/git-hook.js';
 
 const ON_PATH = { isOnPath: () => true, installGitHook };
+const PERSONAL = '.claude/settings.local.json';
+const SHARED = '.claude/settings.json';
 
 async function snapshot(root: string): Promise<Record<string, string>> {
   const result: Record<string, string> = {};
-  for (const file of ['.gitignore', '.claude/settings.json']) {
+  for (const file of ['.gitignore', PERSONAL]) {
     result[file] = await readFile(join(root, file), 'utf8');
   }
   return result;
@@ -25,16 +27,17 @@ describe('nightowl init', () => {
   });
   afterEach(() => repo.cleanup());
 
-  it('sets up .gitignore, Claude Code hooks and the database, then reports it', async () => {
+  it('sets up .gitignore, personal Claude Code hooks and the database, then reports it', async () => {
     const fake = createFakeIo();
     const code = await createInitCommand({ cwd: () => repo.path, ...ON_PATH }).run([], fake.io);
     expect(code).toBe(0);
-    expect(await readFile(join(repo.path, '.gitignore'), 'utf8')).toBe('.nightowl/\n');
-    const settings = JSON.parse(await readFile(join(repo.path, '.claude/settings.json'), 'utf8'));
+    expect(await readFile(join(repo.path, '.gitignore'), 'utf8')).toBe(`${PERSONAL}\n.nightowl/\n`);
+    const settings = JSON.parse(await readFile(join(repo.path, PERSONAL), 'utf8'));
     expect(Object.keys(settings.hooks)).toEqual(['PostToolUse', 'UserPromptSubmit']);
+    expect(await readdir(join(repo.path, '.claude'))).toEqual(['settings.local.json']);
     expect(await readdir(join(repo.path, '.nightowl'))).toContain('nightowl.db');
-    expect(fake.out()).toContain('.gitignore');
-    expect(fake.out()).toContain('.claude/settings.json');
+    expect(fake.out()).toContain(`created .gitignore (added ${PERSONAL}, .nightowl/)`);
+    expect(fake.out()).toContain(`created ${PERSONAL} (hooks: PostToolUse, UserPromptSubmit)`);
     expect(fake.out()).toContain('.git/hooks/pre-commit');
     expect(await readFile(join(repo.path, '.git/hooks/pre-commit'), 'utf8')).toContain('nightowl precommit');
     expect(fake.out()).toContain('.git/hooks/post-commit');
@@ -82,7 +85,7 @@ describe('nightowl init', () => {
     await mkdir(nested);
     await createInitCommand({ cwd: () => nested, ...ON_PATH }).run([], createFakeIo().io);
     expect(await readdir(nested)).toEqual([]);
-    expect(await readFile(join(repo.path, '.gitignore'), 'utf8')).toBe('.nightowl/\n');
+    expect(await readFile(join(repo.path, '.gitignore'), 'utf8')).toContain('.nightowl/\n');
   });
 
   it('gives the same result when run twice and says it is already set up', async () => {
@@ -130,16 +133,68 @@ describe('nightowl init', () => {
     }
   });
 
-  it('changes nothing when .claude/settings.json is invalid', async () => {
+  it.each([
+    [PERSONAL, []],
+    [SHARED, ['--shared']],
+  ])('changes nothing when %s is invalid', async (file, args) => {
     await mkdir(join(repo.path, '.claude'));
-    await writeFile(join(repo.path, '.claude/settings.json'), '{ broken');
+    await writeFile(join(repo.path, file), '{ broken');
     const fake = createFakeIo();
-    const code = await createInitCommand({ cwd: () => repo.path, ...ON_PATH }).run([], fake.io);
+    const code = await createInitCommand({ cwd: () => repo.path, ...ON_PATH }).run(args, fake.io);
     expect(code).toBe(1);
-    expect(fake.err()).toContain('settings.json');
+    expect(fake.err()).toContain(file);
     expect((await readdir(repo.path)).sort()).toEqual(['.claude', '.git']);
     expect(await readdir(join(repo.path, '.git/hooks'))).not.toContain('pre-commit');
     expect(await readdir(join(repo.path, '.git/hooks'))).not.toContain('post-commit');
+  });
+
+  it('writes the shared settings with --shared and leaves .gitignore to .nightowl/', async () => {
+    const fake = createFakeIo();
+    expect(await createInitCommand({ cwd: () => repo.path, ...ON_PATH }).run(['--shared'], fake.io)).toBe(0);
+    expect(await readdir(join(repo.path, '.claude'))).toEqual(['settings.json']);
+    expect(await readFile(join(repo.path, '.gitignore'), 'utf8')).toBe('.nightowl/\n');
+    expect(fake.out()).toContain(`created ${SHARED} (hooks: PostToolUse, UserPromptSubmit)`);
+  });
+
+  it('leaves hooks set up by an older init in the shared file and says how to move them', async () => {
+    await mkdir(join(repo.path, '.claude'));
+    const legacy = { hooks: { UserPromptSubmit: [{ hooks: [{ type: 'command', command: 'nightowl log' }] }] } };
+    await writeFile(join(repo.path, SHARED), JSON.stringify(legacy));
+    const fake = createFakeIo();
+    expect(await createInitCommand({ cwd: () => repo.path, ...ON_PATH }).run([], fake.io)).toBe(0);
+    expect(await readdir(join(repo.path, '.claude'))).toEqual(['settings.json']);
+    expect(fake.out()).toContain(`updated ${SHARED} (upgraded 1 hook)`);
+    expect(fake.out()).toContain(`Claude Code hooks stay in ${SHARED}. To make them personal: nightowl uninstall && nightowl init`);
+    expect(await readFile(join(repo.path, SHARED), 'utf8')).toContain('command -v nightowl');
+  });
+
+  it('warns when both settings files hold NightOwl hooks', async () => {
+    const init = createInitCommand({ cwd: () => repo.path, ...ON_PATH });
+    await init.run(['--shared'], createFakeIo().io);
+    const shared = await readFile(join(repo.path, SHARED), 'utf8');
+    await writeFile(join(repo.path, PERSONAL), shared);
+    const fake = createFakeIo();
+    expect(await init.run([], fake.io)).toBe(0);
+    expect(fake.err()).toContain(`NightOwl hooks are in both ${PERSONAL} and ${SHARED}`);
+  });
+
+  it('refuses a committed personal settings file', async () => {
+    await mkdir(join(repo.path, '.claude'));
+    await writeFile(join(repo.path, PERSONAL), '{}\n');
+    git(repo.path, ['add', PERSONAL]);
+    git(repo.path, ['commit', '-q', '-m', 'settings']);
+    const fake = createFakeIo();
+    expect(await createInitCommand({ cwd: () => repo.path, ...ON_PATH }).run([], fake.io)).toBe(1);
+    expect(fake.err()).toContain('nightowl init --shared');
+    expect(await readFile(join(repo.path, PERSONAL), 'utf8')).toBe('{}\n');
+    expect(await readdir(repo.path)).not.toContain('.nightowl');
+  });
+
+  it('writes no settings when the data folder cannot be created', async () => {
+    await writeFile(join(repo.path, '.nightowl'), 'not a folder');
+    const fake = createFakeIo();
+    expect(await createInitCommand({ cwd: () => repo.path, ...ON_PATH }).run([], fake.io)).toBe(1);
+    expect((await readdir(repo.path)).sort()).toEqual(['.git', '.nightowl']);
   });
 
   it('warns when nightowl is not on PATH but still succeeds', async () => {

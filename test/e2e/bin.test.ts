@@ -74,7 +74,7 @@ describe('nightowl bin (built)', () => {
     try {
       const result = await runBin(args, { cwd: repo.path });
       expect(result.code).toBe(0);
-      expect(result.stdout).toMatch(/^Usage: nightowl init\n/);
+      expect(result.stdout).toMatch(/^Usage: nightowl init \[--shared\]\n/);
       expect(result.stderr).toBe('');
       expect((await readdir(repo.path)).filter((name) => name !== '.git')).toEqual([]);
       expect((await readdir(join(repo.path, '.git/hooks'))).filter((name) => !name.endsWith('.sample'))).toEqual([]);
@@ -122,7 +122,7 @@ describe('nightowl bin (built)', () => {
     let repo: TempDir;
 
     beforeAll(async () => {
-      repo = await createFakeRepo();
+      repo = await createGitRepo();
       await writeFiles(repo.path, { 'src/a.ts': 'export const a = 2;\n' });
     });
 
@@ -131,7 +131,7 @@ describe('nightowl bin (built)', () => {
     it('init sets the project up', async () => {
       const result = await runBin(['init'], { cwd: repo.path });
       expect(result.code).toBe(0);
-      expect(result.stdout).toContain('.claude/settings.json');
+      expect(result.stdout).toContain('.claude/settings.local.json');
       expect(result.stderr).not.toContain('ExperimentalWarning');
     });
 
