@@ -88,13 +88,13 @@ Rủi ro lớn nhất là bảo mật code. Thiết kế on-premise ngay từ đ
 
 Mục tiêu: ghi được lỗi thật trên dự án cá nhân của anh. Dữ liệu lưu ở máy local. Chưa cần đẹp.
 
-- [ ] Tuần 1: Claude Code hook ghi prompt + code AI sinh ra vào file JSON / SQLite.
-- [ ] Tuần 1: Git pre-commit hook so diff, gắn cờ "code AI bị sửa".
-- [ ] Tuần 2: Ghép bản AI với bản dev sửa thành 1 bản ghi lỗi.
-- [ ] Tuần 2: Phân loại lỗi bằng LLM (4 loại cơ bản).
-- [ ] Tuần 3: Dashboard đơn giản: lỗi theo loại, theo module, theo tuần.
-- [ ] Tuần 3: Xuất bộ test dạng JSONL.
-- [ ] Tuần 4: Chạy lại bộ test với 2 model, so điểm.
+- [x] Tuần 1: Claude Code hook ghi prompt + code AI sinh ra vào file JSON / SQLite.
+- [x] Tuần 1: Git pre-commit hook so diff, gắn cờ "code AI bị sửa".
+- [x] Tuần 2: Ghép bản AI với bản dev sửa thành 1 bản ghi lỗi.
+- [x] Tuần 2: Phân loại lỗi bằng LLM (4 loại cơ bản).
+- [x] Tuần 3: Dashboard đơn giản: lỗi theo loại, theo module, theo tuần.
+- [x] Tuần 3: Xuất bộ test dạng JSONL.
+- [x] Tuần 4: Chạy lại bộ test với 2 model, so điểm.
 - [ ] Tuần 4: Tổng kết: đáng làm tiếp không?
 
 ## Chuyển giao cho Claude Code
