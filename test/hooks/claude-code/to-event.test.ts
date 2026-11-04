@@ -8,6 +8,7 @@ import {
 } from '../../../src/hooks/claude-code/to-event.js';
 import { parseHookPayload, type HookPayload } from '../../../src/hooks/claude-code/payload.js';
 import { hookFixture, type FixtureName } from '../../helpers/fixtures.js';
+import { createGitRepo } from '../../helpers/git-repo.js';
 import { createFakeRepo, createTempDir, type TempDir, writeFiles } from '../../helpers/temp-repo.js';
 
 function payload(name: FixtureName, root: string): HookPayload {
@@ -103,6 +104,54 @@ describe('toEvent', () => {
   it('marks a snapshot it could not read', async () => {
     const event = await toEvent(editPayload(repo.path, join(repo.path, 'gone.ts')), repo.path);
     expect(event?.payload).toMatchObject({ snapshot: null, snapshot_skipped: 'unreadable' });
+  });
+
+  it('stores no content for sensitive files', async () => {
+    await writeFiles(repo.path, { '.env': 'API_KEY=supersecret\n' });
+    const payloadIn: HookPayload = {
+      event: 'PostToolUse',
+      sessionId: 's1',
+      cwd: repo.path,
+      toolName: 'Edit',
+      toolInput: { file_path: join(repo.path, '.env'), old_string: 'A', new_string: 'API_KEY=supersecret' },
+    };
+    const event = await toEvent(payloadIn, repo.path);
+    expect(event?.payload).toEqual({ tool: 'Edit', input: { skipped: 'sensitive' }, snapshot: null, snapshot_skipped: 'sensitive' });
+    expect(JSON.stringify(event)).not.toContain('supersecret');
+  });
+
+  it('stores no content for files git ignores', async () => {
+    const gitRepo = await createGitRepo();
+    try {
+      await writeFiles(gitRepo.path, { '.gitignore': 'build/\n', 'build/out.js': 'generated' });
+      const event = await toEvent(editPayload(gitRepo.path, join(gitRepo.path, 'build/out.js')), gitRepo.path);
+      expect(event?.payload).toMatchObject({ input: { skipped: 'ignored' }, snapshot: null, snapshot_skipped: 'ignored' });
+    } finally {
+      await gitRepo.cleanup();
+    }
+  });
+
+  it('accepts in-project names that merely start with two dots', async () => {
+    await writeFiles(repo.path, { '..config/x.ts': 'x' });
+    expect(await toEvent(editPayload(repo.path, join(repo.path, '..config/x.ts')), repo.path)).toMatchObject({
+      filePath: '..config/x.ts',
+    });
+  });
+
+  it('ignores .git and .nightowl in any letter case', async () => {
+    for (const file of ['.GIT/config', '.NightOwl/x']) {
+      expect(await toEvent(editPayload(repo.path, join(repo.path, file)), repo.path)).toBeNull();
+    }
+  });
+
+  it('rejects a path through a missing directory under an outside symlink', async () => {
+    const outside = await createTempDir();
+    try {
+      await symlink(outside.path, join(repo.path, 'out'));
+      expect(await toEvent(editPayload(repo.path, join(repo.path, 'out/newdir/file.ts')), repo.path)).toBeNull();
+    } finally {
+      await outside.cleanup();
+    }
   });
 
   it('keeps the event when the file is a directory', async () => {

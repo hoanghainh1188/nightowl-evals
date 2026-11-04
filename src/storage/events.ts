@@ -1,4 +1,5 @@
 import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
+import { rollbackQuietly } from './migrations.js';
 
 export type EventSource = 'claude-code' | 'git';
 
@@ -88,22 +89,49 @@ export function listEvents(db: DatabaseSync, filter: EventFilter = {}): readonly
   return Object.freeze(rows.map(toStoredEvent));
 }
 
-// AI edits with a file snapshot that no commit-check has counted yet, oldest first.
-export function listUncheckedEdits(db: DatabaseSync, filePaths: readonly string[]): readonly StoredEvent[] {
+export interface PendingEdit {
+  readonly id: number;
+  readonly filePath: string;
+  readonly sessionId: string | null;
+}
+
+// AI edits of the given files that no commit-check has counted yet, oldest first.
+// Reads only indexed columns: payloads (with snapshots) are fetched one by one later.
+export function listUncheckedEdits(db: DatabaseSync, filePaths: readonly string[]): readonly PendingEdit[] {
   if (filePaths.length === 0) return [];
   const rows = db
     .prepare(
-      `SELECT e.* FROM events e
-       WHERE e.source = 'claude-code'
+      `SELECT e.id, e.file_path, e.session_id FROM events e
+       WHERE e.file_path IN (SELECT value FROM json_each(?))
+         AND e.source = 'claude-code'
          AND e.kind = 'edit'
-         AND e.file_path IN (SELECT value FROM json_each(?))
-         AND json_extract(e.payload, '$.snapshot') IS NOT NULL
-         AND NOT EXISTS (
-           SELECT 1 FROM events c, json_each(c.payload, '$.ai_event_ids') counted
-           WHERE c.kind = 'commit-check' AND counted.value = e.id
-         )
+         AND NOT EXISTS (SELECT 1 FROM checked_edits k WHERE k.edit_id = e.id)
        ORDER BY e.id`,
     )
-    .all(JSON.stringify(filePaths)) as unknown as EventRow[];
-  return Object.freeze(rows.map(toStoredEvent));
+    .all(JSON.stringify(filePaths)) as unknown as Array<{ id: number; file_path: string; session_id: string | null }>;
+  return Object.freeze(
+    rows.map((row) => Object.freeze({ id: row.id, filePath: row.file_path, sessionId: row.session_id })),
+  );
+}
+
+export function getSnapshot(db: DatabaseSync, editId: number): string | null {
+  const row = db.prepare(`SELECT json_extract(payload, '$.snapshot') AS snapshot FROM events WHERE id = ?`).get(editId) as
+    | { snapshot: unknown }
+    | undefined;
+  return typeof row?.snapshot === 'string' ? row.snapshot : null;
+}
+
+// Stores a commit-check and marks the edits it counted, in one transaction.
+export function recordCommitCheck(db: DatabaseSync, event: NewEvent, editIds: readonly number[]): StoredEvent {
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const saved = insertEvent(db, event);
+    const mark = db.prepare('INSERT INTO checked_edits (edit_id, check_id) VALUES (?, ?)');
+    for (const id of editIds) mark.run(id, saved.id);
+    db.exec('COMMIT');
+    return saved;
+  } catch (error) {
+    rollbackQuietly(db);
+    throw error;
+  }
 }

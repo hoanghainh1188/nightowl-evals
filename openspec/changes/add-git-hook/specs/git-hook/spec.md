@@ -21,6 +21,17 @@ Khi chạy `nightowl precommit`, với mỗi file staged (thêm mới hoặc s�
 - **WHEN** dev commit `README.md` mà không có sự kiện `edit` nào cho file đó
 - **THEN** không có sự kiện `commit-check` nào cho `README.md`
 
+#### Scenario: Git coi file AI viết là đổi tên
+- **WHEN** AI ghi `new.ts` gần giống `old.ts`, `old.ts` bị xoá, và git nhận ra cặp này là đổi tên
+- **THEN** `new.ts` vẫn được kiểm tra như một file thêm mới
+
+### Requirement: Không so với ảnh chụp cũ
+Khi sự kiện `edit` mới nhất của một file không có ảnh chụp (file quá lớn, không đọc được, nhạy cảm hoặc bị git bỏ qua), NightOwl SHALL NOT so với ảnh chụp của sự kiện cũ hơn, mà SHALL lưu `commit-check` với kết quả `skipped`, lý do `no_snapshot`, và đánh dấu mọi sự kiện `edit` đó là đã được tính.
+
+#### Scenario: Lần sửa mới nhất quá lớn
+- **WHEN** AI ghi `src/a.ts` (có ảnh chụp), rồi ghi lại với nội dung > 512 KB (không có ảnh chụp), rồi dev commit
+- **THEN** `commit-check` của `src/a.ts` có kết quả `skipped` và tham chiếu cả hai sự kiện `edit`
+
 ### Requirement: Mỗi lần AI sửa chỉ kiểm tra một lần
 Sự kiện `edit` đã có `commit-check` tham chiếu SHALL NOT được kiểm tra lại ở các commit sau. Một `commit-check` SHALL dùng ảnh chụp mới nhất của file và đánh dấu mọi sự kiện `edit` cũ hơn chưa kiểm tra của cùng file là đã được tính.
 

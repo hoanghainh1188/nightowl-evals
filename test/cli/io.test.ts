@@ -5,19 +5,19 @@ import { processIo, readStream } from '../../src/cli/io.js';
 describe('readStream', () => {
   it('joins string and buffer chunks as UTF-8', async () => {
     const stream = Readable.from(['{"a":', Buffer.from('"đúng"}')]);
-    expect(await readStream(stream)).toBe('{"a":"đúng"}');
+    expect(await readStream(stream)).toEqual({ text: '{"a":"đúng"}', complete: true });
   });
 
   it('returns an empty string for an empty stream', async () => {
-    expect(await readStream(Readable.from([]))).toBe('');
+    expect(await readStream(Readable.from([]))).toEqual({ text: '', complete: true });
   });
 
   it('resolves with partial input and destroys the stream when it never ends', async () => {
     const stream = new PassThrough();
     stream.write('{"partial":');
     const started = Date.now();
-    const text = await readStream(stream, 50);
-    expect(text).toBe('{"partial":');
+    const read = await readStream(stream, 50);
+    expect(read).toEqual({ text: '{"partial":', complete: false });
     expect(Date.now() - started).toBeLessThan(500);
     expect(stream.destroyed).toBe(true);
   });
@@ -25,7 +25,7 @@ describe('readStream', () => {
   it('finishes before the timeout when the stream ends in time', async () => {
     const stream = new PassThrough();
     stream.end('done');
-    expect(await readStream(stream, 5_000)).toBe('done');
+    expect(await readStream(stream, 5_000)).toEqual({ text: 'done', complete: true });
   });
 
   it('rejects when the stream errors', async () => {

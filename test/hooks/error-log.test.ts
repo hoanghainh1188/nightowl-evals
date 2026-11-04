@@ -21,6 +21,28 @@ describe('appendErrorLog', () => {
     expect(lines[1]).toMatch(/ log Error ERR_SQLITE_ERROR: locked$/);
   });
 
+  it('hides the home directory and caps the message length', async () => {
+    const { homedir } = await import('node:os');
+    await appendErrorLog(repo.path, 'log', new Error(`cannot read ${homedir()}/secret ${'x'.repeat(1000)}`));
+    const line = await readFile(file(), 'utf8');
+    expect(line).not.toContain(homedir());
+    expect(line).toContain('~/secret');
+    expect(line.length).toBeLessThan(400);
+  });
+
+  it('does not follow a symlinked .nightowl', async () => {
+    const { createTempDir } = await import('../helpers/temp-repo.js');
+    const { symlink, readdir } = await import('node:fs/promises');
+    const outside = await createTempDir();
+    try {
+      await symlink(outside.path, join(repo.path, '.nightowl'));
+      await appendErrorLog(repo.path, 'log', 'x');
+      expect(await readdir(outside.path)).toEqual([]);
+    } finally {
+      await outside.cleanup();
+    }
+  });
+
   it('keeps each line on one line', async () => {
     await appendErrorLog(repo.path, 'log', 'two\nlines');
     expect((await readFile(file(), 'utf8')).trimEnd().split('\n')).toHaveLength(1);

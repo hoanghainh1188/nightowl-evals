@@ -64,6 +64,17 @@ Mở database SHALL NOT in gì ra stdout hay stderr, kể cả cảnh báo thử
 - **WHEN** NightOwl mở database trên Node.js 22.13
 - **THEN** stderr không có `ExperimentalWarning`
 
+### Requirement: Thư mục dữ liệu riêng tư
+Thư mục `.nightowl/` SHALL chỉ cho người dùng hiện tại đọc, ghi và truy cập (quyền `0700`), kể cả khi thư mục đã tồn tại với quyền rộng hơn. Khi `.nightowl` là symlink hoặc không phải thư mục, NightOwl SHALL từ chối dùng nó và không ghi gì.
+
+#### Scenario: Tạo mới
+- **WHEN** NightOwl tạo `.nightowl/` lần đầu
+- **THEN** thư mục có quyền `0700`
+
+#### Scenario: Repo clone về có .nightowl là symlink
+- **WHEN** `.nightowl` là symlink trỏ ra ngoài dự án
+- **THEN** mở database báo lỗi và không file nào được tạo ở đích của symlink
+
 ### Requirement: Dữ liệu không rời khỏi máy
 Lớp lưu trữ SHALL chỉ đọc và ghi file trong `.nightowl/` của dự án và SHALL NOT gửi dữ liệu đi đâu.
 

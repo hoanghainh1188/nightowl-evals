@@ -26,6 +26,10 @@ describe('addHookLine', () => {
     expect(addHookLine('#!/usr/bin/env node\nconsole.log(1)\n')).toEqual({ status: 'manual', reason: 'non-shell hook' });
   });
 
+  it('only recognises the marker at the end of a line it added', () => {
+    expect(addHookLine('#!/bin/sh\n# nightowl-evals is set up in CI only\nnpm test\n').status).toBe('updated');
+  });
+
   it('does nothing when the line is already there', () => {
     const once = addHookLine(null);
     expect(once.status === 'created' && addHookLine(once.content)).toEqual({ status: 'unchanged' });
@@ -73,6 +77,14 @@ describe('installPreCommit', () => {
     git(repo.path, ['config', 'core.hooksPath', '.husky']);
     expect(await installPreCommit(repo.path)).toEqual({ status: 'manual', reason: 'core.hooksPath is set to .husky' });
     await expect(stat(join(repo.path, '.husky'))).rejects.toThrow();
+  });
+
+  it('does not write through a symlinked hook', async () => {
+    const { symlink } = await import('node:fs/promises');
+    await writeFile(join(repo.path, 'shared-hook.sh'), '#!/bin/sh\necho shared\n');
+    await symlink(join(repo.path, 'shared-hook.sh'), hookFile());
+    expect(await installPreCommit(repo.path)).toEqual({ status: 'manual', reason: 'pre-commit hook is a symlink' });
+    expect(await readFile(join(repo.path, 'shared-hook.sh'), 'utf8')).toBe('#!/bin/sh\necho shared\n');
   });
 
   it('does not touch a hook written in another language', async () => {

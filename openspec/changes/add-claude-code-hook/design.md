@@ -33,10 +33,13 @@ Một hook được coi là của NightOwl khi `command` bằng đúng `nightowl
 Chỉ cần vài trường; tự viết `parseHookPayload(unknown): HookPayload | null` thay vì thêm `zod`, giữ nguyên chính sách không có dependency lúc chạy.
 
 ### 5. Gốc dự án lấy từ `cwd` trong payload
-Ưu tiên `payload.cwd`, rồi tới `process.cwd()`. Đường dẫn file được chuẩn hoá bằng `realpath` trước khi kiểm tra có nằm trong gốc dự án không, để chặn đường đi vòng qua symlink.
+Ưu tiên `payload.cwd`, rồi tới `process.cwd()`. Đường dẫn file được chuẩn hoá bằng `realpath` trước khi kiểm tra có nằm trong gốc dự án không, để chặn đường đi vòng qua symlink. Nếu cả thư mục cha cũng không resolve được thì bỏ qua sự kiện. `.git`/`.nightowl` so không phân biệt hoa thường (macOS, Windows). Ảnh chụp đọc bằng `O_NOFOLLOW` để không đi theo symlink được tráo vào sau bước kiểm tra.
+
+### 5b. Không lưu nội dung nhạy cảm
+File có tên thuộc nhóm bí mật (`src/hooks/claude-code/sensitive.ts`: `.env*`, khoá, `credentials`, `secrets.*`…) hoặc bị git bỏ qua (`git check-ignore -q`, giới hạn 300 ms; lỗi thì coi như không bị bỏ qua) chỉ được lưu đường dẫn và lý do (`snapshot_skipped: "sensitive" | "ignored"`), không lưu nội dung hay phần thay đổi. File bị bỏ qua không bao giờ vào commit nên cũng không cần cho change 4.
 
 ### 6. Log lỗi
-`.nightowl/nightowl.log`, mỗi dòng: thời điểm ISO, tên hook, mã lỗi hoặc thông báo ngắn. Không ghi payload, code hay prompt. Khi file vượt 1 MB thì xoá nội dung cũ và ghi tiếp (log chỉ để debug, mất cũng không sao).
+`.nightowl/nightowl.log`, mỗi dòng: thời điểm ISO, tên hook, mã lỗi hoặc thông báo ngắn (tối đa 200 ký tự, thư mục home thay bằng `~`). Không ghi payload, code hay prompt. stdin không đóng kịp được ghi riêng, khác với payload hỏng. Khi file vượt 1 MB thì xoá nội dung cũ và ghi tiếp (log chỉ để debug, mất cũng không sao).
 
 ### 7. Payload sự kiện
 

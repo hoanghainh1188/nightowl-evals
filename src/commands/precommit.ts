@@ -19,12 +19,13 @@ export function createPrecommitCommand(deps: PrecommitDeps = { cwd: () => proces
     name: 'precommit',
     summary: 'Compare staged files with AI edits (used by the git hook)',
     run: async () => {
-      const root = findProjectRoot(deps.cwd());
-      if (root === null) return 0;
+      const deadline = Date.now() + (deps.budgetMs ?? PRECOMMIT_BUDGET_MS);
+      let root: string | null = null;
       try {
-        await checkStagedChanges(root, Date.now() + (deps.budgetMs ?? PRECOMMIT_BUDGET_MS));
+        root = findProjectRoot(deps.cwd());
+        if (root !== null) await checkStagedChanges(root, deadline);
       } catch (error) {
-        if (existsSync(join(root, DATA_DIR))) await appendErrorLog(root, 'precommit', error);
+        if (root !== null && existsSync(join(root, DATA_DIR))) await appendErrorLog(root, 'precommit', error);
       }
       return 0;
     },

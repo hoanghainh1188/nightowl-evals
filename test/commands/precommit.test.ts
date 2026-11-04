@@ -118,6 +118,24 @@ describe('nightowl precommit', () => {
     expect(all[0]?.payload).toMatchObject({ ai_event_ids: ids, outcome: 'unchanged' });
   });
 
+  it('does not compare against an older snapshot when the latest edit has none', async () => {
+    const first = await aiWrote('src/a.ts', 'v1\n');
+    const store = await openStore({ cwd: repo.path });
+    const second = store.insertEvent({
+      source: 'claude-code',
+      kind: 'edit',
+      filePath: 'src/a.ts',
+      payload: { tool: 'Write', snapshot: null, snapshot_skipped: 'too_large' },
+    }).id;
+    store.close();
+    await writeFiles(repo.path, { 'src/a.ts': 'huge\n' });
+    git(repo.path, ['add', '-A']);
+    await precommit();
+    expect(await checks()).toEqual([
+      { filePath: 'src/a.ts', payload: { ai_event_ids: [first, second], outcome: 'skipped', skipped_reason: 'no_snapshot' } },
+    ]);
+  });
+
   it('flags whitespace-only edits', async () => {
     await aiWrote('src/a.ts', 'if (a) {\n  b();\n}\n');
     await writeFiles(repo.path, { 'src/a.ts': 'if (a) {\n    b();\n}\n' });
@@ -141,6 +159,17 @@ describe('nightowl precommit', () => {
     git(repo.path, ['add', 'a.ts']);
     expect(await precommit()).toEqual({ code: 0, out: '', err: '' });
     expect(await readFile(join(repo.path, '.nightowl/nightowl.log'), 'utf8')).toMatch(/ precommit /);
+  });
+
+  it('exits 0 even if the working directory cannot be read', async () => {
+    const fake = createFakeIo();
+    const command = createPrecommitCommand({
+      cwd: () => {
+        throw new Error('ENOENT: uv_cwd');
+      },
+    });
+    expect(await command.run([], fake.io)).toBe(0);
+    expect(fake.err()).toBe('');
   });
 
   it('stops when the time budget is used up and still exits 0', async () => {

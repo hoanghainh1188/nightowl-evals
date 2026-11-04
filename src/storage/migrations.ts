@@ -26,6 +26,12 @@ export const migrations: readonly string[] = Object.freeze([
     category       TEXT CHECK (category IN ('logic', 'convention', 'misread-requirement', 'missing-context')),
     status         TEXT NOT NULL DEFAULT 'flagged' CHECK (status IN ('flagged', 'confirmed', 'dismissed'))
   );
+
+  -- Which commit-check counted each AI edit; keeps the pre-commit lookup indexed.
+  CREATE TABLE checked_edits (
+    edit_id   INTEGER PRIMARY KEY REFERENCES events (id),
+    check_id  INTEGER NOT NULL REFERENCES events (id)
+  );
   `,
 ]);
 
@@ -58,7 +64,16 @@ export function migrate(db: DatabaseSync): void {
     db.exec(`PRAGMA user_version = ${CURRENT_SCHEMA_VERSION}`);
     db.exec('COMMIT');
   } catch (error) {
-    db.exec('ROLLBACK');
+    rollbackQuietly(db);
     throw error;
+  }
+}
+
+// Keeps the original error visible if ROLLBACK itself fails.
+export function rollbackQuietly(db: DatabaseSync): void {
+  try {
+    db.exec('ROLLBACK');
+  } catch {
+    // The transaction is already gone; nothing left to undo.
   }
 }

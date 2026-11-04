@@ -1,38 +1,38 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import type { StoredEvent } from '../../storage/events.js';
+import type { NewEvent, PendingEdit } from '../../storage/events.js';
 import { DATA_DIR, openStore, type Store } from '../../storage/store.js';
 import { compareContent } from './compare.js';
 import { listStagedFiles, readStagedFiles, type StagedFile } from './staged.js';
 
 export const MAX_STAGED_BYTES = 512 * 1024;
 
-function groupByFile(edits: readonly StoredEvent[]): ReadonlyMap<string, readonly StoredEvent[]> {
-  const groups = new Map<string, StoredEvent[]>();
-  for (const edit of edits) {
-    if (edit.filePath === null) continue;
-    groups.set(edit.filePath, [...(groups.get(edit.filePath) ?? []), edit]);
-  }
+function groupByFile(edits: readonly PendingEdit[]): ReadonlyMap<string, readonly PendingEdit[]> {
+  const groups = new Map<string, PendingEdit[]>();
+  for (const edit of edits) groups.set(edit.filePath, [...(groups.get(edit.filePath) ?? []), edit]);
   return groups;
 }
 
-function recordCheck(store: Store, filePath: string, edits: readonly StoredEvent[], staged: StagedFile): void {
-  const latest = edits[edits.length - 1] as StoredEvent;
-  const snapshot = (latest.payload as { snapshot: string }).snapshot;
+function commitCheck(store: Store, filePath: string, edits: readonly PendingEdit[], staged: StagedFile): NewEvent {
+  const latest = edits[edits.length - 1] as PendingEdit;
+  const base = { source: 'git', kind: 'commit-check', sessionId: latest.sessionId, filePath } as const;
+  const aiEventIds = edits.map((edit) => edit.id);
+  const snapshot = store.getSnapshot(latest.id);
+  // Never fall back to an older snapshot: the staged file would be compared with stale content.
+  if (snapshot === null) {
+    return { ...base, payload: { ai_event_ids: aiEventIds, outcome: 'skipped', skipped_reason: 'no_snapshot' } };
+  }
   const tooLarge = Buffer.byteLength(staged.content) > MAX_STAGED_BYTES;
-  store.insertEvent({
-    source: 'git',
-    kind: 'commit-check',
-    sessionId: latest.sessionId,
-    filePath,
+  return {
+    ...base,
     payload: {
-      ai_event_ids: edits.map((edit) => edit.id),
+      ai_event_ids: aiEventIds,
       ...compareContent(snapshot, staged.content),
       staged_blob: staged.blob,
       staged_content: tooLarge ? null : staged.content,
       staged_skipped: tooLarge ? 'too_large' : null,
     },
-  });
+  };
 }
 
 // Compares every staged file the AI edited with the AI's latest snapshot and stores one
@@ -42,7 +42,7 @@ export async function checkStagedChanges(root: string, deadline: number): Promis
   if (!existsSync(join(root, DATA_DIR)) || Date.now() >= deadline) return 0;
   const remaining = () => Math.max(1, deadline - Date.now());
 
-  const store = await openStore({ cwd: root });
+  const store = await openStore({ cwd: root, timeoutMs: remaining() });
   try {
     const pending = groupByFile(store.listUncheckedEdits(await listStagedFiles(root, remaining())));
     if (pending.size === 0) return 0;
@@ -53,7 +53,7 @@ export async function checkStagedChanges(root: string, deadline: number): Promis
       if (Date.now() >= deadline) break;
       const file = staged.get(filePath);
       if (file === undefined) continue;
-      recordCheck(store, filePath, edits, file);
+      store.recordCommitCheck(commitCheck(store, filePath, edits, file), edits.map((edit) => edit.id));
       written += 1;
     }
     return written;

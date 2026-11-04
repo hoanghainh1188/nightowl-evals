@@ -80,6 +80,12 @@ describe('log', () => {
     expect(log).not.toContain('secret-code-123');
   });
 
+  it('logs a stdin timeout separately and drops the partial event', async () => {
+    const fake = createFakeIo({ stdin: hookFixture('user-prompt-submit', repo.path).slice(0, 40), timedOut: true });
+    expect(await logCommand.run([], fake.io)).toBe(0);
+    expect(await readFile(join(repo.path, '.nightowl', 'nightowl.log'), 'utf8')).toContain('did not close in time');
+  });
+
   it('writes the error log when the database cannot be opened', async () => {
     await writeFiles(repo.path, { '.nightowl/nightowl.db': 'not a database', 'src/a.ts': 'x' });
     const fake = createFakeIo({ stdin: hookFixture('post-tool-use-edit', repo.path) });

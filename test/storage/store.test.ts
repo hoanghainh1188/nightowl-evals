@@ -73,6 +73,42 @@ describe('openStore', () => {
     expect(store.pragma('busy_timeout')).toBe(2000);
     expect(store.pragma('foreign_keys')).toBe(1);
   });
+
+  it('keeps .nightowl/ private to the current user', async () => {
+    store = await openStore({ cwd: repo.path });
+    const { stat } = await import('node:fs/promises');
+    expect((await stat(join(repo.path, '.nightowl'))).mode & 0o777).toBe(0o700);
+  });
+
+  it('tightens an existing .nightowl/ that others can read', async () => {
+    const fs = await import('node:fs/promises');
+    await fs.mkdir(join(repo.path, '.nightowl'), { mode: 0o755 });
+    await fs.chmod(join(repo.path, '.nightowl'), 0o755);
+    store = await openStore({ cwd: repo.path });
+    expect((await fs.stat(join(repo.path, '.nightowl'))).mode & 0o777).toBe(0o700);
+  });
+
+  it('refuses a .nightowl that is a symlink', async () => {
+    const outside = await createTempDir();
+    try {
+      const fs = await import('node:fs/promises');
+      await fs.symlink(outside.path, join(repo.path, '.nightowl'));
+      await expect(openStore({ cwd: repo.path })).rejects.toThrow(/symlink/i);
+      expect(await listFiles(outside.path)).toEqual([]);
+    } finally {
+      await outside.cleanup();
+    }
+  });
+
+  it('caps the busy timeout at the time the caller has left', async () => {
+    store = await openStore({ cwd: repo.path, timeoutMs: 300 });
+    expect(store.pragma('busy_timeout')).toBe(300);
+  });
+
+  it('only answers the pragmas it knows', async () => {
+    store = await openStore({ cwd: repo.path });
+    expect(() => store?.pragma('user_version; DROP TABLE events')).toThrow(/unsupported pragma/i);
+  });
 });
 
 describe('schema', () => {
@@ -90,7 +126,7 @@ describe('schema', () => {
       repo.path,
       "SELECT name FROM sqlite_master WHERE type IN ('table', 'index') AND name NOT LIKE 'sqlite_%' ORDER BY name",
     ).map((row) => row.name);
-    expect(names).toEqual(['events', 'events_file_time', 'events_session', 'failures']);
+    expect(names).toEqual(['checked_edits', 'events', 'events_file_time', 'events_session', 'failures']);
     expect(rawQuery<{ user_version: number }>(repo.path, 'PRAGMA user_version')[0]?.user_version).toBe(1);
     expect(CURRENT_SCHEMA_VERSION).toBe(1);
   });

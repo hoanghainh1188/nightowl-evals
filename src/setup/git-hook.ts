@@ -1,7 +1,7 @@
 import { chmod, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { GitError, runGit } from '../hooks/git/run-git.js';
-import { readTextIfExists } from './fs-utils.js';
+import { isSymlink, readTextIfExists } from './fs-utils.js';
 
 const MARKER = '# nightowl-evals';
 // `|| true` keeps the commit going even if nightowl is missing or crashes.
@@ -15,7 +15,7 @@ export type HookEdit =
 
 export function addHookLine(existing: string | null): HookEdit {
   if (existing === null) return { status: 'created', content: `#!/bin/sh\n${HOOK_LINE}\n` };
-  if (existing.includes(MARKER)) return { status: 'unchanged' };
+  if (existing.split('\n').some((line) => line.trimEnd().endsWith(MARKER))) return { status: 'unchanged' };
   if (!existing.startsWith('#!')) return { status: 'updated', content: `#!/bin/sh\n${HOOK_LINE}\n${existing}` };
 
   const newline = existing.indexOf('\n');
@@ -46,6 +46,8 @@ export async function installPreCommit(root: string): Promise<InstallResult> {
   const relative = await gitText(root, ['rev-parse', '--git-path', 'hooks/pre-commit']);
   if (!relative) throw new Error('could not locate the git hooks directory');
   const path = resolve(root, relative);
+  // Writing through a symlink would change a script shared with other repositories.
+  if (await isSymlink(path)) return { status: 'manual', reason: 'pre-commit hook is a symlink' };
 
   const edit = addHookLine(await readTextIfExists(path));
   if (edit.status === 'manual') return edit;

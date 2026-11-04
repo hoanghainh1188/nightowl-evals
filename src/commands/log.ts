@@ -1,4 +1,5 @@
 import { recordClaudeCodeEvent } from '../hooks/claude-code/record.js';
+import type { StdinRead } from '../cli/io.js';
 import type { Command } from './command.js';
 
 // Claude Code closes stdin right after writing the event; anything slower is a stuck pipe.
@@ -6,7 +7,7 @@ export const LOG_STDIN_TIMEOUT_MS = 500;
 
 export interface LogDeps {
   readonly cwd: () => string;
-  readonly record: (text: string, cwd: string) => Promise<void>;
+  readonly record: (input: StdinRead, cwd: string) => Promise<void>;
 }
 
 const defaultDeps: LogDeps = { cwd: () => process.cwd(), record: recordClaudeCodeEvent };

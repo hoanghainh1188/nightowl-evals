@@ -1,6 +1,6 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { readTextIfExists, writeFileAtomic } from './fs-utils.js';
+import { readTextIfExists, SetupError, writeFileAtomic } from './fs-utils.js';
 import type { FileChange } from './gitignore.js';
 
 export const HOOK_COMMAND_LINE = 'nightowl log';
@@ -16,7 +16,7 @@ const HOOKS: readonly HookSpec[] = [
   { event: 'UserPromptSubmit' },
 ];
 
-export class ClaudeSettingsError extends Error {
+export class ClaudeSettingsError extends SetupError {
   constructor(message: string) {
     super(message);
     this.name = 'ClaudeSettingsError';

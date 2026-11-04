@@ -51,6 +51,8 @@ CREATE TABLE failures (
 );
 ```
 
+Bảng thứ ba `checked_edits (edit_id INTEGER PRIMARY KEY REFERENCES events(id), check_id INTEGER NOT NULL REFERENCES events(id))` được thêm khi làm change 4 (schema v1 chưa phát hành nên sửa thẳng): xem design của `add-git-hook` mục 3.
+
 `kind` để dạng text tự do thay vì `CHECK` vì change 3 và 4 còn thêm loại mới; mỗi change tự kiểm tra giá trị mình ghi. 4 giá trị `category` theo 4 loại lỗi trong doc. Không có cột tên dev (nguyên tắc 5: chấm AI, không chấm người).
 
 ### 4. Migration bằng `PRAGMA user_version`
@@ -60,10 +62,13 @@ Mảng `migrations: readonly string[]`; phần tử thứ *i* đưa schema từ 
 Khi mở: `journal_mode = WAL`, `busy_timeout = 2000`, `synchronous = NORMAL`, `foreign_keys = ON`. WAL cho phép đọc trong lúc ghi; `busy_timeout` cho tiến trình thứ hai chờ thay vì lỗi ngay. 2 giây khớp với ngân sách thời gian của hook.
 Khi hai tiến trình cùng khởi tạo một database mới, lệnh chuyển sang WAL có thể trả `SQLITE_BUSY` ngay mà không chờ `busy_timeout` (đã tái hiện khi test). Vì vậy bước WAL + migration được bọc trong `retryWhileBusy` (thử lại mỗi 25 ms, tối đa 2 giây).
 
-### 6. API
+### 6. Thư mục dữ liệu
+`ensureDataDir` tạo `.nightowl/` với quyền `0700` (và `chmod` lại nếu thư mục cũ rộng hơn), từ chối khi `.nightowl` là symlink hoặc không phải thư mục. Database, file WAL và log nằm trong đó nên người dùng khác trên máy không đọc được prompt hay code. `EEXIST` khi hai hook cùng tạo thư mục được bỏ qua (test ghi đồng thời đã bắt lỗi này).
+
+### 7. API
 
 ```ts
-openStore(options?: { cwd?: string }): Promise<Store>   // tìm gốc, mở, migrate
+openStore(options?: { cwd?: string; timeoutMs?: number }): Promise<Store>   // tìm gốc, mở, migrate
 interface Store {
   readonly root: string;
   insertEvent(event: NewEvent): StoredEvent;

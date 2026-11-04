@@ -20,6 +20,14 @@ describe('staged files', () => {
     expect([...(await listStagedFiles(repo.path))].sort()).toEqual(['kept.ts', 'src/my file.ts', 'src/đơn hàng.ts']);
   });
 
+  it('lists the new path of a renamed file', async () => {
+    await writeFiles(repo.path, { 'old.ts': 'export const x = 1;\n' });
+    git(repo.path, ['add', '.']);
+    git(repo.path, ['commit', '-q', '-m', 'base']);
+    git(repo.path, ['mv', 'old.ts', 'new.ts']);
+    expect(await listStagedFiles(repo.path)).toEqual(['new.ts']);
+  });
+
   it('reads the staged content, not the working tree', async () => {
     await writeFiles(repo.path, { 'a.ts': 'staged\n', 'b.ts': 'second\n' });
     git(repo.path, ['add', '.']);

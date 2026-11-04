@@ -1,10 +1,11 @@
 import { relative } from 'node:path';
-import { ClaudeSettingsError, ensureClaudeHooks } from '../setup/claude-settings.js';
+import { ensureClaudeHooks } from '../setup/claude-settings.js';
+import { SetupError } from '../setup/fs-utils.js';
 import { HOOK_LINE, type InstallResult, installPreCommit } from '../setup/git-hook.js';
 import { ensureGitignoreEntry, type FileChange } from '../setup/gitignore.js';
 import { isOnPath } from '../setup/path.js';
 import { findProjectRoot } from '../storage/project-root.js';
-import { openStore } from '../storage/store.js';
+import { DataDirError, openStore } from '../storage/store.js';
 import type { Command } from './command.js';
 
 export interface InitDeps {
@@ -44,15 +45,16 @@ export function createInitCommand(deps: InitDeps = defaultDeps): Command {
 
       // Settings first: if they are invalid, nothing else has been touched yet.
       let hooks;
+      let gitignore;
       try {
         hooks = await ensureClaudeHooks(root);
+        gitignore = await ensureGitignoreEntry(root);
+        (await openStore({ cwd: root })).close();
       } catch (error) {
-        if (!(error instanceof ClaudeSettingsError)) throw error;
-        io.stderr(`nightowl init: ${error.message}\nFix the file and run 'nightowl init' again.\n`);
+        if (!(error instanceof SetupError || error instanceof DataDirError)) throw error;
+        io.stderr(`nightowl init: ${error.message}\nFix it and run 'nightowl init' again.\n`);
         return 1;
       }
-      const gitignore = await ensureGitignoreEntry(root);
-      (await openStore({ cwd: root })).close();
       const preCommit = await tryInstallPreCommit(deps, root);
 
       const lines = [

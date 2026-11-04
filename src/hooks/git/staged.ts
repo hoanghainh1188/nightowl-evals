@@ -6,7 +6,7 @@ export interface StagedFile {
 }
 
 export async function listStagedFiles(root: string, timeoutMs?: number): Promise<readonly string[]> {
-  const out = await runGit(['diff', '--cached', '--name-only', '-z', '--diff-filter=AM'], { cwd: root, timeoutMs });
+  const out = await runGit(['diff', '--cached', '--name-only', '-z', '--no-renames', '--diff-filter=AM'], { cwd: root, timeoutMs });
   return out.toString('utf8').split('\0').filter(Boolean);
 }
 

@@ -37,6 +37,14 @@ describe('ensureGitignoreEntry', () => {
     expect(await ensureGitignoreEntry(repo.path)).toBe('unchanged');
   });
 
+  it('refuses to replace a symlinked .gitignore', async () => {
+    const { symlink } = await import('node:fs/promises');
+    await writeFile(join(repo.path, 'shared.gitignore'), 'dist/\n');
+    await symlink(join(repo.path, 'shared.gitignore'), join(repo.path, '.gitignore'));
+    await expect(ensureGitignoreEntry(repo.path)).rejects.toThrow(/symlink/i);
+    expect(await readFile(join(repo.path, 'shared.gitignore'), 'utf8')).toBe('dist/\n');
+  });
+
   it('reports updated and keeps other lines', async () => {
     await writeFile(join(repo.path, '.gitignore'), 'node_modules/\n');
     expect(await ensureGitignoreEntry(repo.path)).toBe('updated');
