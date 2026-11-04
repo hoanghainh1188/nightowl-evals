@@ -27,6 +27,11 @@ function changedLine(rate: Rate): string {
   return `AI edits changed by the developer: ${rate.failures} of ${rate.checked} checked at commit (${percent(rate.rate)})`;
 }
 
+function reviewedLine(byStatus: Readonly<Record<string, number>>): string {
+  const n = (status: string) => byStatus[status] ?? 0;
+  return `Reviewed: ${n('confirmed')} confirmed, ${n('dismissed')} dismissed, ${n('flagged')} still flagged (nightowl review)`;
+}
+
 export function formatText(report: Report): string {
   const since = report.since === null ? '' : ` since ${report.since.slice(0, 10)}`;
   const plural = report.total === 1 ? 'failure' : 'failures';
@@ -40,6 +45,7 @@ export function formatText(report: Report): string {
   return [
     header,
     changedLine(report.changedRate),
+    reviewedLine(report.byStatus),
     '',
     'By category',
     ...rows(Object.entries(report.byCategory)),
@@ -68,6 +74,7 @@ export function formatJson(report: Report): string {
       changed_rate: report.changedRate,
       by_category: report.byCategory,
       by_source: report.bySource,
+      by_status: report.byStatus,
       by_module: report.byModule,
       by_week: report.byWeek.map((w) => ({ week: w.week, failures: w.recorded, checked: w.checked, changed: w.failures, rate: w.rate })),
     },

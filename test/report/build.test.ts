@@ -108,5 +108,19 @@ describe('buildReport', () => {
     expect(report.bySource).toEqual({ 'manual-fix': 2, 'ai-self-fix': 1 });
     expect(buildReport({ ...base, failures: [], checks: [] }).bySource).toEqual({ 'manual-fix': 0, 'ai-self-fix': 0 });
   });
+
+  it('counts by review status, dismissed included, while the total leaves dismissed out', () => {
+    const report = buildReport({
+      ...base,
+      failures: [
+        row('a.ts', null, '2026-11-02', 2, 'confirmed'),
+        row('b.ts', null, '2026-11-02', 1, 'dismissed'),
+        row('c.ts', null, '2026-11-02', 3),
+      ],
+      checks: [],
+    });
+    expect(report.byStatus).toEqual({ confirmed: 2, dismissed: 1, flagged: 3 });
+    expect(report.total).toBe(5);
+  });
 });
 
