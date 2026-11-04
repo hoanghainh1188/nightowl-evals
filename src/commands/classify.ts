@@ -1,0 +1,160 @@
+import { parseArgs } from 'node:util';
+import { errorMessage } from '../cli/errors.js';
+import type { Io } from '../cli/io.js';
+import { parseClaudeOutput } from '../classify/parse.js';
+import { buildPrompt } from '../classify/prompt.js';
+import { type RunClaude, runClaude } from '../classify/run-claude.js';
+import { isOnPath } from '../setup/path.js';
+import type { FailureToClassify } from '../storage/failures.js';
+import { openStore, ProjectNotFoundError, type Store } from '../storage/store.js';
+import type { Command } from './command.js';
+
+export const DEFAULT_LIMIT = 20;
+export const DEFAULT_MODEL = 'haiku';
+const MAX_LIMIT = 1000;
+// Plain model names or ids only: never something claude could read as a flag.
+const MODEL_NAME = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
+const INSTALL_HINT = 'Install Claude Code (https://docs.claude.com/claude-code) and make sure `claude` is on your PATH.';
+
+export interface ClassifyDeps {
+  readonly cwd: () => string;
+  readonly runClaude: RunClaude;
+  readonly isOnPath: (command: string) => boolean;
+  readonly now: () => Date;
+}
+
+const defaultDeps: ClassifyDeps = {
+  cwd: () => process.cwd(),
+  runClaude,
+  isOnPath: (command) => isOnPath(command, process.env.PATH),
+  now: () => new Date(),
+};
+
+interface Options {
+  readonly yes: boolean;
+  readonly redo: boolean;
+  readonly limit: number;
+  readonly model: string;
+}
+
+function parseOptions(args: readonly string[]): Options | string {
+  let values;
+  try {
+    values = parseArgs({
+      args: [...args],
+      options: {
+        yes: { type: 'boolean' },
+        redo: { type: 'boolean' },
+        limit: { type: 'string' },
+        model: { type: 'string' },
+      },
+      strict: true,
+      allowPositionals: false,
+    }).values;
+  } catch (error) {
+    return errorMessage(error);
+  }
+  const limit = values.limit === undefined ? DEFAULT_LIMIT : Number(values.limit);
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIMIT) return `--limit must be a whole number from 1 to ${MAX_LIMIT}`;
+  const model = values.model ?? DEFAULT_MODEL;
+  if (!MODEL_NAME.test(model)) return `invalid --model: ${model}`;
+  return { yes: values.yes === true, redo: values.redo === true, limit, model };
+}
+
+function kilobytes(bytes: number): string {
+  return `${(bytes / 1024).toFixed(1)} KB`;
+}
+
+function dryRun(failures: readonly FailureToClassify[], options: Options, io: Io): number {
+  const prompts = failures.map((failure) => ({ failure, prompt: buildPrompt(failure) }));
+  const lines = prompts.map(({ failure, prompt }) => {
+    const cut = prompt.truncated.length > 0 ? `, truncated: ${prompt.truncated.join(', ')}` : '';
+    return `  #${failure.id} ${failure.filePath} (${kilobytes(prompt.bytes)}${cut})\n`;
+  });
+  const total = prompts.reduce((sum, { prompt }) => sum + prompt.bytes, 0);
+  const rerun = [
+    'nightowl classify --yes',
+    ...(options.redo ? ['--redo'] : []),
+    ...(options.limit === DEFAULT_LIMIT ? [] : [`--limit ${options.limit}`]),
+    ...(options.model === DEFAULT_MODEL ? [] : [`--model ${options.model}`]),
+  ].join(' ');
+  io.stdout(
+    `Would send ${failures.length} ${failures.length === 1 ? 'failure' : 'failures'} (${kilobytes(total)}) ` +
+      `to Claude Code, model ${options.model}:\n${lines.join('')}` +
+      `Nothing was sent. The code above leaves your machine only if you run:\n  ${rerun}\n`,
+  );
+  return 0;
+}
+
+async function classifyAll(store: Store, failures: readonly FailureToClassify[], options: Options, deps: ClassifyDeps, io: Io): Promise<number> {
+  const counts = new Map<string, number>();
+  let failed = 0;
+  for (const failure of failures) {
+    let error: string;
+    try {
+      const parsed = parseClaudeOutput(await deps.runClaude(buildPrompt(failure).text, { model: options.model }));
+      if (parsed.ok) {
+        store.saveClassification(failure.id, {
+          ...parsed.value,
+          classifier: `claude-code:${options.model}`,
+          classifiedAt: deps.now().toISOString(),
+        });
+        counts.set(parsed.value.category, (counts.get(parsed.value.category) ?? 0) + 1);
+        continue;
+      }
+      error = parsed.error;
+    } catch (caught) {
+      error = errorMessage(caught);
+    }
+    failed += 1;
+    io.stderr(`nightowl classify: #${failure.id} ${failure.filePath}: ${error}\n`);
+  }
+
+  const classified = failures.length - failed;
+  const byCategory = [...counts].map(([category, n]) => `  ${category}: ${n}\n`).join('');
+  io.stdout(
+    `Classified ${classified} of ${failures.length} ${failures.length === 1 ? 'failure' : 'failures'}\n${byCategory}` +
+      (failed > 0 ? `  failed: ${failed}\n` : ''),
+  );
+  return failed > 0 ? 1 : 0;
+}
+
+export function createClassifyCommand(deps: ClassifyDeps = defaultDeps): Command {
+  return {
+    name: 'classify',
+    summary: 'Classify failures with Claude Code (dry run unless --yes)',
+    run: async (args, io) => {
+      const options = parseOptions(args);
+      if (typeof options === 'string') {
+        io.stderr(`nightowl classify: ${options}\n`);
+        return 1;
+      }
+      // Checked before opening anything, so a missing claude changes nothing.
+      if (options.yes && !deps.isOnPath('claude')) {
+        io.stderr(`nightowl classify: 'claude' was not found on your PATH.\n  ${INSTALL_HINT}\n`);
+        return 1;
+      }
+
+      let store: Store;
+      try {
+        store = await openStore({ cwd: deps.cwd() });
+      } catch (error) {
+        const message = error instanceof ProjectNotFoundError ? `no git repository found at or above ${error.cwd}` : errorMessage(error);
+        io.stderr(`nightowl classify: ${message}\n`);
+        return 1;
+      }
+      try {
+        const failures = store.listFailuresToClassify(options.limit, options.redo);
+        if (failures.length === 0) {
+          io.stdout('No failures to classify.\n');
+          return 0;
+        }
+        return options.yes ? await classifyAll(store, failures, options, deps, io) : dryRun(failures, options, io);
+      } finally {
+        store.close();
+      }
+    },
+  };
+}
+
+export const classifyCommand = createClassifyCommand();

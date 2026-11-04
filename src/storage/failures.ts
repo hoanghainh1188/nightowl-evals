@@ -103,3 +103,55 @@ export function countFailures(db: DatabaseSync): FailureCounts {
     byStatus: Object.freeze(Object.fromEntries(rows.map((row) => [row.status, row.n]))),
   });
 }
+
+export interface FailureToClassify {
+  readonly id: number;
+  readonly filePath: string;
+  readonly userPrompt: string | null;
+  readonly aiContent: string;
+  readonly finalContent: string;
+}
+
+export interface SavedClassification {
+  readonly category: string;
+  readonly reason: string;
+  readonly confidence: number;
+  readonly classifier: string;
+  readonly classifiedAt: string;
+}
+
+// Oldest first; with `redo`, failures that already have a category are included too.
+export function listFailuresToClassify(db: DatabaseSync, limit: number, redo: boolean): readonly FailureToClassify[] {
+  const rows = db
+    .prepare(
+      `SELECT f.id, f.file_path, f.ai_content, f.final_content, json_extract(p.payload, '$.prompt') AS prompt
+       FROM failures f LEFT JOIN events p ON p.id = f.prompt_event_id
+       WHERE ? OR f.category IS NULL
+       ORDER BY f.id LIMIT ?`,
+    )
+    .all(redo ? 1 : 0, limit) as unknown as Array<{
+    id: number;
+    file_path: string;
+    ai_content: string;
+    final_content: string;
+    prompt: unknown;
+  }>;
+  return Object.freeze(
+    rows.map((row) =>
+      Object.freeze({
+        id: row.id,
+        filePath: row.file_path,
+        userPrompt: typeof row.prompt === 'string' ? row.prompt : null,
+        aiContent: row.ai_content,
+        finalContent: row.final_content,
+      }),
+    ),
+  );
+}
+
+export function saveClassification(db: DatabaseSync, failureId: number, value: SavedClassification): void {
+  db.prepare(
+    `UPDATE failures SET category = ?, category_reason = ?, category_confidence = ?, classifier = ?, classified_at = ?
+     WHERE id = ?`,
+  ).run(value.category, value.reason, value.confidence, value.classifier, value.classifiedAt, failureId);
+}

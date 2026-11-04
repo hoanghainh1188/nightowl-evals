@@ -17,9 +17,13 @@ import {
   attachChecks,
   countFailures,
   type FailureCounts,
+  type FailureToClassify,
   findPromptBefore,
   getEventPayload,
+  listFailuresToClassify,
   listUnattachedChecks,
+  type SavedClassification,
+  saveClassification,
   type UnattachedCheck,
 } from './failures.js';
 import { migrate } from './migrations.js';
@@ -52,6 +56,8 @@ export interface Store {
   readonly findPromptBefore: (editId: number) => number | null;
   readonly attachChecks: (commitSha: string, attachments: readonly Attachment[]) => number;
   readonly countFailures: () => FailureCounts;
+  readonly listFailuresToClassify: (limit: number, redo: boolean) => readonly FailureToClassify[];
+  readonly saveClassification: (failureId: number, value: SavedClassification) => void;
   readonly pragma: (name: string) => unknown;
   readonly close: () => void;
 }
@@ -95,6 +101,8 @@ export async function openStore(options: OpenStoreOptions = {}): Promise<Store> 
     findPromptBefore: (editId: number) => findPromptBefore(db, editId),
     attachChecks: (commitSha: string, attachments: readonly Attachment[]) => attachChecks(db, commitSha, attachments),
     countFailures: () => countFailures(db),
+    listFailuresToClassify: (limit: number, redo: boolean) => listFailuresToClassify(db, limit, redo),
+    saveClassification: (failureId: number, value: SavedClassification) => saveClassification(db, failureId, value),
     pragma: (name: string) => {
       if (!READABLE_PRAGMAS.has(name)) throw new Error(`Unsupported pragma: ${name}`);
       const row = db.prepare(`PRAGMA ${name}`).get() as Record<string, unknown> | undefined;

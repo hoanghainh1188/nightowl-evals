@@ -1,3 +1,4 @@
+import { classifyCommand } from './classify.js';
 import type { Command } from './command.js';
 import { exportCommand } from './export.js';
 import { initCommand } from './init.js';
@@ -15,4 +16,5 @@ export const commands: readonly Command[] = Object.freeze([
   precommitCommand,
   postcommitCommand,
   failuresCommand,
+  classifyCommand,
 ]);

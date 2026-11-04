@@ -6,6 +6,7 @@ import { runGit } from '../git/run-git.js';
 import type { HookPayload } from './payload.js';
 import { projectRelativePath } from './paths.js';
 import { isSensitivePath } from './sensitive.js';
+import { truncateUtf8 } from '../../shared/truncate.js';
 
 export const MAX_PROMPT_BYTES = 64 * 1024;
 export const MAX_SNAPSHOT_BYTES = 512 * 1024;
@@ -14,15 +15,6 @@ const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit']);
 const CHECK_IGNORE_TIMEOUT_MS = 300;
 
 type SnapshotSkip = 'too_large' | 'unreadable' | 'sensitive' | 'ignored';
-
-function truncateUtf8(text: string, maxBytes: number): { text: string; truncated: boolean } {
-  const bytes = Buffer.from(text, 'utf8');
-  if (bytes.length <= maxBytes) return { text, truncated: false };
-  let end = maxBytes;
-  // Step back over UTF-8 continuation bytes so no character is cut in half.
-  while (end > 0 && ((bytes[end] ?? 0) & 0xc0) === 0x80) end -= 1;
-  return { text: bytes.subarray(0, end).toString('utf8'), truncated: true };
-}
 
 async function readSnapshot(path: string): Promise<{ snapshot: string | null; snapshot_skipped: SnapshotSkip | null }> {
   // O_NOFOLLOW: if the file was swapped for a symlink after the path check, refuse it.

@@ -44,6 +44,12 @@ export const migrations: readonly string[] = Object.freeze([
     failure_id  INTEGER REFERENCES failures (id)
   );
   `,
+  `
+  ALTER TABLE failures ADD COLUMN category_reason     TEXT;
+  ALTER TABLE failures ADD COLUMN category_confidence REAL CHECK (category_confidence BETWEEN 0 AND 1);
+  ALTER TABLE failures ADD COLUMN classified_at       TEXT;
+  ALTER TABLE failures ADD COLUMN classifier          TEXT;
+  `,
 ]);
 
 export const CURRENT_SCHEMA_VERSION = migrations.length;

@@ -34,6 +34,29 @@ describe('no-network policy', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('only starts claude from src/classify/', async () => {
+    const files = await sourceFiles(SRC_DIR);
+    const offenders: string[] = [];
+    for (const file of files) {
+      const text = await readFile(file, 'utf8');
+      if (/['"]claude['"]/.test(text) && /\bspawn\(|\bexec(?:File)?(?:Sync)?\(/.test(text) && !file.includes(`${join('src', 'classify')}`)) {
+        offenders.push(file);
+      }
+    }
+    expect(offenders).toEqual([]);
+    const runner = await readFile(join(SRC_DIR, 'classify/run-claude.ts'), 'utf8');
+    expect(runner).toMatch(/spawn\('claude'/);
+  });
+
+  it('never starts claude from a hook command', async () => {
+    const commandFiles = ['log.ts', 'precommit.ts', 'postcommit.ts', 'git-hook-command.ts'].map((f) => join(SRC_DIR, 'commands', f));
+    const hookFiles = [...commandFiles, ...(await sourceFiles(join(SRC_DIR, 'hooks')))];
+    for (const file of hookFiles) {
+      const text = await readFile(file, 'utf8');
+      expect(text, file).not.toMatch(/from\s+['"][^'"]*classify/);
+    }
+  });
+
   it('detects the patterns it is meant to block', () => {
     expect(NETWORK_IMPORT.test("import { request } from 'node:https';")).toBe(true);
     expect(NETWORK_IMPORT.test("import net from 'net';")).toBe(true);
