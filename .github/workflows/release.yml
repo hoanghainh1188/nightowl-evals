@@ -1,7 +1,7 @@
 name: Release
 
 # Pushing a tag v<version> publishes that version to npm and creates its GitHub Release.
-# Bump package.json in a PR first; see "Releasing" in the README.
+# Bump package.json in a PR first, then tag the merged commit on main.
 on:
   push:
     tags: ['v*']
