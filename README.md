@@ -125,7 +125,8 @@ Cost depends on your Claude plan. As a rough guide, one test run measured about 
 | --- | --- |
 | `nightowl failures` | Number of failures recorded so far |
 | `nightowl log`, `precommit`, `postcommit` | Called by the hooks; you do not run them yourself |
-| `nightowl --help`, `--version` | Help and version |
+| `nightowl --help`, `--version` | General help and version |
+| `nightowl <command> --help` | Options of one command; never runs it (same as `nightowl help <command>`) |
 
 ## Data
 

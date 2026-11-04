@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { errorMessage } from '../cli/errors.js';
+import { renderCommandHelp } from '../cli/help.js';
 import type { Io } from '../cli/io.js';
 import { type RunClaude, runClaude } from '../classify/run-claude.js';
 import { type EvalCase, type LoadedCases, loadCases, type SkipReason } from '../eval/cases.js';
@@ -254,6 +255,20 @@ export function createEvalCommand(deps: EvalDeps = defaultDeps): Command {
   return {
     name: 'eval',
     summary: 'Re-run the exported suite with Claude models and compare scores (dry run unless --yes)',
+    help: renderCommandHelp({
+      name: 'eval',
+      usage: '[options]',
+      description: [
+        'Gives each exported case to Claude models and scores how close each answer is to your fix.',
+        'Without --yes it only says what would be sent. With --yes it sends file content to `claude -p`.',
+      ],
+      options: [
+        ['--yes', 'Actually call Claude (default: dry run)'],
+        ['--input <file>', `Suite to run (default: ${DATA_DIR}/${EXPORT_DIR}/${EXPORT_FILE})`],
+        ['--model <name>', `Model to compare; repeatable (default: ${DEFAULT_MODELS.join(', ')})`],
+        [`--limit <1-${MAX_LIMIT}>`, `At most this many cases (default: ${DEFAULT_EVAL_LIMIT})`],
+      ],
+    }),
     run: async (args, io) => {
       const options = parseOptions(args);
       if (typeof options === 'string') {

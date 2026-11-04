@@ -7,6 +7,7 @@ function throwing(name: string, error: unknown): Command {
   return {
     name,
     summary: 'Always throws',
+    help: '',
     run: async () => {
       throw error;
     },

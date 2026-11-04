@@ -60,6 +60,11 @@ describe('real commits → export → nightowl eval', () => {
     expect(spawnSync('git', ['commit', '-q', '-m', 'fix'], { cwd: repo.path, env, stdio: 'ignore' }).status).toBe(0);
     expect(nightowl(['export']).status).toBe(0);
 
+    const help = nightowl(['eval', '--yes', '--help']);
+    expect(help.status).toBe(0);
+    expect(help.stdout).toMatch(/^Usage: nightowl eval/);
+    expect(await claude.calls()).toEqual([]);
+
     const dry = nightowl(['eval']);
     expect(dry.status).toBe(0);
     expect(dry.stdout).toContain('Would run 1 cases × 2 models (haiku, sonnet) = 2 calls');

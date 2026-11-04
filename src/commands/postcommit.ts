@@ -4,7 +4,15 @@ import { createGitHookCommand, type GitHookDeps } from './git-hook-command.js';
 
 export function createPostcommitCommand(deps: GitHookDeps = { cwd: () => process.cwd() }): Command {
   return createGitHookCommand(
-    { name: 'postcommit', summary: 'Record failures from the commit just made (used by the git hook)', run: attachCommit },
+    {
+      name: 'postcommit',
+      summary: 'Record failures from the commit just made (used by the git hook)',
+      description: [
+        'Records a failure for each committed file that differs from the AI version.',
+        'Called by the git post-commit hook; you do not run it yourself. Always exits 0 and prints nothing.',
+      ],
+      run: attachCommit,
+    },
     deps,
   );
 }

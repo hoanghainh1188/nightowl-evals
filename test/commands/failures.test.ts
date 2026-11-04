@@ -37,9 +37,9 @@ describe('nightowl failures', () => {
     }
   }
 
-  async function run(cwd = repo.path) {
+  async function run(cwd = repo.path, args: readonly string[] = []) {
     const fake = createFakeIo();
-    const code = await createFailuresCommand({ cwd: () => cwd }).run([], fake.io);
+    const code = await createFailuresCommand({ cwd: () => cwd }).run(args, fake.io);
     return { code, out: fake.out(), err: fake.err() };
   }
 
@@ -55,6 +55,21 @@ describe('nightowl failures', () => {
   it('lists every status present', async () => {
     await addFailures(['flagged', 'dismissed']);
     expect((await run()).out).toBe('2 failures recorded\n  dismissed: 1\n  flagged: 1\n');
+  });
+
+  it('keeps control characters of a bad argument off the terminal', async () => {
+    const result = await run(repo.path, ['x\u001b[2J']);
+    expect(result.code).toBe(1);
+    expect(result.err).not.toContain('\u001b');
+  });
+
+  it.each([[['all']], [['--json']]])('rejects %j without creating .nightowl/', async (args) => {
+    const result = await run(repo.path, args);
+    expect(result.code).toBe(1);
+    expect(result.out).toBe('');
+    expect(result.err).toContain(args[0] as string);
+    expect(result.err).toContain("Run 'nightowl failures --help'");
+    expect(await readdir(repo.path)).not.toContain('.nightowl');
   });
 
   it('fails outside a git repository without creating files', async () => {

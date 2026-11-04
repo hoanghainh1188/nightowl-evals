@@ -1,6 +1,8 @@
 import { errorMessage } from '../cli/errors.js';
+import { renderCommandHelp } from '../cli/help.js';
 import { openStore, ProjectNotFoundError } from '../storage/store.js';
 import type { Command } from './command.js';
+import { acceptsNoArguments } from './no-arguments.js';
 
 export interface FailuresDeps {
   readonly cwd: () => string;
@@ -10,7 +12,14 @@ export function createFailuresCommand(deps: FailuresDeps = { cwd: () => process.
   return {
     name: 'failures',
     summary: 'Count the failure records collected so far',
-    run: async (_args, io) => {
+    help: renderCommandHelp({
+      name: 'failures',
+      usage: '',
+      description: ['Prints how many failures have been recorded, per status.'],
+      options: [],
+    }),
+    run: async (args, io) => {
+      if (!acceptsNoArguments('failures', args, io)) return 1;
       let counts;
       try {
         const store = await openStore({ cwd: deps.cwd() });

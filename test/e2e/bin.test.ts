@@ -1,10 +1,11 @@
 import { spawn } from 'node:child_process';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import pkg from '../../package.json' with { type: 'json' };
 import { openStore } from '../../src/storage/store.js';
 import { hookFixture } from '../helpers/fixtures.js';
+import { createGitRepo } from '../helpers/git-repo.js';
 import { createFakeRepo, createTempDir, type TempDir, writeFiles } from '../helpers/temp-repo.js';
 
 const ROOT = join(import.meta.dirname, '../..');
@@ -66,6 +67,20 @@ describe('nightowl bin (built)', () => {
 
   it('prints the version', async () => {
     expect(await runBin(['--version'])).toEqual({ code: 0, stdout: `${pkg.version}\n`, stderr: '' });
+  });
+
+  it.each([['init', '--help'], ['init', '-h'], ['help', 'init']])('%s %s explains init without setting anything up', async (...args) => {
+    const repo = await createGitRepo();
+    try {
+      const result = await runBin(args, { cwd: repo.path });
+      expect(result.code).toBe(0);
+      expect(result.stdout).toMatch(/^Usage: nightowl init\n/);
+      expect(result.stderr).toBe('');
+      expect((await readdir(repo.path)).filter((name) => name !== '.git')).toEqual([]);
+      expect((await readdir(join(repo.path, '.git/hooks'))).filter((name) => !name.endsWith('.sample'))).toEqual([]);
+    } finally {
+      await repo.cleanup();
+    }
   });
 
   it('prints help listing all commands', async () => {

@@ -2,6 +2,7 @@ import { open } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { errorMessage } from '../cli/errors.js';
+import { renderCommandHelp } from '../cli/help.js';
 import type { Io } from '../cli/io.js';
 import { CATEGORIES } from '../classify/prompt.js';
 import { EVAL_SCHEMA, evalId, toEvalCase } from '../export/eval-case.js';
@@ -13,7 +14,7 @@ import { isSymlink, writeFileAtomic } from '../setup/fs-utils.js';
 import { parseDateOption } from '../shared/date-option.js';
 import { printable } from '../shared/printable.js';
 import { ensurePrivateDir } from '../shared/private-dir.js';
-import type { Store } from '../storage/store.js';
+import { DATA_DIR, type Store } from '../storage/store.js';
 import type { Command } from './command.js';
 import { openExistingStore } from './existing-store.js';
 
@@ -144,6 +145,20 @@ export function createExportCommand(deps: ExportDeps = { cwd: () => process.cwd(
   return {
     name: 'export',
     summary: 'Export recorded failures as a JSONL test suite',
+    help: renderCommandHelp({
+      name: 'export',
+      usage: '[options]',
+      description: [
+        'Writes one JSON line per failure: prompt, file before, AI version and your version.',
+        'The file contains code from this project; keep it private.',
+      ],
+      options: [
+        ['--out <file>', `Where to write; - for stdout (default: ${DATA_DIR}/${EXPORT_DIR}/${EXPORT_FILE})`],
+        ['--force', 'Overwrite a file that is not a NightOwl export'],
+        ['--since <YYYY-MM-DD>', 'Only failures from this date on'],
+        ['--category <name>', `Only this category; repeatable (${[...CATEGORY_NAMES].join(', ')})`],
+      ],
+    }),
     run: async (args, io) => {
       const options = parseOptions(args);
       if (typeof options === 'string') {
