@@ -1,7 +1,15 @@
-import { chmod, readFile, stat, writeFile } from 'node:fs/promises';
+import { chmod, readdir, readFile, stat, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { addHookLine, GIT_HOOKS, HOOK_LINE, hookLine, installGitHook } from '../../src/setup/git-hook.js';
+import {
+  addHookLine,
+  GIT_HOOKS,
+  HOOK_LINE,
+  hookLine,
+  installGitHook,
+  removeHookLine,
+  uninstallGitHook,
+} from '../../src/setup/git-hook.js';
 import { createGitRepo, git } from '../helpers/git-repo.js';
 import type { TempDir } from '../helpers/temp-repo.js';
 
@@ -106,5 +114,82 @@ describe.each(GIT_HOOKS)('installGitHook($name)', (hook) => {
     if (other === undefined) throw new Error('expected two hooks');
     expect((await installGitHook(repo.path, other)).status).toBe('created');
     expect((await installGitHook(repo.path, hook)).status).toBe('unchanged');
+  });
+});
+
+describe('removeHookLine', () => {
+  it('asks to delete a hook that only holds what NightOwl wrote', () => {
+    expect(removeHookLine(`#!/bin/sh\n${HOOK_LINE}\n`)).toEqual({ status: 'removed' });
+  });
+
+  it('keeps the rest of a shared hook', () => {
+    expect(removeHookLine(`#!/bin/bash\n${HOOK_LINE}\nnpm run lint\n`)).toEqual({
+      status: 'updated',
+      content: '#!/bin/bash\nnpm run lint\n',
+    });
+  });
+
+  it('keeps CRLF line endings of a shared hook', () => {
+    expect(removeHookLine(`#!/bin/sh\r\n${HOOK_LINE}\r\nnpm test\r\n`)).toEqual({
+      status: 'updated',
+      content: '#!/bin/sh\r\nnpm test\r\n',
+    });
+  });
+
+  it('changes nothing in a hook without the NightOwl line', () => {
+    expect(removeHookLine('#!/bin/sh\nnpm test\n')).toEqual({ status: 'unchanged' });
+  });
+});
+
+describe('uninstallGitHook', () => {
+  let repo: TempDir;
+  beforeEach(async () => {
+    repo = await createGitRepo();
+  });
+  afterEach(() => repo.cleanup());
+
+  const [preCommit] = GIT_HOOKS as [(typeof GIT_HOOKS)[number]];
+  const hookPath = () => join(repo.path, '.git/hooks/pre-commit');
+
+  it('deletes a hook NightOwl created', async () => {
+    await installGitHook(repo.path, preCommit);
+    expect(await uninstallGitHook(repo.path, preCommit)).toEqual({ status: 'removed', path: hookPath() });
+    expect(await readdir(join(repo.path, '.git/hooks'))).not.toContain('pre-commit');
+  });
+
+  it('keeps the other lines and the mode of a shared hook', async () => {
+    await writeFile(hookPath(), '#!/bin/sh\nnpm run lint\n', { mode: 0o755 });
+    await installGitHook(repo.path, preCommit);
+    expect(await uninstallGitHook(repo.path, preCommit)).toEqual({ status: 'updated', path: hookPath() });
+    expect(await readFile(hookPath(), 'utf8')).toBe('#!/bin/sh\nnpm run lint\n');
+    expect((await stat(hookPath())).mode & 0o777).toBe(0o755);
+  });
+
+  it('reports a missing hook as unchanged', async () => {
+    expect(await uninstallGitHook(repo.path, preCommit)).toEqual({ status: 'unchanged', path: hookPath() });
+  });
+
+  it('leaves a hook under core.hooksPath that runs NightOwl to the user', async () => {
+    git(repo.path, ['config', 'core.hooksPath', '.husky']);
+    const { mkdir } = await import('node:fs/promises');
+    await mkdir(join(repo.path, '.husky'));
+    await writeFile(join(repo.path, '.husky/pre-commit'), `${HOOK_LINE}\n`);
+    expect(await uninstallGitHook(repo.path, preCommit)).toEqual({
+      status: 'manual',
+      reason: 'core.hooksPath is set to .husky',
+    });
+    expect(await readFile(join(repo.path, '.husky/pre-commit'), 'utf8')).toBe(`${HOOK_LINE}\n`);
+  });
+
+  it('reports a hook under core.hooksPath without NightOwl as unchanged', async () => {
+    git(repo.path, ['config', 'core.hooksPath', '.husky']);
+    expect((await uninstallGitHook(repo.path, preCommit)).status).toBe('unchanged');
+  });
+
+  it('does not write through a symlinked hook', async () => {
+    await writeFile(join(repo.path, 'shared.sh'), `#!/bin/sh\n${HOOK_LINE}\n`);
+    await symlink(join(repo.path, 'shared.sh'), hookPath());
+    expect(await uninstallGitHook(repo.path, preCommit)).toEqual({ status: 'manual', reason: 'pre-commit hook is a symlink' });
+    expect(await readFile(join(repo.path, 'shared.sh'), 'utf8')).toContain(HOOK_LINE);
   });
 });

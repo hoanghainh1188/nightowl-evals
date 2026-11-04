@@ -42,10 +42,12 @@ This adds, without removing anything already there:
 
 | File | What it does |
 | --- | --- |
-| `.claude/settings.json` | Claude Code hooks that run `nightowl log` after each prompt and each file edit |
+| `.claude/settings.local.json` | Claude Code hooks that run `nightowl log` after each prompt and each file edit. This file is yours only |
 | `.git/hooks/pre-commit` | Runs `nightowl precommit`: compares staged files with what the AI last wrote |
 | `.git/hooks/post-commit` | Runs `nightowl postcommit`: records a failure when the committed file differs from the AI version |
-| `.gitignore` | Adds `.nightowl/` |
+| `.gitignore` | Adds `.nightowl/`, and `.claude/settings.local.json` if git does not ignore it yet |
+
+The hooks go in your personal settings, so teammates who share the repository are not affected. If your team agrees to record together, use `nightowl init --shared` to put them in `.claude/settings.json` instead. The Claude Code hook checks that `nightowl` is installed first, so machines without it stay quiet.
 
 Then work as usual: prompt Claude Code, fix what it got wrong, commit. Check what has been collected:
 
@@ -129,6 +131,7 @@ Cost depends on your Claude plan. As a rough guide, one test run measured about 
 | Command | Meaning |
 | --- | --- |
 | `nightowl failures` | Number of failures recorded so far |
+| `nightowl uninstall` | Removes the hooks NightOwl added; keeps `.nightowl/` and `.gitignore` |
 | `nightowl log`, `precommit`, `postcommit` | Called by the hooks; you do not run them yourself |
 | `nightowl --help`, `--version` | General help and version |
 | `nightowl <command> --help` | Options of one command; never runs it (same as `nightowl help <command>`) |
@@ -141,7 +144,7 @@ Cost depends on your Claude plan. As a rough guide, one test run measured about 
 | `.nightowl/export/` | Exported suites |
 | `.nightowl/runs/` | Eval results |
 
-`.nightowl/` is created with mode 0700, and exports and results with mode 0600. To stop recording, remove the NightOwl entries from `.claude/settings.json` and the `nightowl` lines from the two git hooks. To delete everything, remove `.nightowl/`.
+`.nightowl/` is created with mode 0700, and exports and results with mode 0600. To stop recording, run `nightowl uninstall`. To also delete the recorded data, remove `.nightowl/`.
 
 ## Development
 
