@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { truncate, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { loadCases, MAX_EVAL_FILE_BYTES, MAX_PROMPT_BYTES, MAX_SUITE_BYTES, parseCases, SuiteError } from '../../src/eval/cases.js';
+import { buildEvalPrompt } from '../../src/eval/prompt.js';
 import { createTempDir } from '../helpers/temp-repo.js';
 
 const line = (overrides: Record<string, unknown> = {}, input: Record<string, unknown> = {}) =>
@@ -23,6 +24,14 @@ describe('parseCases', () => {
       { id: 'c2', filePath: 'src/a.ts', prompt: 'fix it', fileBefore: null, rejected: 'v1\n', expected: 'v2\n' },
     ]);
     expect(Object.values(loaded.skipped).every((n) => n === 0)).toBe(true);
+  });
+
+  it('reads a case with feedback but never hands the feedback to the model', () => {
+    const loaded = parseCases(`${line({ source: 'ai-self-fix' }, { feedback: 'wrong, 18 counts' })}\n`);
+    expect(loaded.cases).toHaveLength(1);
+    const prompt = buildEvalPrompt(loaded.cases[0] as (typeof loaded.cases)[number]);
+    expect(prompt).toContain('fix it');
+    expect(prompt).not.toContain('18 counts');
   });
 
   it('counts broken lines, unknown schemas and missing fields as invalid', () => {

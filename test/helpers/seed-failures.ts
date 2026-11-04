@@ -13,6 +13,8 @@ export interface SeedFailure {
   readonly prompt?: string | null;
   readonly reason?: string | null;
   readonly confidence?: number | null;
+  readonly source?: 'manual-fix' | 'ai-self-fix';
+  readonly feedback?: string | null;
 }
 
 export interface SeedCheck {
@@ -30,8 +32,8 @@ export async function seed(root: string, failures: readonly SeedFailure[], check
     );
     const failure = db.prepare(
       `INSERT INTO failures (created_at, file_path, ai_event_id, prompt_event_id, ai_content, final_content, commit_sha,
-         category, category_reason, category_confidence, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+         category, category_reason, category_confidence, status, source, feedback_event_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
     );
     const ids: number[] = [];
     for (const f of failures) {
@@ -42,6 +44,10 @@ export async function seed(root: string, failures: readonly SeedFailure[], check
           ? null
           : (event.get(createdAt, 'claude-code', 'prompt', null, JSON.stringify({ prompt: f.prompt })) as { id: number }).id;
       const edit = (event.get(createdAt, 'claude-code', 'edit', filePath, '{}') as { id: number }).id;
+      const feedback =
+        f.feedback === undefined || f.feedback === null
+          ? null
+          : (event.get(createdAt, 'claude-code', 'prompt', null, JSON.stringify({ prompt: f.feedback })) as { id: number }).id;
       const row = failure.get(
         createdAt,
         filePath,
@@ -54,6 +60,8 @@ export async function seed(root: string, failures: readonly SeedFailure[], check
         f.reason ?? null,
         f.confidence ?? null,
         f.status ?? 'flagged',
+        f.source ?? 'manual-fix',
+        feedback,
       ) as { id: number };
       ids.push(row.id);
     }

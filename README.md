@@ -62,13 +62,18 @@ The hooks never block Claude Code or a commit. They always exit 0, print nothing
 2. At `git commit`, the pre-commit hook compares the latest AI snapshot of each staged file with the staged content.
 3. After the commit, the post-commit hook keeps only comparisons that match the committed file. If you changed the AI's lines (not just whitespace), it records a **failure**: the prompt, the AI version, your final version and the commit.
 
+Failures have a **source**:
+
+- `manual-fix`: you edited the AI's code yourself before committing.
+- `ai-self-fix`: you told the AI it was wrong and it redid the edit. NightOwl sees an AI edit, then a prompt from you in the same Claude Code session, then another AI edit of the same file. If the committed file dropped or changed lines of the edit you answered, that edit is the failure, and your prompt is kept as its feedback. When your prompt only made the AI add code (a new request rather than a correction), nothing is recorded.
+
 The content of files that look sensitive (`.env`, keys, credentials) is never stored.
 
 ## Commands
 
 ### `nightowl report`
 
-Failures grouped by type, module and ISO week, plus the share of committed AI edits that you had to change.
+Failures grouped by type, source, module and ISO week, plus the share of committed AI edits that had to change.
 
 | Option | Meaning |
 | --- | --- |
@@ -78,7 +83,7 @@ Failures grouped by type, module and ISO week, plus the share of committed AI ed
 
 ### `nightowl export`
 
-Writes one JSON line per failure (`nightowl.eval/v1`) to `.nightowl/export/evals.jsonl`, readable only by you. Each case holds the prompt, the file before the AI edit, the AI version (`rejected`) and your version (`expected`).
+Writes one JSON line per failure (`nightowl.eval/v1`) to `.nightowl/export/evals.jsonl`, readable only by you. Each case holds the prompt, the file before the AI edit, the AI version (`rejected`), your version (`expected`), the `source`, and for `ai-self-fix` the prompt you used to correct the AI (`input.feedback`). `nightowl eval` never shows that feedback to the model under test.
 
 | Option | Meaning |
 | --- | --- |

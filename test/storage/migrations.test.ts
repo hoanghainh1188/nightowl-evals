@@ -36,7 +36,7 @@ describe('schema v1 → current', () => {
       expect(db.prepare('SELECT file_path, ai_content, prompt_event_id FROM failures').all()).toEqual([
         { file_path: 'a.ts', ai_content: 'x', prompt_event_id: null },
       ]);
-      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(3);
+      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(4);
     } finally {
       db.close();
     }
@@ -102,6 +102,48 @@ describe('schema v2 → v3', () => {
     try {
       expect(() => db.exec(`UPDATE failures SET category_confidence = ${value}`)).toThrow();
       db.exec('UPDATE failures SET category_confidence = 0.5');
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe('migration v3 to v4', () => {
+  let repo: TempDir;
+  let dbFile: string;
+
+  beforeEach(async () => {
+    repo = await createFakeRepo();
+    await mkdir(join(repo.path, '.nightowl'), { mode: 0o700 });
+    dbFile = join(repo.path, '.nightowl', 'nightowl.db');
+    const db = new DatabaseSync(dbFile);
+    for (const sql of migrations.slice(0, 3)) db.exec(sql);
+    db.exec(`INSERT INTO failures (created_at, file_path, ai_content, final_content) VALUES ('t', 'a.ts', 'x', 'y'), ('t', 'b.ts', 'x', 'y')`);
+    db.exec('PRAGMA user_version = 3');
+    db.close();
+  });
+  afterEach(() => repo.cleanup());
+
+  it('marks existing failures as manual fixes', async () => {
+    (await openStore({ cwd: repo.path })).close();
+    const db = new DatabaseSync(dbFile);
+    try {
+      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(4);
+      expect(db.prepare('SELECT source, feedback_event_id FROM failures').all()).toEqual([
+        { source: 'manual-fix', feedback_event_id: null },
+        { source: 'manual-fix', feedback_event_id: null },
+      ]);
+    } finally {
+      db.close();
+    }
+  });
+
+  it('rejects an unknown source', async () => {
+    (await openStore({ cwd: repo.path })).close();
+    const db = new DatabaseSync(dbFile);
+    try {
+      expect(() => db.exec(`UPDATE failures SET source = 'other'`)).toThrow();
+      db.exec(`UPDATE failures SET source = 'ai-self-fix'`);
     } finally {
       db.close();
     }

@@ -127,9 +127,9 @@ describe('nightowl export', () => {
     ]);
     await run();
     const [a, created] = await lines();
-    expect(a?.input).toEqual({ prompt: null, file_before: 'v0\n' });
+    expect(a?.input).toEqual({ prompt: null, file_before: 'v0\n', feedback: null });
     expect(a?.id).toMatch(new RegExp(`^${sha.slice(0, 12)}-\\d+$`));
-    expect(created?.input).toEqual({ prompt: null, file_before: null });
+    expect(created?.input).toEqual({ prompt: null, file_before: null, feedback: null });
   });
 
   it('refuses to write through a symlink', async () => {

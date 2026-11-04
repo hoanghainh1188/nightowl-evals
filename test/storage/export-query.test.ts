@@ -11,7 +11,7 @@ describe('failures to export', () => {
     repo = await createFakeRepo();
     await seed(repo.path, [
       { filePath: 'a.ts', category: 'logic', createdAt: '2026-11-01T00:00:00.000Z', prompt: 'p1', reason: 'r', confidence: 0.5 },
-      { filePath: 'b.ts', category: 'convention', createdAt: '2026-11-03T00:00:00.000Z' },
+      { filePath: 'b.ts', category: 'convention', createdAt: '2026-11-03T00:00:00.000Z', source: 'ai-self-fix', feedback: 'wrong, 18 counts' },
       { filePath: 'c.ts', category: null, createdAt: '2026-11-04T00:00:00.000Z' },
       { filePath: 'd.ts', category: 'logic', status: 'dismissed' },
     ]);
@@ -30,6 +30,15 @@ describe('failures to export', () => {
     expect(all.map((f) => f.filePath)).toEqual(['a.ts', 'b.ts', 'c.ts']);
     expect(all[0]).toMatchObject({ prompt: 'p1', category: 'logic', categoryReason: 'r', categoryConfidence: 0.5, aiContent: 'ai\n' });
     expect(all[1]?.prompt).toBeNull();
+  });
+
+  it('returns the source and the feedback prompt', () => {
+    const all = store.listFailuresToExport({ since: null, categories: null });
+    expect(all.map((f) => [f.source, f.feedback])).toEqual([
+      ['manual-fix', null],
+      ['ai-self-fix', 'wrong, 18 counts'],
+      ['manual-fix', null],
+    ]);
   });
 
   it('filters by date and by categories, including unclassified', () => {

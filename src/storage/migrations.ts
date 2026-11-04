@@ -52,6 +52,12 @@ export const migrations: readonly string[] = Object.freeze([
   ALTER TABLE failures ADD COLUMN classify_attempts   INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE failures ADD COLUMN classify_error      TEXT;
   `,
+  `
+  -- Where a failure was seen: the developer edited the AI code, or asked the AI to redo it.
+  ALTER TABLE failures ADD COLUMN source TEXT NOT NULL DEFAULT 'manual-fix'
+    CHECK (source IN ('manual-fix', 'ai-self-fix'));
+  ALTER TABLE failures ADD COLUMN feedback_event_id INTEGER REFERENCES events (id);
+  `,
 ]);
 
 export const CURRENT_SCHEMA_VERSION = migrations.length;

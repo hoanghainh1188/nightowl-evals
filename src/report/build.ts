@@ -4,6 +4,7 @@ import { moduleOf } from './module.js';
 import { isoWeek } from './week.js';
 
 export const UNCLASSIFIED = 'unclassified';
+export const SOURCES: readonly string[] = Object.freeze(['manual-fix', 'ai-self-fix']);
 
 export interface Rate {
   readonly failures: number;
@@ -21,6 +22,7 @@ export interface Report {
   readonly dismissed: number;
   readonly changedRate: Rate;
   readonly byCategory: Readonly<Record<string, number>>;
+  readonly bySource: Readonly<Record<string, number>>;
   readonly byModule: ReadonlyArray<{ readonly module: string; readonly failures: number }>;
   readonly byWeek: ReadonlyArray<{ readonly week: string } & Rate & { readonly recorded: number }>;
 }
@@ -46,10 +48,12 @@ export function buildReport(input: ReportInput): Report {
   const dismissed = input.failures.filter((row) => row.status === 'dismissed').reduce((sum, row) => sum + row.count, 0);
 
   const byCategory = new Map<string, number>([...Object.keys(CATEGORIES), UNCLASSIFIED].map((name) => [name, 0]));
+  const bySource = new Map<string, number>(SOURCES.map((name) => [name, 0]));
   const byModule = new Map<string, number>();
   const recordedByWeek = new Map<string, number>();
   for (const row of counted) {
     add(byCategory, row.category ?? UNCLASSIFIED, row.count);
+    add(bySource, row.source, row.count);
     add(byModule, moduleOf(row.filePath, input.depth), row.count);
     add(recordedByWeek, isoWeek(row.day), row.count);
   }
@@ -73,6 +77,7 @@ export function buildReport(input: ReportInput): Report {
     dismissed,
     changedRate: rate(sum(failedByWeek), sum(checkedByWeek)),
     byCategory: Object.freeze(Object.fromEntries(byCategory)),
+    bySource: Object.freeze(Object.fromEntries(bySource)),
     byModule: Object.freeze(
       [...byModule]
         .map(([module, failures]) => ({ module, failures }))

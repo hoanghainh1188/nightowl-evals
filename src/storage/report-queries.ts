@@ -4,6 +4,7 @@ export interface FailureCountRow {
   readonly filePath: string;
   readonly category: string | null;
   readonly status: string;
+  readonly source: string;
   // YYYY-MM-DD in UTC.
   readonly day: string;
   readonly count: number;
@@ -15,20 +16,34 @@ export interface CheckCountRow {
   readonly count: number;
 }
 
-// Failure counts grouped by file, category, status and day. Never reads code columns.
+// Failure counts grouped by file, category, status, source and day. Never reads code columns.
 export function countFailuresForReport(db: DatabaseSync, since: string | null): readonly FailureCountRow[] {
   const rows = db
     .prepare(
-      `SELECT file_path, category, status, substr(created_at, 1, 10) AS day, COUNT(*) AS n
+      `SELECT file_path, category, status, source, substr(created_at, 1, 10) AS day, COUNT(*) AS n
        FROM failures WHERE ? IS NULL OR created_at >= ?
-       GROUP BY file_path, category, status, day ORDER BY day, file_path`,
+       GROUP BY file_path, category, status, source, day ORDER BY day, file_path, source`,
     )
     
     // Plain `?` placeholders: numbered ones (?1) fail to bind on Node 22.13's node:sqlite.
-    .all(since, since) as unknown as Array<{ file_path: string; category: string | null; status: string; day: string; n: number }>;
+    .all(since, since) as unknown as Array<{
+      file_path: string;
+      category: string | null;
+      status: string;
+      source: string;
+      day: string;
+      n: number;
+    }>;
   return Object.freeze(
     rows.map((row) =>
-      Object.freeze({ filePath: row.file_path, category: row.category, status: row.status, day: row.day, count: row.n }),
+      Object.freeze({
+        filePath: row.file_path,
+        category: row.category,
+        status: row.status,
+        source: row.source,
+        day: row.day,
+        count: row.n,
+      }),
     ),
   );
 }

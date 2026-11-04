@@ -6,6 +6,7 @@ import {
   getSnapshot,
   insertEvent,
   listEvents,
+  listOpenEdits,
   listUncheckedEdits,
   type NewEvent,
   type PendingEdit,
@@ -21,6 +22,8 @@ import {
   type FailureToClassify,
   type FailureToExport,
   findPromptBefore,
+  findPromptBetween,
+  isFeedbackFor,
   getEventPayload,
   listFailuresToClassify,
   listFailuresToExport,
@@ -54,11 +57,14 @@ export interface Store {
   readonly insertEvent: (event: NewEvent) => StoredEvent;
   readonly listEvents: (filter?: EventFilter) => readonly StoredEvent[];
   readonly listUncheckedEdits: (filePaths: readonly string[]) => readonly PendingEdit[];
+  readonly listOpenEdits: (filePath: string) => readonly PendingEdit[];
   readonly getSnapshot: (editId: number) => string | null;
   readonly recordCommitCheck: (event: NewEvent, editIds: readonly number[]) => StoredEvent;
   readonly listUnattachedChecks: () => readonly UnattachedCheck[];
   readonly getEventPayload: (id: number) => unknown;
   readonly findPromptBefore: (editId: number) => number | null;
+  readonly findPromptBetween: (afterEditId: number, beforeEditId: number) => number | null;
+  readonly isFeedbackFor: (editId: number, feedbackId: number, filePath: string) => boolean;
   readonly attachChecks: (commitSha: string, attachments: readonly Attachment[]) => number;
   readonly countFailures: () => FailureCounts;
   readonly listFailuresToClassify: (limit: number, redo: boolean) => readonly FailureToClassify[];
@@ -132,11 +138,14 @@ function storeApi(db: import('node:sqlite').DatabaseSync, root: string): Store {
     insertEvent: (event: NewEvent) => insertEvent(db, event),
     listEvents: (filter?: EventFilter) => listEvents(db, filter),
     listUncheckedEdits: (filePaths: readonly string[]) => listUncheckedEdits(db, filePaths),
+    listOpenEdits: (filePath: string) => listOpenEdits(db, filePath),
     getSnapshot: (editId: number) => getSnapshot(db, editId),
     recordCommitCheck: (event: NewEvent, editIds: readonly number[]) => recordCommitCheck(db, event, editIds),
     listUnattachedChecks: () => listUnattachedChecks(db),
     getEventPayload: (id: number) => getEventPayload(db, id),
     findPromptBefore: (editId: number) => findPromptBefore(db, editId),
+    findPromptBetween: (afterEditId: number, beforeEditId: number) => findPromptBetween(db, afterEditId, beforeEditId),
+    isFeedbackFor: (editId: number, feedbackId: number, filePath: string) => isFeedbackFor(db, editId, feedbackId, filePath),
     attachChecks: (commitSha: string, attachments: readonly Attachment[]) => attachChecks(db, commitSha, attachments),
     countFailures: () => countFailures(db),
     listFailuresToClassify: (limit: number, redo: boolean) => listFailuresToClassify(db, limit, redo),
