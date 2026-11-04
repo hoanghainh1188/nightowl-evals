@@ -1,3 +1,4 @@
+import { closingTagEscaper } from '../shared/tags.js';
 import { truncateUtf8 } from '../shared/truncate.js';
 import { unifiedDiff } from './diff.js';
 
@@ -27,12 +28,7 @@ export interface BuiltPrompt {
 }
 
 const TAGS = ['file_path', 'developer_prompt', 'diff', 'ai_version', 'developer_version'];
-const CLOSING_TAG = new RegExp(`</(${TAGS.join('|')})>`, 'gi');
-
-// Repository content must not be able to close a tag and pose as NightOwl's own text.
-function neutralise(text: string): string {
-  return text.replace(CLOSING_TAG, '<\\/$1>');
-}
+const neutralise = closingTagEscaper(TAGS);
 
 function part(tag: string, content: string, truncated: string[]): string {
   const cut = truncateUtf8(neutralise(content), MAX_PART_BYTES);

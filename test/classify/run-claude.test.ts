@@ -14,7 +14,7 @@ describe('runClaude', () => {
 
   it('calls claude non-interactively with no tools, the schema and the model, prompt on stdin', async () => {
     fake = await createFakeClaude('{"result":"ok"}');
-    const out = await runClaude('the prompt', { model: 'haiku', env: { ...process.env, PATH: fake.path } });
+    const out = await runClaude('the prompt', { model: 'haiku', schema: CLASSIFICATION_SCHEMA, env: { ...process.env, PATH: fake.path } });
     expect(out).toBe('{"result":"ok"}');
     const [call] = await fake.calls();
     expect(call?.args).toEqual([
@@ -40,9 +40,18 @@ describe('runClaude', () => {
     expect(call?.args.join(' ')).not.toContain('the prompt');
   });
 
+  it('passes the schema it is given', async () => {
+    fake = await createFakeClaude('{}');
+    const schema = { type: 'object', properties: { content: { type: 'string' } } };
+    await runClaude('p', { model: 'sonnet', schema, env: { ...process.env, PATH: fake.path } });
+    const [call] = await fake.calls();
+    expect(call?.args[call.args.indexOf('--json-schema') + 1]).toBe(JSON.stringify(schema));
+    expect(call?.args.at(-1)).toBe('sonnet');
+  });
+
   it('runs in an empty temporary directory that is removed afterwards', async () => {
     fake = await createFakeClaude({ body: 'ls -A; echo "{}"' });
-    const out = await runClaude('p', { model: 'haiku', env: { ...process.env, PATH: fake.path } });
+    const out = await runClaude('p', { model: 'haiku', schema: CLASSIFICATION_SCHEMA, env: { ...process.env, PATH: fake.path } });
     expect(out).toBe('{}\n');
     const [call] = await fake.calls();
     expect(call?.cwd).toMatch(/nightowl-classify-/);
@@ -51,15 +60,24 @@ describe('runClaude', () => {
   });
 
   it('reports a missing claude', async () => {
-    await expect(runClaude('p', { model: 'haiku', env: { PATH: '/nonexistent' } })).rejects.toMatchObject({
+    await expect(runClaude('p', { model: 'haiku', schema: CLASSIFICATION_SCHEMA, env: { PATH: '/nonexistent' } })).rejects.toMatchObject({
       name: 'ClaudeError',
       reason: 'not_found',
     });
   });
 
+  it('stops claude as soon as its output passes 4 MB', async () => {
+    fake = await createFakeClaude({ body: 'head -c 5000000 /dev/zero; sleep 30' });
+    const started = Date.now();
+    await expect(runClaude('p', { model: 'haiku', schema: CLASSIFICATION_SCHEMA, env: { ...process.env, PATH: fake.path } })).rejects.toMatchObject({
+      reason: 'too_large',
+    });
+    expect(Date.now() - started).toBeLessThan(10_000);
+  });
+
   it('reports a failing claude', async () => {
     fake = await createFakeClaude({ body: 'exit 3' });
-    await expect(runClaude('p', { model: 'haiku', env: { ...process.env, PATH: fake.path } })).rejects.toMatchObject({
+    await expect(runClaude('p', { model: 'haiku', schema: CLASSIFICATION_SCHEMA, env: { ...process.env, PATH: fake.path } })).rejects.toMatchObject({
       reason: 'exit',
     });
   });
@@ -67,7 +85,7 @@ describe('runClaude', () => {
   it('kills claude and what it started when it takes too long', async () => {
     fake = await createFakeClaude({ body: `sleep 30 & echo $! > "${'$'}base.child"; wait` });
     const started = Date.now();
-    const error = await runClaude('p', { model: 'haiku', timeoutMs: 1_500, env: { ...process.env, PATH: fake.path } }).catch(
+    const error = await runClaude('p', { model: 'haiku', schema: CLASSIFICATION_SCHEMA, timeoutMs: 1_500, env: { ...process.env, PATH: fake.path } }).catch(
       (e: unknown) => e,
     );
     expect(error).toBeInstanceOf(ClaudeError);

@@ -1,7 +1,7 @@
 import { parseArgs } from 'node:util';
 import { errorMessage } from '../cli/errors.js';
 import type { Io } from '../cli/io.js';
-import { parseClaudeOutput } from '../classify/parse.js';
+import { CLASSIFICATION_SCHEMA, parseClaudeOutput } from '../classify/parse.js';
 import { buildPrompt } from '../classify/prompt.js';
 import { type RunClaude, runClaude } from '../classify/run-claude.js';
 import { isOnPath } from '../setup/path.js';
@@ -15,8 +15,8 @@ export const DEFAULT_MODEL = 'haiku';
 // Each call may take up to two minutes; keep a run bounded.
 const MAX_LIMIT = 100;
 // Plain model names or ids only: never something claude could read as a flag.
-const MODEL_NAME = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
-const INSTALL_HINT = 'Install Claude Code (https://docs.claude.com/claude-code) and make sure `claude` is on your PATH.';
+export const MODEL_NAME = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
+export const INSTALL_HINT = 'Install Claude Code (https://docs.claude.com/claude-code) and make sure `claude` is on your PATH.';
 
 export interface ClassifyDeps {
   readonly cwd: () => string;
@@ -94,7 +94,7 @@ async function classifyAll(store: Store, failures: readonly FailureToClassify[],
   for (const failure of failures) {
     let error: string;
     try {
-      const parsed = parseClaudeOutput(await deps.runClaude(buildPrompt(failure).text, { model: options.model }));
+      const parsed = parseClaudeOutput(await deps.runClaude(buildPrompt(failure).text, { model: options.model, schema: CLASSIFICATION_SCHEMA }));
       if (parsed.ok) {
         store.saveClassification(failure.id, {
           ...parsed.value,
