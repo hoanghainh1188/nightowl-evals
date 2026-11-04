@@ -1,7 +1,8 @@
 import { errorMessage } from '../cli/errors.js';
 import { renderCommandHelp } from '../cli/help.js';
-import { openStore, ProjectNotFoundError } from '../storage/store.js';
+import { printable } from '../shared/printable.js';
 import type { Command } from './command.js';
+import { openExistingStore } from './existing-store.js';
 import { acceptsNoArguments } from './no-arguments.js';
 
 export interface FailuresDeps {
@@ -20,18 +21,20 @@ export function createFailuresCommand(deps: FailuresDeps = { cwd: () => process.
     }),
     run: async (args, io) => {
       if (!acceptsNoArguments('failures', args, io)) return 1;
+      // Read-only: never creates .nightowl/ or upgrades the database.
+      const store = await openExistingStore(deps.cwd());
+      if (typeof store === 'string') {
+        io.stderr(`nightowl failures: ${store}\n`);
+        return 1;
+      }
       let counts;
       try {
-        const store = await openStore({ cwd: deps.cwd() });
-        try {
-          counts = store.countFailures();
-        } finally {
-          store.close();
-        }
+        counts = store.countFailures();
       } catch (error) {
-        const message = error instanceof ProjectNotFoundError ? `no git repository found at or above ${error.cwd}` : errorMessage(error);
-        io.stderr(`nightowl failures: ${message}\n`);
+        io.stderr(`nightowl failures: ${printable(errorMessage(error))}\n`);
         return 1;
+      } finally {
+        store.close();
       }
       const lines = Object.entries(counts.byStatus).map(([status, n]) => `  ${status}: ${n}`);
       io.stdout(`${counts.total} ${counts.total === 1 ? 'failure' : 'failures'} recorded\n${lines.map((l) => `${l}\n`).join('')}`);

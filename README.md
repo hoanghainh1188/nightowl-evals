@@ -112,7 +112,7 @@ Writes one JSON line per failure (`nightowl.eval/v1`) to `.nightowl/export/evals
 
 Asks Claude to sort failures into four categories: `logic`, `convention`, `misread-requirement`, `missing-context`.
 
-Without `--yes` it only says how many failures it would send. With `--yes` it sends the prompt, the AI version and your version of each failure through `claude -p`. Tools, MCP servers and slash commands are all switched off, and the call runs from an empty temporary folder.
+Without `--yes` it only says how many failures it would send. With `--yes` it sends the prompt, the AI version and your version of each failure through `claude -p`. Tools, MCP servers and slash commands are all switched off, and the call runs from an empty temporary folder. Only one `classify --yes` runs at a time in a project (`.nightowl/classify.lock`), so failures are never sent twice.
 
 | Option | Meaning |
 | --- | --- |

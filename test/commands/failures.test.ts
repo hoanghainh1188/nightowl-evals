@@ -44,7 +44,26 @@ describe('nightowl failures', () => {
   }
 
   it('reports zero failures', async () => {
+    await addFailures([]);
     expect(await run()).toEqual({ code: 0, out: '0 failures recorded\n', err: '' });
+  });
+
+  it('needs nightowl init and creates nothing', async () => {
+    const result = await run();
+    expect(result.code).toBe(1);
+    expect(result.err).toContain('nightowl init');
+    expect(await readdir(repo.path)).toEqual(['.git']);
+  });
+
+  it('refuses a database older than this NightOwl without upgrading it', async () => {
+    await addFailures(['flagged']);
+    const { DatabaseSync } = await import('node:sqlite');
+    const db = new DatabaseSync(`${repo.path}/.nightowl/nightowl.db`);
+    db.exec('PRAGMA user_version = 3');
+    db.close();
+    const result = await run();
+    expect(result.code).toBe(1);
+    expect(result.err).toContain('nightowl init');
   });
 
   it('reports the total and the count per status', async () => {
