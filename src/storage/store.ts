@@ -17,10 +17,13 @@ import {
   attachChecks,
   countFailures,
   type FailureCounts,
+  type ExportFilter,
   type FailureToClassify,
+  type FailureToExport,
   findPromptBefore,
   getEventPayload,
   listFailuresToClassify,
+  listFailuresToExport,
   listUnattachedChecks,
   type SavedClassification,
   recordClassifyError,
@@ -28,6 +31,7 @@ import {
   type UnattachedCheck,
 } from './failures.js';
 import { migrate } from './migrations.js';
+import { type CheckCountRow, countChecksForReport, countFailuresForReport, type FailureCountRow } from './report-queries.js';
 import { findProjectRoot } from './project-root.js';
 import { loadSqlite } from './sqlite.js';
 
@@ -60,6 +64,9 @@ export interface Store {
   readonly listFailuresToClassify: (limit: number, redo: boolean) => readonly FailureToClassify[];
   readonly saveClassification: (failureId: number, value: SavedClassification) => void;
   readonly recordClassifyError: (failureId: number, error: string) => void;
+  readonly listFailuresToExport: (filter: ExportFilter) => readonly FailureToExport[];
+  readonly countFailuresForReport: (since: string | null) => readonly FailureCountRow[];
+  readonly countChecksForReport: (since: string | null) => readonly CheckCountRow[];
   // Hooks shorten the lock wait to what is left of their budget before writing.
   readonly setBusyTimeout: (ms: number) => void;
   readonly pragma: (name: string) => unknown;
@@ -108,6 +115,9 @@ export async function openStore(options: OpenStoreOptions = {}): Promise<Store> 
     listFailuresToClassify: (limit: number, redo: boolean) => listFailuresToClassify(db, limit, redo),
     saveClassification: (failureId: number, value: SavedClassification) => saveClassification(db, failureId, value),
     recordClassifyError: (failureId: number, error: string) => recordClassifyError(db, failureId, error),
+    listFailuresToExport: (filter: ExportFilter) => listFailuresToExport(db, filter),
+    countFailuresForReport: (since: string | null) => countFailuresForReport(db, since),
+    countChecksForReport: (since: string | null) => countChecksForReport(db, since),
     setBusyTimeout: (ms: number) => db.exec(`PRAGMA busy_timeout = ${Math.max(1, Math.floor(ms))}`),
     pragma: (name: string) => {
       if (!READABLE_PRAGMAS.has(name)) throw new Error(`Unsupported pragma: ${name}`);

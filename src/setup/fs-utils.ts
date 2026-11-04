@@ -27,10 +27,11 @@ export async function isSymlink(path: string): Promise<boolean> {
 
 // Write next to the target, then rename, so a crash never leaves a half-written file.
 // Refuses a symlinked target: replacing it would silently change a shared file elsewhere.
-export async function writeFileAtomic(path: string, content: string): Promise<void> {
+// `mode` applies to a newly written file (the umask may narrow it further).
+export async function writeFileAtomic(path: string, content: string, mode?: number): Promise<void> {
   if (await isSymlink(path)) throw new SetupError(`${path} is a symlink; edit it by hand`);
   const temp = join(dirname(path), `.${basename(path)}.${randomBytes(6).toString('hex')}.tmp`);
-  await writeFile(temp, content, { flag: 'wx' });
+  await writeFile(temp, content, { flag: 'wx', ...(mode === undefined ? {} : { mode }) });
   try {
     await rename(temp, path);
   } catch (error) {
