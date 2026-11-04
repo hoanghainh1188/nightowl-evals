@@ -67,7 +67,7 @@ The hooks never block Claude Code or a commit. They always exit 0, print nothing
 Failures have a **source**:
 
 - `manual-fix`: you edited the AI's code yourself before committing.
-- `ai-self-fix`: you told the AI it was wrong and it redid the edit. NightOwl sees an AI edit, then a prompt from you in the same Claude Code session, then another AI edit of the same file. If the committed file dropped or changed lines of the edit you answered, that edit is the failure, and your prompt is kept as its feedback. When your prompt only made the AI add code (a new request rather than a correction), nothing is recorded.
+- `ai-self-fix`: you told the AI it was wrong and it redid the edit. NightOwl sees an AI edit, then a prompt from you in the same Claude Code session, then another AI edit of the same file. If the AI then dropped or changed lines of the edit you answered (not just whitespace), that edit is the failure, and your prompt is kept as its feedback. When your prompt only made the AI add code (a new request rather than a correction), nothing is recorded.
 
 The content of files that look sensitive (`.env`, keys, credentials) is never stored.
 
