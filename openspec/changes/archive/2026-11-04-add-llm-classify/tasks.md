@@ -25,4 +25,4 @@
 
 - [x] 5.1 Test e2e với `claude` giả: dựng 2 bản ghi lỗi qua git thật, `nightowl classify` (chạy thử), rồi `--yes`, kiểm tra DB
 - [x] 5.2 Chạy `npm run test:coverage` đạt ≥ 80% và `npm run spec:validate`
-- [ ] 5.3 Thử với `claude` thật trên 1 bản ghi lỗi mẫu không chứa code nhạy cảm; xác nhận định dạng đầu ra khớp design mục 2 (cần người dùng đồng ý vì có gửi dữ liệu)
+- [x] 5.3 Thử với `claude` thật trên 1 bản ghi lỗi mẫu không chứa code nhạy cảm; xác nhận định dạng đầu ra khớp design mục 2 (cần người dùng đồng ý vì có gửi dữ liệu) — đã thử 2026-11-04 với claude 2.1.311, model haiku: các cờ đều được nhận, `structured_output` đúng schema, 7 giây, khoảng 0,006 USD/lần
