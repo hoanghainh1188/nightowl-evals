@@ -1,4 +1,4 @@
-import { errorMessage, HOOK_COMMAND } from './errors.js';
+import { errorMessage, isHookCommand } from './errors.js';
 
 interface Listenable {
   on(event: 'error', listener: (error: Error) => void): unknown;
@@ -14,7 +14,7 @@ export interface GuardTarget {
 // Errors that escape `main()` (closed pipes, stray rejections) end the process
 // cleanly: silent exit 0 for the hook, a one-line message and exit 1 otherwise.
 export function installProcessGuards(argv: readonly string[], target: GuardTarget): void {
-  const isHook = argv[0] === HOOK_COMMAND;
+  const isHook = isHookCommand(argv[0]);
   const ignore = () => {};
   target.stdout.on('error', ignore);
   target.stderr.on('error', ignore);

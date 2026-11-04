@@ -53,6 +53,12 @@ Lưu `staged_content` để change 5 không phải đọc lại git (commit có 
 ### 7. Ngân sách thời gian
 Đặt hạn chót 2 giây từ lúc bắt đầu; mỗi file kiểm tra xong là ghi DB ngay, hết giờ thì dừng. Tiến trình `git` con được gọi với `timeout` của `execFile`. Phần `|| true` trong dòng hook là chốt chặn cuối: ngay cả khi `nightowl` crash, commit vẫn đi tiếp.
 
+### 8. Ghi chú khi cài đặt
+- Chỉ sự kiện `edit` có `snapshot` mới được coi là "chưa kiểm tra"; sự kiện bị bỏ ảnh chụp (file quá lớn, không đọc được) không bao giờ được so.
+- `precommit` được coi là lệnh hook giống `log`: `main()` và `installProcessGuards()` luôn cho nó thoát 0 (`HOOK_COMMANDS` trong `src/cli/errors.ts`).
+- `init` coi lỗi khi cài git hook (ví dụ không có `git`) là bước thủ công: in hướng dẫn, vẫn thoát 0.
+- Test chạy `git` với `GIT_CONFIG_GLOBAL=/dev/null` và `GIT_CONFIG_NOSYSTEM=1` (`test/setup-env.ts`) để cấu hình git của máy dev không ảnh hưởng kết quả. Bản build cho test e2e được tạo một lần trong `globalSetup` vì các file e2e chạy song song.
+
 ## Risks / Trade-offs
 
 - [Commit có cờ bỏ qua hook, hoặc commit qua IDE tắt hook] → Sự kiện `edit` vẫn ở trạng thái chưa kiểm tra; commit sau có file đó sẽ tính. Ghi chú trong README.

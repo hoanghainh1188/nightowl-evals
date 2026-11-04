@@ -45,9 +45,13 @@ describe('installProcessGuards', () => {
     expect(() => stderrEvents.emit('error', epipe)).not.toThrow();
   });
 
-  it.each(['uncaughtException', 'unhandledRejection'])('exits 0 silently on %s for the hook', (event) => {
+  it.each([
+    ['uncaughtException', 'log'],
+    ['unhandledRejection', 'log'],
+    ['uncaughtException', 'precommit'],
+  ])('exits 0 silently on %s for the %s hook', (event, command) => {
     const { target, written, exitCodeOf } = createTarget();
-    installProcessGuards(['log'], target);
+    installProcessGuards([command], target);
     expect(exitCodeOf(event, new Error('boom'))).toBe(0);
     expect(written).toEqual([]);
   });

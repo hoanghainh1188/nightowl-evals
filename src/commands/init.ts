@@ -1,4 +1,6 @@
+import { relative } from 'node:path';
 import { ClaudeSettingsError, ensureClaudeHooks } from '../setup/claude-settings.js';
+import { HOOK_LINE, type InstallResult, installPreCommit } from '../setup/git-hook.js';
 import { ensureGitignoreEntry, type FileChange } from '../setup/gitignore.js';
 import { isOnPath } from '../setup/path.js';
 import { findProjectRoot } from '../storage/project-root.js';
@@ -8,12 +10,22 @@ import type { Command } from './command.js';
 export interface InitDeps {
   readonly cwd: () => string;
   readonly isOnPath: (command: string) => boolean;
+  readonly installPreCommit: (root: string) => Promise<InstallResult>;
 }
 
 const defaultDeps: InitDeps = {
   cwd: () => process.cwd(),
   isOnPath: (command) => isOnPath(command, process.env.PATH),
+  installPreCommit,
 };
+
+async function tryInstallPreCommit(deps: InitDeps, root: string): Promise<InstallResult> {
+  try {
+    return await deps.installPreCommit(root);
+  } catch (error) {
+    return { status: 'manual', reason: error instanceof Error ? error.message : String(error) };
+  }
+}
 
 function describeChange(file: string, change: FileChange, detail: string): string | null {
   return change === 'unchanged' ? null : `  ${change} ${file} (${detail})`;
@@ -41,10 +53,14 @@ export function createInitCommand(deps: InitDeps = defaultDeps): Command {
       }
       const gitignore = await ensureGitignoreEntry(root);
       (await openStore({ cwd: root })).close();
+      const preCommit = await tryInstallPreCommit(deps, root);
 
       const lines = [
         describeChange('.claude/settings.json', hooks.status, `hooks: ${hooks.added.join(', ')}`),
         describeChange('.gitignore', gitignore, 'added .nightowl/'),
+        preCommit.status === 'manual'
+          ? null
+          : describeChange(relative(root, preCommit.path), preCommit.status, 'runs nightowl precommit'),
       ].filter((line): line is string => line !== null);
       io.stdout(
         lines.length === 0
@@ -52,6 +68,12 @@ export function createInitCommand(deps: InitDeps = defaultDeps): Command {
           : `NightOwl is set up in ${root}\n${lines.join('\n')}\n`,
       );
 
+      if (preCommit.status === 'manual') {
+        io.stderr(
+          `nightowl init: git pre-commit hook not installed (${preCommit.reason}).\n` +
+            `  Add this line to your pre-commit hook yourself:\n  ${HOOK_LINE}\n`,
+        );
+      }
       if (!deps.isOnPath('nightowl')) {
         io.stderr(
           "nightowl init: warning: 'nightowl' is not on your PATH, so the hooks cannot run.\n" +

@@ -87,3 +87,23 @@ export function listEvents(db: DatabaseSync, filter: EventFilter = {}): readonly
   const rows = db.prepare(`SELECT * FROM events ${where} ORDER BY id`).all(...params) as unknown as EventRow[];
   return Object.freeze(rows.map(toStoredEvent));
 }
+
+// AI edits with a file snapshot that no commit-check has counted yet, oldest first.
+export function listUncheckedEdits(db: DatabaseSync, filePaths: readonly string[]): readonly StoredEvent[] {
+  if (filePaths.length === 0) return [];
+  const rows = db
+    .prepare(
+      `SELECT e.* FROM events e
+       WHERE e.source = 'claude-code'
+         AND e.kind = 'edit'
+         AND e.file_path IN (SELECT value FROM json_each(?))
+         AND json_extract(e.payload, '$.snapshot') IS NOT NULL
+         AND NOT EXISTS (
+           SELECT 1 FROM events c, json_each(c.payload, '$.ai_event_ids') counted
+           WHERE c.kind = 'commit-check' AND counted.value = e.id
+         )
+       ORDER BY e.id`,
+    )
+    .all(JSON.stringify(filePaths)) as unknown as EventRow[];
+  return Object.freeze(rows.map(toStoredEvent));
+}

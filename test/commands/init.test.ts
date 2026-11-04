@@ -3,9 +3,12 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createInitCommand } from '../../src/commands/init.js';
 import { createFakeIo } from '../helpers/fake-io.js';
-import { createFakeRepo, createTempDir, type TempDir } from '../helpers/temp-repo.js';
+import { createGitRepo, git } from '../helpers/git-repo.js';
+import { createTempDir, type TempDir } from '../helpers/temp-repo.js';
 
-const ON_PATH = { isOnPath: () => true };
+import { installPreCommit } from '../../src/setup/git-hook.js';
+
+const ON_PATH = { isOnPath: () => true, installPreCommit };
 
 async function snapshot(root: string): Promise<Record<string, string>> {
   const result: Record<string, string> = {};
@@ -18,7 +21,7 @@ async function snapshot(root: string): Promise<Record<string, string>> {
 describe('nightowl init', () => {
   let repo: TempDir;
   beforeEach(async () => {
-    repo = await createFakeRepo();
+    repo = await createGitRepo();
   });
   afterEach(() => repo.cleanup());
 
@@ -32,7 +35,31 @@ describe('nightowl init', () => {
     expect(await readdir(join(repo.path, '.nightowl'))).toContain('nightowl.db');
     expect(fake.out()).toContain('.gitignore');
     expect(fake.out()).toContain('.claude/settings.json');
+    expect(fake.out()).toContain('.git/hooks/pre-commit');
+    expect(await readFile(join(repo.path, '.git/hooks/pre-commit'), 'utf8')).toContain('nightowl precommit');
     expect(fake.err()).toBe('');
+  });
+
+  it('explains how to add the hook when core.hooksPath is set, and still succeeds', async () => {
+    git(repo.path, ['config', 'core.hooksPath', '.husky']);
+    const fake = createFakeIo();
+    expect(await createInitCommand({ cwd: () => repo.path, ...ON_PATH }).run([], fake.io)).toBe(0);
+    expect(fake.err()).toContain('core.hooksPath');
+    expect(fake.err()).toContain('nightowl precommit');
+    expect((await readdir(repo.path)).includes('.husky')).toBe(false);
+  });
+
+  it('reports a git failure as a manual step instead of failing', async () => {
+    const fake = createFakeIo();
+    const init = createInitCommand({
+      cwd: () => repo.path,
+      ...ON_PATH,
+      installPreCommit: async () => {
+        throw new Error('git not found');
+      },
+    });
+    expect(await init.run([], fake.io)).toBe(0);
+    expect(fake.err()).toContain('git not found');
   });
 
   it('writes at the repository root when run from a subdirectory', async () => {
@@ -74,11 +101,12 @@ describe('nightowl init', () => {
     expect(code).toBe(1);
     expect(fake.err()).toContain('settings.json');
     expect((await readdir(repo.path)).sort()).toEqual(['.claude', '.git']);
+    expect(await readdir(join(repo.path, '.git/hooks'))).not.toContain('pre-commit');
   });
 
   it('warns when nightowl is not on PATH but still succeeds', async () => {
     const fake = createFakeIo();
-    const code = await createInitCommand({ cwd: () => repo.path, isOnPath: () => false }).run([], fake.io);
+    const code = await createInitCommand({ cwd: () => repo.path, isOnPath: () => false, installPreCommit }).run([], fake.io);
     expect(code).toBe(0);
     expect(fake.err()).toContain('npm i -g @hoanghainh/nightowl-evals');
   });

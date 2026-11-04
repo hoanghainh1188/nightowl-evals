@@ -1,6 +1,13 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { type EventFilter, insertEvent, listEvents, type NewEvent, type StoredEvent } from './events.js';
+import {
+  type EventFilter,
+  insertEvent,
+  listEvents,
+  listUncheckedEdits,
+  type NewEvent,
+  type StoredEvent,
+} from './events.js';
 import { retryWhileBusy } from './busy.js';
 import { migrate } from './migrations.js';
 import { findProjectRoot } from './project-root.js';
@@ -22,6 +29,7 @@ export interface Store {
   readonly root: string;
   readonly insertEvent: (event: NewEvent) => StoredEvent;
   readonly listEvents: (filter?: EventFilter) => readonly StoredEvent[];
+  readonly listUncheckedEdits: (filePaths: readonly string[]) => readonly StoredEvent[];
   readonly pragma: (name: string) => unknown;
   readonly close: () => void;
 }
@@ -52,6 +60,7 @@ export async function openStore(options: { readonly cwd?: string } = {}): Promis
     root,
     insertEvent: (event: NewEvent) => insertEvent(db, event),
     listEvents: (filter?: EventFilter) => listEvents(db, filter),
+    listUncheckedEdits: (filePaths: readonly string[]) => listUncheckedEdits(db, filePaths),
     pragma: (name: string) => {
       const row = db.prepare(`PRAGMA ${name}`).get() as Record<string, unknown> | undefined;
       return row === undefined ? undefined : Object.values(row)[0];

@@ -1,7 +1,6 @@
-import { execFile, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import pkg from '../../package.json' with { type: 'json' };
 import { openStore } from '../../src/storage/store.js';
@@ -10,7 +9,6 @@ import { createFakeRepo, createTempDir, type TempDir, writeFiles } from '../help
 
 const ROOT = join(import.meta.dirname, '../..');
 const BIN = join(ROOT, 'dist/bin.js');
-const execFileAsync = promisify(execFile);
 
 interface Result {
   readonly code: number | null;
@@ -51,8 +49,7 @@ const HOOK_BUDGET_MS = 2_000;
 describe('nightowl bin (built)', () => {
   beforeAll(async () => {
     scratch = await createTempDir();
-    await execFileAsync('npx', ['tsup', '--silent'], { cwd: ROOT });
-  }, 60_000);
+  });
 
   afterAll(() => scratch.cleanup());
 
