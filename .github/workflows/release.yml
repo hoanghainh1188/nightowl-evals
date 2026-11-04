@@ -56,7 +56,8 @@ jobs:
       - name: Pack
         id: pack
         run: |
-          npm pack --json > pack.json
+          # The build step above already made dist/; prepack would print into the JSON.
+          npm pack --json --ignore-scripts > pack.json
           tarball=$(node -p "require('./pack.json')[0].filename")
           node -p "require('./pack.json')[0].files.map((f) => f.path).join('\n')"
           sha256sum "$tarball" > "$tarball.sha256"

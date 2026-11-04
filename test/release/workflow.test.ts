@@ -54,7 +54,8 @@ describe('release workflow', () => {
 
   it('publishes the tarball verify built, running no package code next to the OIDC token', () => {
     const verify = job(text, 'verify');
-    expect(verify).toContain('npm pack --json');
+    // `dist/` is already built: lifecycle output would otherwise end up in the JSON.
+    expect(verify).toContain('npm pack --json --ignore-scripts > pack.json');
     expect(verify).toMatch(/uses: actions\/upload-artifact@/);
     const publish = job(text, 'publish');
     for (const forbidden of ['actions/checkout', 'npm ci', 'npm install', 'npm run']) expect(publish).not.toContain(forbidden);
