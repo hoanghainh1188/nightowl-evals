@@ -120,15 +120,15 @@ describe('schema', () => {
 
   afterEach(() => repo.cleanup());
 
-  it('creates both tables and indexes at version 1', async () => {
+  it('creates all tables and indexes at the current version', async () => {
     (await openStore({ cwd: repo.path })).close();
     const names = rawQuery<{ name: string }>(
       repo.path,
       "SELECT name FROM sqlite_master WHERE type IN ('table', 'index') AND name NOT LIKE 'sqlite_%' ORDER BY name",
     ).map((row) => row.name);
-    expect(names).toEqual(['checked_edits', 'events', 'events_file_time', 'events_session', 'failures']);
-    expect(rawQuery<{ user_version: number }>(repo.path, 'PRAGMA user_version')[0]?.user_version).toBe(1);
-    expect(CURRENT_SCHEMA_VERSION).toBe(1);
+    expect(names).toEqual(['checked_edits', 'checks_attached', 'events', 'events_file_time', 'events_session', 'failures']);
+    expect(rawQuery<{ user_version: number }>(repo.path, 'PRAGMA user_version')[0]?.user_version).toBe(2);
+    expect(CURRENT_SCHEMA_VERSION).toBe(2);
   });
 
   it('leaves data and version untouched when reopened', async () => {
@@ -138,7 +138,7 @@ describe('schema', () => {
     const second = await openStore({ cwd: repo.path });
     expect(second.listEvents()).toHaveLength(1);
     second.close();
-    expect(rawQuery<{ user_version: number }>(repo.path, 'PRAGMA user_version')[0]?.user_version).toBe(1);
+    expect(rawQuery<{ user_version: number }>(repo.path, 'PRAGMA user_version')[0]?.user_version).toBe(2);
   });
 
   it('refuses a database written by a newer NightOwl without changing it', async () => {

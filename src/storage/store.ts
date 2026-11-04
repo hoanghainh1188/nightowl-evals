@@ -12,6 +12,16 @@ import {
   recordCommitCheck,
   type StoredEvent,
 } from './events.js';
+import {
+  type Attachment,
+  attachChecks,
+  countFailures,
+  type FailureCounts,
+  findPromptBefore,
+  getEventPayload,
+  listUnattachedChecks,
+  type UnattachedCheck,
+} from './failures.js';
 import { migrate } from './migrations.js';
 import { findProjectRoot } from './project-root.js';
 import { loadSqlite } from './sqlite.js';
@@ -37,6 +47,11 @@ export interface Store {
   readonly listUncheckedEdits: (filePaths: readonly string[]) => readonly PendingEdit[];
   readonly getSnapshot: (editId: number) => string | null;
   readonly recordCommitCheck: (event: NewEvent, editIds: readonly number[]) => StoredEvent;
+  readonly listUnattachedChecks: () => readonly UnattachedCheck[];
+  readonly getEventPayload: (id: number) => unknown;
+  readonly findPromptBefore: (editId: number) => number | null;
+  readonly attachChecks: (commitSha: string, attachments: readonly Attachment[]) => number;
+  readonly countFailures: () => FailureCounts;
   readonly pragma: (name: string) => unknown;
   readonly close: () => void;
 }
@@ -75,6 +90,11 @@ export async function openStore(options: OpenStoreOptions = {}): Promise<Store> 
     listUncheckedEdits: (filePaths: readonly string[]) => listUncheckedEdits(db, filePaths),
     getSnapshot: (editId: number) => getSnapshot(db, editId),
     recordCommitCheck: (event: NewEvent, editIds: readonly number[]) => recordCommitCheck(db, event, editIds),
+    listUnattachedChecks: () => listUnattachedChecks(db),
+    getEventPayload: (id: number) => getEventPayload(db, id),
+    findPromptBefore: (editId: number) => findPromptBefore(db, editId),
+    attachChecks: (commitSha: string, attachments: readonly Attachment[]) => attachChecks(db, commitSha, attachments),
+    countFailures: () => countFailures(db),
     pragma: (name: string) => {
       if (!READABLE_PRAGMAS.has(name)) throw new Error(`Unsupported pragma: ${name}`);
       const row = db.prepare(`PRAGMA ${name}`).get() as Record<string, unknown> | undefined;

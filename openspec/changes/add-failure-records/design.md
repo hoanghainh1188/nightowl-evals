@@ -27,6 +27,7 @@ Xem proposal.md. Hành vi: `specs/failure-records`, `specs/project-setup`. Dựa
 `git cat-file --batch-check` (một tiến trình, đường dẫn qua stdin) với đầu vào `HEAD:<path>` cho sha blob của từng file trong commit vừa tạo. `commit-check` khớp khi sha này bằng `staged_blob`.
 Với mỗi file chỉ xét `commit-check` chưa xử lý mới nhất. Các `commit-check` chưa xử lý cũ hơn của cùng file được đánh dấu `superseded` (đã có lần kiểm tra mới hơn thay thế), nên không bị xét mãi.
 `commit-check` mới nhất không khớp thì để nguyên chưa xử lý: có thể commit bị huỷ, hoặc dev sẽ commit đúng bản đó ở lần sau.
+`commit-check` không có `staged_blob` (kết quả `skipped`) không bao giờ khớp được, nên được đóng ngay là `not-a-failure`. Bản dev commit quá 512 KB (`staged_content` rỗng) cũng thành `not-a-failure`, vì thiếu nội dung để lưu.
 
 ### 3. Schema v2
 

@@ -33,6 +33,17 @@ export const migrations: readonly string[] = Object.freeze([
     check_id  INTEGER NOT NULL REFERENCES events (id)
   );
   `,
+  `
+  ALTER TABLE failures ADD COLUMN prompt_event_id INTEGER REFERENCES events (id);
+
+  -- Each commit-check is handled by post-commit at most once.
+  CREATE TABLE checks_attached (
+    check_id    INTEGER PRIMARY KEY REFERENCES events (id),
+    outcome     TEXT NOT NULL CHECK (outcome IN ('failure', 'not-a-failure', 'superseded')),
+    commit_sha  TEXT,
+    failure_id  INTEGER REFERENCES failures (id)
+  );
+  `,
 ]);
 
 export const CURRENT_SCHEMA_VERSION = migrations.length;
