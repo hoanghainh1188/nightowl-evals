@@ -17,6 +17,7 @@ Xem proposal.md. Hành vi cần đạt: `specs/local-storage/spec.md`. Ràng bu�
 
 ### 1. `node:sqlite` `DatabaseSync`, import động sau khi chặn cảnh báo
 `src/storage/sqlite.ts` bọc `process.emitWarning` để bỏ đúng cảnh báo có `name === 'ExperimentalWarning'` và nội dung chứa `SQLite`, rồi mới `await import('node:sqlite')`. Bọc trước là bắt buộc vì import tĩnh sẽ được thực thi trước mọi code khác của bundle.
+Build phải giữ tiền tố `node:` (`removeNodeProtocol: false` trong tsup): `node:sqlite` không có tên không tiền tố, bỏ tiền tố thì bundle không chạy được.
 *Phương án khác:* shebang `#!/usr/bin/env -S node --no-warnings`: tắt mọi cảnh báo của mọi thư viện, và `env -S` không có trên mọi hệ thống; `better-sqlite3`: là native addon, cài chậm, trái quyết định trong doc.
 
 ### 2. Tìm gốc dự án bằng cách đi ngược tìm `.git`
@@ -57,6 +58,7 @@ Mảng `migrations: readonly string[]`; phần tử thứ *i* đưa schema từ 
 
 ### 5. Đồng thời: WAL + `busy_timeout`
 Khi mở: `journal_mode = WAL`, `busy_timeout = 2000`, `synchronous = NORMAL`, `foreign_keys = ON`. WAL cho phép đọc trong lúc ghi; `busy_timeout` cho tiến trình thứ hai chờ thay vì lỗi ngay. 2 giây khớp với ngân sách thời gian của hook.
+Khi hai tiến trình cùng khởi tạo một database mới, lệnh chuyển sang WAL có thể trả `SQLITE_BUSY` ngay mà không chờ `busy_timeout` (đã tái hiện khi test). Vì vậy bước WAL + migration được bọc trong `retryWhileBusy` (thử lại mỗi 25 ms, tối đa 2 giây).
 
 ### 6. API
 
