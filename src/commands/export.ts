@@ -1,4 +1,4 @@
-import { lstat, mkdir, open } from 'node:fs/promises';
+import { open } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { errorMessage } from '../cli/errors.js';
@@ -12,7 +12,8 @@ import { UNCLASSIFIED } from '../report/build.js';
 import { isSymlink, writeFileAtomic } from '../setup/fs-utils.js';
 import { parseDateOption } from '../shared/date-option.js';
 import { printable } from '../shared/printable.js';
-import { DATA_DIR, type Store } from '../storage/store.js';
+import { ensurePrivateDir } from '../shared/private-dir.js';
+import type { Store } from '../storage/store.js';
 import type { Command } from './command.js';
 import { openExistingStore } from './existing-store.js';
 
@@ -108,12 +109,7 @@ async function isGitIgnored(root: string, path: string): Promise<boolean> {
 
 // The default folder sits inside .nightowl/ (git-ignored) and is private to the user.
 async function defaultTarget(root: string): Promise<string> {
-  const dir = join(root, DATA_DIR, EXPORT_DIR);
-  await mkdir(dir, { mode: 0o700 }).catch((error: NodeJS.ErrnoException) => {
-    if (error.code !== 'EEXIST') throw error;
-  });
-  if ((await lstat(dir)).isSymbolicLink()) throw new Error(`${dir} is a symlink`);
-  return join(dir, EXPORT_FILE);
+  return join(await ensurePrivateDir(root, EXPORT_DIR), EXPORT_FILE);
 }
 
 async function write(built: Built, options: Options, root: string, cwd: string, io: Io): Promise<void> {

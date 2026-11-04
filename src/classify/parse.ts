@@ -1,3 +1,4 @@
+import { readClaudeAnswer } from '../shared/claude-answer.js';
 import { CATEGORIES, type Category } from './prompt.js';
 
 export const MAX_REASON_CHARS = 300;
@@ -21,35 +22,11 @@ export const CLASSIFICATION_SCHEMA = Object.freeze({
   },
 });
 
-function parseJson(text: string): unknown {
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    return undefined;
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-// The answer is in `structured_output` when --json-schema is honoured, else maybe as JSON text in `result`.
-function findAnswer(envelope: Record<string, unknown>): unknown {
-  if (isRecord(envelope.structured_output)) return envelope.structured_output;
-  if (typeof envelope.result !== 'string') return undefined;
-  const fenced = /^\s*```(?:json)?\s*([\s\S]*?)\s*```\s*$/.exec(envelope.result);
-  return parseJson(fenced ? (fenced[1] as string) : envelope.result);
-}
-
 // Never trusts the LLM: anything off-schema is rejected, nothing is coerced.
 export function parseClaudeOutput(stdout: string): ParseResult {
-  const envelope = parseJson(stdout);
-  if (!isRecord(envelope)) return { ok: false, error: 'claude output is not a JSON object' };
-  if (envelope.is_error === true) return { ok: false, error: 'claude reported an error' };
-  const answer = findAnswer(envelope);
-  if (!isRecord(answer)) return { ok: false, error: 'no classification in claude output' };
-
-  const { category, reason, confidence } = answer;
+  const read = readClaudeAnswer(stdout, 'classification');
+  if (!read.ok) return read;
+  const { category, reason, confidence } = read.answer;
   if (typeof category !== 'string' || !Object.hasOwn(CATEGORIES, category)) return { ok: false, error: 'unknown category' };
   if (typeof reason !== 'string' || reason.trim() === '') return { ok: false, error: 'missing reason' };
   if (typeof confidence !== 'number' || !Number.isFinite(confidence) || confidence < 0 || confidence > 1) {

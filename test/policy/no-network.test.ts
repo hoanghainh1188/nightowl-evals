@@ -53,7 +53,7 @@ describe('no-network policy', () => {
     const hookFiles = [...commandFiles, ...(await sourceFiles(join(SRC_DIR, 'hooks')))];
     for (const file of hookFiles) {
       const text = await readFile(file, 'utf8');
-      expect(text, file).not.toMatch(/from\s+['"][^'"]*classify/);
+      expect(text, file).not.toMatch(/from\s+['"][^'"]*\/(?:classify|eval)\//);
     }
   });
 
