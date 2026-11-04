@@ -1,0 +1,153 @@
+name: Release
+
+# Pushing a tag v<version> publishes that version to npm and creates its GitHub Release.
+# Bump package.json in a PR first; see "Releasing" in the README.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+# Each tag runs on its own, and a release is never cancelled halfway through.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Checks and packs the release. No OIDC token and no write access here, so nothing that runs
+  # during install, test or build can publish anything.
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      name: ${{ steps.pack.outputs.name }}
+      version: ${{ steps.tag.outputs.version }}
+      dist_tag: ${{ steps.tag.outputs.dist_tag }}
+      prerelease: ${{ steps.tag.outputs.prerelease }}
+      tarball: ${{ steps.pack.outputs.tarball }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Tag matches package.json
+        id: tag
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node scripts/check-release-tag.ts
+      - name: Tagged commit is on main
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::The tagged commit is not on main. Tag the commit after its PR is merged."
+            exit 1
+          fi
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test:coverage
+      - run: npm run build
+      - run: npm run spec:validate
+      - name: Pack
+        id: pack
+        run: |
+          npm pack --json > pack.json
+          tarball=$(node -p "require('./pack.json')[0].filename")
+          node -p "require('./pack.json')[0].files.map((f) => f.path).join('\n')"
+          sha256sum "$tarball" > "$tarball.sha256"
+          {
+            echo "tarball=$tarball"
+            echo "name=$(node -p "require('./package.json').name")"
+          } >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: package
+          path: |
+            ${{ steps.pack.outputs.tarball }}
+            ${{ steps.pack.outputs.tarball }}.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  # Publishes exactly the tarball verify built. No checkout, no install, no build: no package code
+  # runs next to the OIDC token.
+  publish:
+    name: publish
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Configured as the trusted publisher on npmjs.com; add yourself as a required reviewer
+    # in the repository settings to approve every release before it is published.
+    environment: npm
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          # Pinned: its bundled npm supports trusted publishing, so nothing is downloaded here.
+          node-version: '24.22.2'
+          registry-url: https://registry.npmjs.org
+      - name: npm supports trusted publishing
+        run: |
+          version=$(npm --version)
+          if ! printf '%s\n%s\n' 11.5.1 "$version" | sort --version-sort --check=quiet; then
+            echo "::error::npm $version is older than 11.5.1, which trusted publishing needs"
+            exit 1
+          fi
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: package
+      - name: Tarball is the one verify built
+        env:
+          TARBALL: ${{ needs.verify.outputs.tarball }}
+        run: sha256sum --check "$TARBALL.sha256"
+      - name: Publish to npm
+        env:
+          NAME: ${{ needs.verify.outputs.name }}
+          VERSION: ${{ needs.verify.outputs.version }}
+          DIST_TAG: ${{ needs.verify.outputs.dist_tag }}
+          TARBALL: ${{ needs.verify.outputs.tarball }}
+        run: |
+          # The registry-url .npmrc holds a placeholder token; reading a public package needs none.
+          if existing=$(NODE_AUTH_TOKEN='' npm view "$NAME@$VERSION" version 2>&1); then
+            if [ -n "$existing" ]; then
+              echo "$NAME@$VERSION is already on npm; not publishing it again."
+              exit 0
+            fi
+          elif ! grep -q E404 <<< "$existing"; then
+            echo "::error::Could not check whether $NAME@$VERSION is on npm."
+            echo "$existing"
+            exit 1
+          fi
+          npm publish "$TARBALL" --access public --tag "$DIST_TAG" --ignore-scripts
+
+  release:
+    name: release
+    needs: [verify, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ needs.verify.outputs.prerelease }}
+        run: |
+          if found=$(gh release view "$TAG" 2>&1); then
+            echo "Release $TAG already exists."
+            exit 0
+          elif ! grep -q "release not found" <<< "$found"; then
+            echo "::error::Could not check whether release $TAG exists."
+            echo "$found"
+            exit 1
+          fi
+          flags=(--verify-tag --generate-notes)
+          if [ "$PRERELEASE" = true ]; then flags+=(--prerelease); fi
+          gh release create "$TAG" "${flags[@]}"
