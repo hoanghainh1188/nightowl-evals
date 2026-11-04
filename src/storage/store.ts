@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { retryWhileBusy } from './busy.js';
-import { ensureDataDir } from './data-dir.js';
+import { DATA_DIR, ensureDataDir } from './data-dir.js';
 import {
   type EventFilter,
   getSnapshot,
@@ -17,17 +17,21 @@ import {
   attachChecks,
   countFailures,
   type FailureCounts,
+  type ExportFilter,
   type FailureToClassify,
+  type FailureToExport,
   findPromptBefore,
   getEventPayload,
   listFailuresToClassify,
+  listFailuresToExport,
   listUnattachedChecks,
   type SavedClassification,
   recordClassifyError,
   saveClassification,
   type UnattachedCheck,
 } from './failures.js';
-import { migrate } from './migrations.js';
+import { CURRENT_SCHEMA_VERSION, migrate, SchemaTooNewError } from './migrations.js';
+import { type CheckCountRow, countChecksForReport, countFailuresForReport, type FailureCountRow } from './report-queries.js';
 import { findProjectRoot } from './project-root.js';
 import { loadSqlite } from './sqlite.js';
 
@@ -60,6 +64,9 @@ export interface Store {
   readonly listFailuresToClassify: (limit: number, redo: boolean) => readonly FailureToClassify[];
   readonly saveClassification: (failureId: number, value: SavedClassification) => void;
   readonly recordClassifyError: (failureId: number, error: string) => void;
+  readonly listFailuresToExport: (filter: ExportFilter) => readonly FailureToExport[];
+  readonly countFailuresForReport: (since: string | null) => readonly FailureCountRow[];
+  readonly countChecksForReport: (since: string | null) => readonly CheckCountRow[];
   // Hooks shorten the lock wait to what is left of their budget before writing.
   readonly setBusyTimeout: (ms: number) => void;
   readonly pragma: (name: string) => unknown;
@@ -70,6 +77,29 @@ export interface OpenStoreOptions {
   readonly cwd?: string;
   // Upper bound on waiting for other writers; hooks pass what is left of their budget.
   readonly timeoutMs?: number;
+  // Opens an existing, up-to-date database without creating, migrating or writing anything.
+  readonly readOnly?: boolean;
+}
+
+export class SchemaOutdatedError extends Error {
+  constructor(readonly found: number) {
+    super(`NightOwl database schema v${found} is older than v${CURRENT_SCHEMA_VERSION}. Run 'nightowl init' to upgrade it.`);
+    this.name = 'SchemaOutdatedError';
+  }
+}
+
+function openReadOnly(DatabaseSync: typeof import('node:sqlite').DatabaseSync, path: string, waitMs: number) {
+  const db = new DatabaseSync(path, { readOnly: true });
+  try {
+    db.exec(`PRAGMA busy_timeout = ${waitMs}`);
+    const version = (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
+    if (version > CURRENT_SCHEMA_VERSION) throw new SchemaTooNewError(version);
+    if (version < CURRENT_SCHEMA_VERSION) throw new SchemaOutdatedError(version);
+    return db;
+  } catch (error) {
+    db.close();
+    throw error;
+  }
 }
 
 export async function openStore(options: OpenStoreOptions = {}): Promise<Store> {
@@ -79,6 +109,7 @@ export async function openStore(options: OpenStoreOptions = {}): Promise<Store> 
   if (root === null) throw new ProjectNotFoundError(cwd);
 
   const { DatabaseSync } = await loadSqlite();
+  if (options.readOnly) return storeApi(openReadOnly(DatabaseSync, join(root, DATA_DIR, DB_FILE), waitMs), root);
   const db = new DatabaseSync(join(ensureDataDir(root), DB_FILE));
   try {
     db.exec(`PRAGMA busy_timeout = ${waitMs}`);
@@ -92,7 +123,10 @@ export async function openStore(options: OpenStoreOptions = {}): Promise<Store> 
     db.close();
     throw error;
   }
+  return storeApi(db, root);
+}
 
+function storeApi(db: import('node:sqlite').DatabaseSync, root: string): Store {
   return Object.freeze({
     root,
     insertEvent: (event: NewEvent) => insertEvent(db, event),
@@ -108,6 +142,9 @@ export async function openStore(options: OpenStoreOptions = {}): Promise<Store> 
     listFailuresToClassify: (limit: number, redo: boolean) => listFailuresToClassify(db, limit, redo),
     saveClassification: (failureId: number, value: SavedClassification) => saveClassification(db, failureId, value),
     recordClassifyError: (failureId: number, error: string) => recordClassifyError(db, failureId, error),
+    listFailuresToExport: (filter: ExportFilter) => listFailuresToExport(db, filter),
+    countFailuresForReport: (since: string | null) => countFailuresForReport(db, since),
+    countChecksForReport: (since: string | null) => countChecksForReport(db, since),
     setBusyTimeout: (ms: number) => db.exec(`PRAGMA busy_timeout = ${Math.max(1, Math.floor(ms))}`),
     pragma: (name: string) => {
       if (!READABLE_PRAGMAS.has(name)) throw new Error(`Unsupported pragma: ${name}`);

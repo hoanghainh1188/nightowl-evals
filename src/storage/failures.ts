@@ -174,3 +174,65 @@ export function recordClassifyError(db: DatabaseSync, failureId: number, error: 
     failureId,
   );
 }
+
+export interface ExportFilter {
+  readonly since: string | null;
+  // null = every category; 'unclassified' selects failures without one.
+  readonly categories: readonly string[] | null;
+}
+
+export interface FailureToExport {
+  readonly id: number;
+  readonly createdAt: string;
+  readonly filePath: string;
+  readonly commitSha: string | null;
+  readonly prompt: string | null;
+  readonly aiContent: string;
+  readonly finalContent: string;
+  readonly category: string | null;
+  readonly categoryReason: string | null;
+  readonly categoryConfidence: number | null;
+}
+
+// Failures not dismissed, oldest first, with their prompt text.
+export function listFailuresToExport(db: DatabaseSync, filter: ExportFilter): readonly FailureToExport[] {
+  const categories = filter.categories === null ? null : JSON.stringify(filter.categories);
+  const rows = db
+    .prepare(
+      `SELECT f.id, f.created_at, f.file_path, f.commit_sha, json_extract(p.payload, '$.prompt') AS prompt,
+              f.ai_content, f.final_content, f.category, f.category_reason, f.category_confidence
+       FROM failures f LEFT JOIN events p ON p.id = f.prompt_event_id
+       WHERE f.status != 'dismissed'
+         AND (? IS NULL OR f.created_at >= ?)
+         AND (? IS NULL OR COALESCE(f.category, 'unclassified') IN (SELECT value FROM json_each(?)))
+       ORDER BY f.id`,
+    )
+    .all(filter.since, filter.since, categories, categories) as unknown as Array<{
+    id: number;
+    created_at: string;
+    file_path: string;
+    commit_sha: string | null;
+    prompt: unknown;
+    ai_content: string;
+    final_content: string;
+    category: string | null;
+    category_reason: string | null;
+    category_confidence: number | null;
+  }>;
+  return Object.freeze(
+    rows.map((row) =>
+      Object.freeze({
+        id: row.id,
+        createdAt: row.created_at,
+        filePath: row.file_path,
+        commitSha: row.commit_sha,
+        prompt: typeof row.prompt === 'string' ? row.prompt : null,
+        aiContent: row.ai_content,
+        finalContent: row.final_content,
+        category: row.category,
+        categoryReason: row.category_reason,
+        categoryConfidence: row.category_confidence,
+      }),
+    ),
+  );
+}
