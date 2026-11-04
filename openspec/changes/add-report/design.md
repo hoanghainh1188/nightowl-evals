@@ -19,7 +19,7 @@ Xem proposal.md. Hành vi: `specs/failure-report`. Dựa trên:
 ## Decisions
 
 ### 1. Tổng hợp trong SQL, định dạng trong TypeScript
-Ba truy vấn `GROUP BY` (theo loại, theo `file_path`, theo ngày) đọc bảng `failures`, không đọc cột nội dung (`ai_content`, `final_content`). Module và tuần ISO được tính trong TypeScript từ kết quả gộp theo `file_path` và theo ngày, vì SQLite không có hàm tuần ISO và cách tách thư mục theo độ sâu viết bằng SQL khó đọc. Số dòng trả về tối đa bằng số file và số ngày có lỗi, nên vẫn nhỏ.
+Một truy vấn `GROUP BY file_path, category, status, ngày` đọc bảng `failures` và một truy vấn `GROUP BY ngày, outcome` đọc `checks_attached`; không đọc cột nội dung (`ai_content`, `final_content`). Module và tuần ISO được tính trong TypeScript từ kết quả gộp theo `file_path` và theo ngày, vì SQLite không có hàm tuần ISO và cách tách thư mục theo độ sâu viết bằng SQL khó đọc. Số dòng trả về tối đa bằng số file và số ngày có lỗi, nên vẫn nhỏ.
 
 Hàm thuần `buildReport(rows, options) → Report` tách khỏi phần in, để test không cần database.
 
