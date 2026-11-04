@@ -41,7 +41,11 @@ When Claude Code writes buggy code and you fix it—either by hand before commit
 
 ## Install
 
-From source (not yet published to npm):
+```bash
+npm i -g @hoanghainh/nightowl-evals
+```
+
+From source:
 
 ```bash
 git clone https://github.com/hoanghainh1188/nightowl-evals.git
