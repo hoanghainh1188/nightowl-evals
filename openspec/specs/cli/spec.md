@@ -24,7 +24,7 @@ Package `@hoanghainh/nightowl-evals` SHALL cung cấp một file thực thi tên
 
 #### Scenario: Cờ --help
 - **WHEN** người dùng chạy `nightowl --help`
-- **THEN** stdout chứa `init`, `log`, `report`, `export`, `doctor` và `nightowl <command> --help`, mã thoát là 0
+- **THEN** stdout chứa `init`, `log`, `report`, `export`, `doctor`, `prune` và `nightowl <command> --help`, mã thoát là 0
 
 #### Scenario: Không có tham số
 - **WHEN** người dùng chạy `nightowl` không kèm tham số
