@@ -68,17 +68,20 @@ describe('nightowl classify', () => {
 
   function deps(responses: ReadonlyArray<string | Error>, overrides: Partial<ClassifyDeps> = {}): ClassifyDeps {
     let call = 0;
+    const runner = async (prompt: string, options: { model: string }) => {
+      prompts.push(prompt);
+      models.push(options.model);
+      const response = responses[call++ % responses.length] as string | Error;
+      if (response instanceof Error) throw response;
+      return response;
+    };
     return {
       cwd: () => repo.path,
       isOnPath: () => true,
+      env: () => ({}),
       now: () => new Date('2026-11-04T10:00:00.000Z'),
-      runClaude: async (prompt, options) => {
-        prompts.push(prompt);
-        models.push(options.model);
-        const response = responses[call++ % responses.length] as string | Error;
-        if (response instanceof Error) throw response;
-        return response;
-      },
+      runClaude: async (prompt, options) => runner(prompt, options),
+      runApi: async (prompt, options) => runner(prompt, options),
       ...overrides,
     };
   }
@@ -252,6 +255,7 @@ describe('nightowl classify', () => {
     [['--limit', '101']],
     [['--model', '--dangerous']],
     [['--model=-x']],
+    [['--transport', 'foo']],
     [['--unknown']],
     [['extra']],
   ])('rejects bad options %j', async (args) => {
@@ -259,6 +263,62 @@ describe('nightowl classify', () => {
     expect(result.code).toBe(1);
     expect(result.err).toMatch(/^nightowl classify: /);
     expect(prompts).toEqual([]);
+  });
+
+  describe('transport api', () => {
+    it('defaults to cli and rejects unknown transport', async () => {
+      await addFailures(1);
+      const dry = await run([], deps([answer('logic')]));
+      expect(dry.out).toContain('to Claude Code, model haiku');
+      expect(dry.out).not.toContain('--transport');
+      expect((await run(['--transport', 'smtp'], deps([answer('logic')]))).err).toContain('--transport must be cli or api');
+    });
+
+    it('dry-run mentions Anthropic host and does not call the API', async () => {
+      await addFailures(1);
+      const result = await run(['--transport', 'api', '--model', 'haiku'], deps([answer('logic')]));
+      expect(result.code).toBe(0);
+      expect(result.out).toContain('Anthropic API (api.anthropic.com)');
+      expect(result.out).toContain('claude-haiku-4-5-20251001');
+      expect(result.out).toContain('nightowl classify --yes --transport api');
+      expect(result.out).toContain('ANTHROPIC_API_KEY is not set');
+      expect(prompts).toEqual([]);
+    });
+
+    it('requires ANTHROPIC_API_KEY before calling the API', async () => {
+      await addFailures(1);
+      const before = rows();
+      const result = await run(['--yes', '--transport', 'api'], deps([answer('logic')]));
+      expect(result.code).toBe(1);
+      expect(result.err).toContain('ANTHROPIC_API_KEY is not set');
+      expect(prompts).toEqual([]);
+      expect(rows()).toEqual(before);
+    });
+
+    it('classifies via runApi and records anthropic-api classifier with resolved model id', async () => {
+      await addFailures(1);
+      const result = await run(
+        ['--yes', '--transport', 'api', '--model', 'haiku'],
+        deps([answer('logic', 0.7)], { env: () => ({ ANTHROPIC_API_KEY: 'sk-test' }) }),
+      );
+      expect(result.code).toBe(0);
+      expect(models).toEqual(['haiku']);
+      expect(rows()[0]).toMatchObject({
+        category: 'logic',
+        classifier: 'anthropic-api:claude-haiku-4-5-20251001',
+        category_confidence: 0.7,
+      });
+    });
+
+    it('does not require claude on PATH when using the API', async () => {
+      await addFailures(1);
+      const result = await run(
+        ['--yes', '--transport', 'api'],
+        deps([answer('logic')], { isOnPath: () => false, env: () => ({ ANTHROPIC_API_KEY: 'sk-test' }) }),
+      );
+      expect(result.code).toBe(0);
+      expect(rows()[0]?.classifier).toBe('anthropic-api:claude-haiku-4-5-20251001');
+    });
   });
 
   it('fails outside a git repository', async () => {

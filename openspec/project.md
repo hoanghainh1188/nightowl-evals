@@ -86,7 +86,7 @@ Chi tiết xem [`docs/production-readiness.md`](../docs/production-readiness.md)
 | 14 | `add-hook-manager-support` | Hỗ trợ cấu hình tích hợp Husky và Lefthook | Hoàn thành |
 | 15 | `add-report-json` | Thêm cờ `--json` cho `nightowl report` | Hoàn thành |
 | 16 | `add-eval-test-runner` | Hỗ trợ chạy kiểm thử tự động (unit tests) để verify eval | Hoàn thành |
-| 17 | `add-direct-api-classify` | Hỗ trợ gọi phân loại trực tiếp qua LLM API key | P2 |
+| 17 | `add-direct-api-classify` | Hỗ trợ gọi phân loại trực tiếp qua LLM API key | Hoàn thành |
 
 ### Định hướng mở rộng tương lai (v0.3.0+ Ideation)
 

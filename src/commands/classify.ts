@@ -5,6 +5,13 @@ import type { Io } from '../cli/io.js';
 import { CLASSIFICATION_SCHEMA, parseClaudeOutput } from '../classify/parse.js';
 import { buildPrompt } from '../classify/prompt.js';
 import { acquireClassifyLock, ClassifyLockError } from '../classify/lock.js';
+import {
+  ANTHROPIC_API_HOST,
+  ANTHROPIC_API_KEY_ENV,
+  type RunAnthropicApi,
+  resolveApiModel,
+  runAnthropicApi,
+} from '../classify/run-api.js';
 import { type RunClaude, runClaude } from '../classify/run-claude.js';
 import { isOnPath } from '../setup/path.js';
 import { printable } from '../shared/printable.js';
@@ -20,18 +27,23 @@ const MAX_LIMIT = 100;
 // Plain model names or ids only: never something claude could read as a flag.
 export const MODEL_NAME = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 export const INSTALL_HINT = 'Install Claude Code (https://docs.claude.com/claude-code) and make sure `claude` is on your PATH.';
+export type ClassifyTransport = 'cli' | 'api';
 
 export interface ClassifyDeps {
   readonly cwd: () => string;
   readonly runClaude: RunClaude;
+  readonly runApi: RunAnthropicApi;
   readonly isOnPath: (command: string) => boolean;
+  readonly env: () => NodeJS.ProcessEnv;
   readonly now: () => Date;
 }
 
 const defaultDeps: ClassifyDeps = {
   cwd: () => process.cwd(),
   runClaude,
+  runApi: runAnthropicApi,
   isOnPath: (command) => isOnPath(command, process.env.PATH),
+  env: () => process.env,
   now: () => new Date(),
 };
 
@@ -40,6 +52,7 @@ interface Options {
   readonly redo: boolean;
   readonly limit: number;
   readonly model: string;
+  readonly transport: ClassifyTransport;
 }
 
 function parseOptions(args: readonly string[]): Options | string {
@@ -52,6 +65,7 @@ function parseOptions(args: readonly string[]): Options | string {
         redo: { type: 'boolean' },
         limit: { type: 'string' },
         model: { type: 'string' },
+        transport: { type: 'string' },
       },
       strict: true,
       allowPositionals: false,
@@ -63,32 +77,64 @@ function parseOptions(args: readonly string[]): Options | string {
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIMIT) return `--limit must be a whole number from 1 to ${MAX_LIMIT}`;
   const model = values.model ?? DEFAULT_MODEL;
   if (!MODEL_NAME.test(model)) return `invalid --model: ${model}`;
-  return { yes: values.yes === true, redo: values.redo === true, limit, model };
+  const transportRaw = values.transport ?? 'cli';
+  if (transportRaw !== 'cli' && transportRaw !== 'api') return `--transport must be cli or api`;
+  return { yes: values.yes === true, redo: values.redo === true, limit, model, transport: transportRaw };
 }
 
 function kilobytes(bytes: number): string {
   return `${(bytes / 1024).toFixed(1)} KB`;
 }
 
-function dryRun(failures: readonly FailureToClassify[], options: Options, io: Io): number {
+function rerunHint(options: Options): string {
+  return [
+    'nightowl classify --yes',
+    ...(options.transport === 'cli' ? [] : [`--transport ${options.transport}`]),
+    ...(options.redo ? ['--redo'] : []),
+    ...(options.limit === DEFAULT_LIMIT ? [] : [`--limit ${options.limit}`]),
+    ...(options.model === DEFAULT_MODEL ? [] : [`--model ${options.model}`]),
+  ].join(' ');
+}
+
+function dryRun(failures: readonly FailureToClassify[], options: Options, deps: ClassifyDeps, io: Io): number {
   const prompts = failures.map((failure) => ({ failure, prompt: buildPrompt(failure) }));
   const lines = prompts.map(({ failure, prompt }) => {
     const cut = prompt.truncated.length > 0 ? `, truncated: ${prompt.truncated.join(', ')}` : '';
     return `  #${failure.id} ${printable(failure.filePath)} (${kilobytes(prompt.bytes)}${cut})\n`;
   });
   const total = prompts.reduce((sum, { prompt }) => sum + prompt.bytes, 0);
-  const rerun = [
-    'nightowl classify --yes',
-    ...(options.redo ? ['--redo'] : []),
-    ...(options.limit === DEFAULT_LIMIT ? [] : [`--limit ${options.limit}`]),
-    ...(options.model === DEFAULT_MODEL ? [] : [`--model ${options.model}`]),
-  ].join(' ');
+  const via =
+    options.transport === 'api'
+      ? `Anthropic API (${ANTHROPIC_API_HOST}), model ${resolveApiModel(options.model)}`
+      : `Claude Code, model ${options.model}`;
+  const keyNote =
+    options.transport === 'api' && !(deps.env()[ANTHROPIC_API_KEY_ENV] ?? '').trim()
+      ? `Warning: ${ANTHROPIC_API_KEY_ENV} is not set; --yes will fail until you export it.\n`
+      : '';
   io.stdout(
     `Would send ${failures.length} ${failures.length === 1 ? 'failure' : 'failures'} (${kilobytes(total)}) ` +
-      `to Claude Code, model ${options.model}:\n${lines.join('')}` +
-      `Nothing was sent. The code above leaves your machine only if you run:\n  ${rerun}\n`,
+      `to ${via}:\n${lines.join('')}${keyNote}` +
+      `Nothing was sent. The code above leaves your machine only if you run:\n  ${rerunHint(options)}\n`,
   );
   return 0;
+}
+
+async function callModel(prompt: string, options: Options, deps: ClassifyDeps): Promise<string> {
+  if (options.transport === 'api') {
+    const apiKey = deps.env()[ANTHROPIC_API_KEY_ENV];
+    return deps.runApi(prompt, {
+      model: options.model,
+      schema: CLASSIFICATION_SCHEMA,
+      ...(apiKey === undefined ? {} : { apiKey }),
+    });
+  }
+  return deps.runClaude(prompt, { model: options.model, schema: CLASSIFICATION_SCHEMA });
+}
+
+function classifierLabel(options: Options): string {
+  return options.transport === 'api'
+    ? `anthropic-api:${resolveApiModel(options.model)}`
+    : `claude-code:${options.model}`;
 }
 
 async function classifyAll(store: Store, failures: readonly FailureToClassify[], options: Options, deps: ClassifyDeps, io: Io): Promise<number> {
@@ -97,11 +143,11 @@ async function classifyAll(store: Store, failures: readonly FailureToClassify[],
   for (const failure of failures) {
     let error: string;
     try {
-      const parsed = parseClaudeOutput(await deps.runClaude(buildPrompt(failure).text, { model: options.model, schema: CLASSIFICATION_SCHEMA }));
+      const parsed = parseClaudeOutput(await callModel(buildPrompt(failure).text, options, deps));
       if (parsed.ok) {
         store.saveClassification(failure.id, {
           ...parsed.value,
-          classifier: `claude-code:${options.model}`,
+          classifier: classifierLabel(options),
           classifiedAt: deps.now().toISOString(),
         });
         counts.set(parsed.value.category, (counts.get(parsed.value.category) ?? 0) + 1);
@@ -128,18 +174,20 @@ async function classifyAll(store: Store, failures: readonly FailureToClassify[],
 export function createClassifyCommand(deps: ClassifyDeps = defaultDeps): Command {
   return {
     name: 'classify',
-    summary: 'Classify failures with Claude Code (dry run unless --yes)',
+    summary: 'Classify failures with Claude Code or the Anthropic API (dry run unless --yes)',
     help: renderCommandHelp({
       name: 'classify',
       usage: '[options]',
       description: [
         'Asks Claude to sort failures into: logic, convention, misread-requirement, missing-context.',
-        'Without --yes it only says what would be sent. With --yes it sends each failure to `claude -p`.',
+        'Without --yes it only says what would be sent. With --yes it sends each failure to `claude -p` (default) or the Anthropic API (`--transport api`).',
+        `For --transport api, set ${ANTHROPIC_API_KEY_ENV}. Short --model names (haiku, sonnet, opus) map to pinned API model ids.`,
       ],
       options: [
-        ['--yes', 'Actually call Claude (default: dry run)'],
+        ['--yes', 'Actually call the model (default: dry run)'],
+        ['--transport cli|api', 'How to call the model (default: cli)'],
         [`--limit <1-${MAX_LIMIT}>`, `At most this many failures (default: ${DEFAULT_LIMIT})`],
-        ['--model <name>', `Claude model (default: ${DEFAULT_MODEL})`],
+        ['--model <name>', `Claude model or API model id (default: ${DEFAULT_MODEL})`],
         ['--redo', 'Classify again failures already classified'],
       ],
     }),
@@ -149,9 +197,12 @@ export function createClassifyCommand(deps: ClassifyDeps = defaultDeps): Command
         io.stderr(`nightowl classify: ${options}\n`);
         return 1;
       }
-      // Checked before opening anything, so a missing claude changes nothing.
-      if (options.yes && !deps.isOnPath('claude')) {
+      if (options.yes && options.transport === 'cli' && !deps.isOnPath('claude')) {
         io.stderr(`nightowl classify: 'claude' was not found on your PATH.\n  ${INSTALL_HINT}\n`);
+        return 1;
+      }
+      if (options.yes && options.transport === 'api' && !(deps.env()[ANTHROPIC_API_KEY_ENV] ?? '').trim()) {
+        io.stderr(`nightowl classify: ${ANTHROPIC_API_KEY_ENV} is not set.\n  export ${ANTHROPIC_API_KEY_ENV}=… and retry with --transport api.\n`);
         return 1;
       }
 
@@ -170,7 +221,7 @@ export function createClassifyCommand(deps: ClassifyDeps = defaultDeps): Command
           io.stdout('No failures to classify.\n');
           return 0;
         }
-        return options.yes ? await classifyAll(store, failures, options, deps, io) : dryRun(failures, options, io);
+        return options.yes ? await classifyAll(store, failures, options, deps, io) : dryRun(failures, options, deps, io);
       } catch (error) {
         if (!(error instanceof ClassifyLockError)) throw error;
         io.stderr(`nightowl classify: ${printable(error.message)}\n`);

@@ -8,7 +8,7 @@ When Claude Code writes buggy code and you fix it—either by hand before commit
 - export each failure as an evaluation dataset (`nightowl export`);
 - re-run those cases against Claude models and compare scores (`nightowl eval`).
 
-**Everything stays on your machine.** Data lives in `.nightowl/` inside your repository (git-ignored, mode `0700`). Nothing is sent anywhere unless you run `classify` or `eval` with `--yes`, which call your own local `claude` CLI.
+**Everything stays on your machine by default.** Data lives in `.nightowl/` inside your repository (git-ignored, mode `0700`). Nothing is sent anywhere unless you run `classify` or `eval` with `--yes` (local `claude` CLI by default, or Anthropic API when `classify --transport api`).
 
 ```
 ┌──────────────────┐
@@ -190,14 +190,15 @@ Uses Claude to classify failures into 4 categories: `logic`, `convention`, `misr
 Runs locally via `claude -p` in an isolated temporary directory with all tools and MCP disabled. Without `--yes`, it only previews how many failures would be processed. Only one `classify --yes` runs at a time in a project (`.nightowl/classify.lock`), so failures are never sent twice.
 
 ```bash
-nightowl classify [--yes] [--model <name>] [--limit <1-100>] [--redo]
+nightowl classify [--yes] [--transport cli|api] [--model <name>] [--limit <1-100>] [--redo]
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `--yes` | Actually execute calls to Claude |
+| `--transport cli\|api` | `cli` (default) uses local `claude`; `api` calls Anthropic Messages API (`ANTHROPIC_API_KEY` required with `--yes`) |
 | `--limit <1-100>` | Maximum failures to classify in one run (default: 20) |
-| `--model <name>` | Claude model to use (default: `haiku`) |
+| `--model <name>` | Claude model to use (default: `haiku`); with `--transport api`, short names map to pinned API model ids |
 | `--redo` | Re-classify failures that already have a category |
 
 ### `nightowl eval` (opt-in)
