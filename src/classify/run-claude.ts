@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -14,6 +14,7 @@ export interface RunClaudeOptions {
   readonly schema: object;
   readonly timeoutMs?: number;
   readonly env?: NodeJS.ProcessEnv;
+  readonly platform?: NodeJS.Platform;
 }
 
 export type RunClaude = (prompt: string, options: RunClaudeOptions) => Promise<string>;
@@ -51,10 +52,34 @@ export function claudeArgs(model: string, schema: object): readonly string[] {
   ];
 }
 
-function killGroup(pid: number | undefined): void {
+export interface ProcessTreeKillerDeps {
+  readonly spawnSync?: typeof spawnSync;
+  readonly kill?: typeof process.kill;
+}
+
+// Terminates the process tree across platforms without external dependencies.
+export function killProcessTree(
+  pid: number | undefined,
+  platform: NodeJS.Platform = process.platform,
+  deps: ProcessTreeKillerDeps = {},
+): void {
   if (pid === undefined) return;
+  const sync = deps.spawnSync ?? spawnSync;
+  const kill = deps.kill ?? process.kill;
+  if (platform === 'win32') {
+    try {
+      sync('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' });
+    } catch {
+      try {
+        kill(pid, 'SIGKILL');
+      } catch {
+        // Already gone.
+      }
+    }
+    return;
+  }
   try {
-    process.kill(-pid, 'SIGKILL');
+    kill(-pid, 'SIGKILL');
   } catch {
     // Already gone.
   }
@@ -62,12 +87,16 @@ function killGroup(pid: number | undefined): void {
 
 function spawnClaude(prompt: string, options: RunClaudeOptions, cwd: string): Promise<string> {
   return new Promise((resolve, reject) => {
+    const platform = options.platform ?? process.platform;
+    const isWindows = platform === 'win32';
+    const env = options.env ?? process.env;
     const child = spawn('claude', [...claudeArgs(options.model, options.schema)], {
       cwd,
-      env: { ...(options.env ?? process.env), [INTERNAL_ENV]: '1' },
+      env: { ...env, [INTERNAL_ENV]: '1' },
       stdio: ['pipe', 'pipe', 'ignore'],
-      // Own process group, so a timeout also kills what claude started (MCP servers, hooks).
-      detached: true,
+      // Own process group on POSIX, so a timeout also kills what claude started (MCP servers, hooks).
+      detached: !isWindows,
+      windowsHide: isWindows,
     });
     const chunks: Buffer[] = [];
     let size = 0;
@@ -80,7 +109,7 @@ function spawnClaude(prompt: string, options: RunClaudeOptions, cwd: string): Pr
     };
     // Kill and give up at once: a grandchild may keep stdout open long after.
     const timer = setTimeout(() => {
-      killGroup(child.pid);
+      killProcessTree(child.pid, platform);
       finish(() => reject(new ClaudeError('claude did not answer in time', 'timeout')));
     }, options.timeoutMs ?? CLAUDE_TIMEOUT_MS);
 
@@ -90,7 +119,7 @@ function spawnClaude(prompt: string, options: RunClaudeOptions, cwd: string): Pr
         chunks.push(chunk);
         return;
       }
-      killGroup(child.pid);
+      killProcessTree(child.pid, platform);
       finish(() => reject(new ClaudeError('claude output is larger than 4 MB', 'too_large')));
     });
     child.on('error', (error: NodeJS.ErrnoException) =>

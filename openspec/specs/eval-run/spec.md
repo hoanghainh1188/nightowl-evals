@@ -60,11 +60,15 @@ Thư mục `.nightowl/runs/` SHALL được chuẩn bị trước lời gọi đ
 - **THEN** stderr báo không chuẩn bị được thư mục, không có lời gọi `claude` nào, mã thoát 1
 
 ### Requirement: Lời gọi model tách biệt và an toàn
-Mỗi lời gọi SHALL dùng Claude Code CLI ở chế độ không tương tác, không có tool nào (kể cả MCP và skill trong cấu hình người dùng), không lưu phiên, đầu ra JSON theo schema, với `NIGHTOWL_INTERNAL=1`, trong thư mục tạm rỗng, và bị huỷ (cả nhóm tiến trình) sau 180 giây. Đầu ra không hợp lệ, nội dung quá 512 KB, đầu ra thô quá 4 MB (tiến trình bị huỷ ngay), hoặc lời gọi lỗi SHALL được ghi là thất bại cho bài đó với model đó, và lệnh SHALL chạy tiếp các bài còn lại rồi thoát mã 1.
+Mỗi lời gọi SHALL dùng Claude Code CLI ở chế độ không tương tác, không có tool nào, không lưu phiên, đầu ra JSON theo schema, với `NIGHTOWL_INTERNAL=1`, trong thư mục tạm rỗng, và bị huỷ (cả nhóm tiến trình) sau 180 giây trên cả POSIX và Windows. Đầu ra không hợp lệ, quá 512 KB, đầu ra thô quá 4 MB, hoặc lời gọi lỗi SHALL được ghi là thất bại cho bài đó với model đó, và lệnh SHALL chạy tiếp các bài còn lại rồi thoát mã 1.
 
 #### Scenario: Lời gọi treo
 - **WHEN** `claude` không trả lời trong 180 giây cho một bài
 - **THEN** tiến trình bị huỷ, bài đó được ghi là thất bại cho model đó, các bài khác vẫn chạy, mã thoát 1
+
+#### Scenario: Huỷ tiến trình trên Windows
+- **WHEN** lời gọi model bị huỷ trên Windows
+- **THEN** toàn bộ cây tiến trình bị huỷ an toàn theo cơ chế của Windows
 
 ### Requirement: Đầu vào không hợp lệ
 Khi file bộ test không tồn tại, lệnh SHALL gợi ý chạy `nightowl export` và thoát mã 1. File bộ test không phải file thường hoặc lớn hơn 32 MB SHALL bị từ chối, thoát mã 1. Dòng không phải JSON hoặc không có `schema` bắt đầu bằng `nightowl.eval/v1` SHALL bị bỏ qua và được đếm. Khi `claude` không có trong `PATH` và có `--yes`, lệnh SHALL báo lỗi kèm cách cài và thoát mã 1 mà không tạo file kết quả.

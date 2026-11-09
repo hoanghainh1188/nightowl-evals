@@ -1,9 +1,69 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CLASSIFICATION_SCHEMA } from '../../src/classify/parse.js';
-import { ClaudeError, runClaude } from '../../src/classify/run-claude.js';
+import {
+  ClaudeError,
+  killProcessTree,
+  runClaude,
+} from '../../src/classify/run-claude.js';
 import { createFakeClaude, type FakeClaude } from '../helpers/fake-claude.js';
+
+describe('killProcessTree', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('does nothing when pid is undefined', () => {
+    expect(() => killProcessTree(undefined)).not.toThrow();
+  });
+
+  it('calls process.kill with negative pid on POSIX platforms', () => {
+    const killMock = vi.fn();
+    killProcessTree(99999, 'darwin', { kill: killMock as unknown as typeof process.kill });
+    expect(killMock).toHaveBeenCalledWith(-99999, 'SIGKILL');
+  });
+
+  it('swallows errors when process is already gone on POSIX', () => {
+    const killMock = vi.fn().mockImplementation(() => {
+      throw new Error('ESRCH');
+    });
+    expect(() => killProcessTree(99999, 'linux', { kill: killMock as unknown as typeof process.kill })).not.toThrow();
+  });
+
+  it('calls taskkill on Windows', () => {
+    const spawnSyncMock = vi.fn().mockReturnValue({ status: 0 });
+    killProcessTree(12345, 'win32', { spawnSync: spawnSyncMock as unknown as typeof import('node:child_process').spawnSync });
+    expect(spawnSyncMock).toHaveBeenCalledWith('taskkill', ['/pid', '12345', '/T', '/F'], { stdio: 'ignore' });
+  });
+
+  it('falls back to process.kill on Windows if taskkill throws', () => {
+    const spawnSyncMock = vi.fn().mockImplementation(() => {
+      throw new Error('taskkill not found');
+    });
+    const killMock = vi.fn();
+    killProcessTree(12345, 'win32', {
+      spawnSync: spawnSyncMock as unknown as typeof import('node:child_process').spawnSync,
+      kill: killMock as unknown as typeof process.kill,
+    });
+    expect(killMock).toHaveBeenCalledWith(12345, 'SIGKILL');
+  });
+
+  it('swallows process.kill errors on Windows fallback when already gone', () => {
+    const spawnSyncMock = vi.fn().mockImplementation(() => {
+      throw new Error('taskkill not found');
+    });
+    const killMock = vi.fn().mockImplementation(() => {
+      throw new Error('ESRCH');
+    });
+    expect(() =>
+      killProcessTree(12345, 'win32', {
+        spawnSync: spawnSyncMock as unknown as typeof import('node:child_process').spawnSync,
+        kill: killMock as unknown as typeof process.kill,
+      }),
+    ).not.toThrow();
+  });
+});
 
 describe('runClaude', () => {
   let fake: FakeClaude | undefined;
@@ -95,5 +155,16 @@ describe('runClaude', () => {
     const childPid = Number(await readFile(join(fake.dir.path, 'call-0.child'), 'utf8'));
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(() => process.kill(childPid, 0)).toThrow();
+  });
+
+  it('supports platform override for windows', async () => {
+    fake = await createFakeClaude('{"result":"win32"}');
+    const out = await runClaude('prompt', {
+      model: 'haiku',
+      schema: CLASSIFICATION_SCHEMA,
+      platform: 'win32',
+      env: { ...process.env, PATH: fake.path },
+    });
+    expect(out).toBe('{"result":"win32"}');
   });
 });

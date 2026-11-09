@@ -13,12 +13,11 @@ Công cụ CLI tự động ghi lại mỗi lần AI viết code sai, gom lỗi 
 - Xuất bộ test: mỗi lỗi = đầu vào + code đúng + tiêu chí chấm (JSONL).
 - Chạy lại: so điểm giữa các model, prompt, rules.
 
-### Giai đoạn hiện tại: MVP 4 tuần
+### Giai đoạn: Chuẩn bị phát hành Production-Ready
 
-Ghi được lỗi thật trên dự án cá nhân của tác giả. Dữ liệu ở máy local. Chưa cần đẹp.
-Điều kiện qua giai đoạn: ≥ 50 lỗi thật được ghi tự động.
-
-Phạm vi MVP chỉ gồm **Claude Code + Git**. Cursor, review comment trong PR, phát hiện revert, dashboard web, on-premise server và SaaS nằm ngoài phạm vi.
+- **Giai đoạn MVP (4 tuần)**: Đã hoàn thành 100% (9/9 changes, test coverage > 95%).
+- **Giai đoạn hiện tại**: Hoàn thiện độ tin cậy, đa nền tảng và vận hành dữ liệu (Production Hardening) dựa trên kế hoạch tại [`docs/production-readiness.md`](../docs/production-readiness.md).
+- Phạm vi hiện tại: Tiếp tục tối ưu hóa cho Claude Code + Git, đảm bảo tương thích ổn định trên macOS, Linux, Windows và bảo vệ dữ liệu nhạy cảm.
 
 ## Tech stack
 
@@ -60,14 +59,31 @@ Mọi change phải giữ đủ các nguyên tắc này. Proposal nào vi phạm
 
 ## Lộ trình change
 
-| Thứ tự | Change | Nội dung | Tuần |
+### Các change MVP đã hoàn thành
+
+| Thứ tự | Change | Nội dung | Trạng thái |
 | --- | --- | --- | --- |
-| 1 | `add-cli-skeleton` | Khung TypeScript, bin `nightowl`, lệnh rỗng, build, test | 1 |
-| 2 | `add-local-storage` | Schema SQLite: bảng `events`, `failures` | 1 |
-| 3 | `add-claude-code-hook` | `nightowl init` ghi hook vào `.claude/settings.json` (PostToolUse cho Edit/Write); `nightowl log` đọc JSON từ stdin | 1 |
-| 4 | `add-git-hook` | pre-commit so code AI viết với code được commit, gắn cờ "bị sửa" | 1 |
-| 5 | `add-failure-records` | Ghép bản AI + bản dev sửa thành 1 bản ghi lỗi | 2 |
-| 6 | `add-llm-classify` | Phân loại 4 loại lỗi, tắt mặc định | 2 |
-| 7 | `add-report` | `nightowl report`: lỗi theo loại, module, tuần | 3 |
-| 8 | `add-export` | `nightowl export`: xuất bộ test JSONL | 3 |
-| 9 | `add-eval-run` | Chạy lại bộ test với 2 model, so điểm | 4 |
+| 1 | `add-cli-skeleton` | Khung TypeScript, bin `nightowl`, lệnh rỗng, build, test | Hoàn thành |
+| 2 | `add-local-storage` | Schema SQLite: bảng `events`, `failures` | Hoàn thành |
+| 3 | `add-claude-code-hook` | `nightowl init` ghi hook vào `.claude/settings.json` (PostToolUse cho Edit/Write); `nightowl log` đọc JSON từ stdin | Hoàn thành |
+| 4 | `add-git-hook` | pre-commit so code AI viết với code được commit, gắn cờ "bị sửa" | Hoàn thành |
+| 5 | `add-failure-records` | Ghép bản AI + bản dev sửa thành 1 bản ghi lỗi | Hoàn thành |
+| 6 | `add-llm-classify` | Phân loại 4 loại lỗi, tắt mặc định | Hoàn thành |
+| 7 | `add-report` | `nightowl report`: lỗi theo loại, module, tuần | Hoàn thành |
+| 8 | `add-export` | `nightowl export`: xuất bộ test JSONL | Hoàn thành |
+| 9 | `add-eval-run` | Chạy lại bộ test với 2 model, so điểm | Hoàn thành |
+
+### Lộ trình change tiếp theo (Production-Ready)
+
+Chi tiết xem [`docs/production-readiness.md`](../docs/production-readiness.md):
+
+| Thứ tự | Change | Nội dung | Ưu tiên |
+| --- | --- | --- | --- |
+| 10 | `fix-cross-platform-process` | Khắc phục kill process group trên Windows trong `run-claude.ts` | Hoàn thành |
+| 11 | `add-inline-secret-filter` | Bổ sung regex quét secret inline cho snapshot | P0 |
+| 12 | `add-doctor-command` | Lệnh `nightowl doctor` chẩn đoán cấu hình môi trường | P0 |
+| 13 | `add-storage-prune` | Cơ chế dọn dẹp snapshot cũ và tối ưu dung lượng SQLite | P1 |
+| 14 | `add-hook-manager-support` | Hỗ trợ cấu hình tích hợp Husky và Lefthook | P1 |
+| 15 | `add-report-json` | Thêm cờ `--json` cho `nightowl report` | P1 |
+| 16 | `add-eval-test-runner` | Hỗ trợ chạy kiểm thử tự động (unit tests) để verify eval | P2 |
+| 17 | `add-direct-api-classify` | Hỗ trợ gọi phân loại trực tiếp qua LLM API key | P2 |
