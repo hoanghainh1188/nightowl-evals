@@ -28,8 +28,8 @@ describe('storage prune', () => {
         : { file_path: 'src/a.ts', snapshot, snapshot_skipped: null },
     );
     db.prepare(`
-      INSERT INTO events (created_at, source, kind, file_path, payload)
-      VALUES (?, 'claude-code', 'edit', 'src/a.ts', ?)
+      INSERT INTO events (created_at, source, kind, file_path, payload, agent)
+      VALUES (?, 'agent-hook', 'edit', 'src/a.ts', ?, 'claude-code')
     `).run(createdAt, payload);
   }
 

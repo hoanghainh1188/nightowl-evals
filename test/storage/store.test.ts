@@ -126,9 +126,17 @@ describe('schema', () => {
       repo.path,
       "SELECT name FROM sqlite_master WHERE type IN ('table', 'index') AND name NOT LIKE 'sqlite_%' ORDER BY name",
     ).map((row) => row.name);
-    expect(names).toEqual(['checked_edits', 'checks_attached', 'events', 'events_file_time', 'events_session', 'failures']);
-    expect(rawQuery<{ user_version: number }>(repo.path, 'PRAGMA user_version')[0]?.user_version).toBe(4);
-    expect(CURRENT_SCHEMA_VERSION).toBe(4);
+    expect(names).toEqual([
+      'checked_edits',
+      'checks_attached',
+      'events',
+      'events_agent',
+      'events_file_time',
+      'events_session',
+      'failures',
+    ]);
+    expect(rawQuery<{ user_version: number }>(repo.path, 'PRAGMA user_version')[0]?.user_version).toBe(5);
+    expect(CURRENT_SCHEMA_VERSION).toBe(5);
   });
 
   it('leaves data and version untouched when reopened', async () => {
@@ -138,7 +146,7 @@ describe('schema', () => {
     const second = await openStore({ cwd: repo.path });
     expect(second.listEvents()).toHaveLength(1);
     second.close();
-    expect(rawQuery<{ user_version: number }>(repo.path, 'PRAGMA user_version')[0]?.user_version).toBe(4);
+    expect(rawQuery<{ user_version: number }>(repo.path, 'PRAGMA user_version')[0]?.user_version).toBe(5);
   });
 
   it('refuses a database written by a newer NightOwl without changing it', async () => {
@@ -197,7 +205,7 @@ describe('events', () => {
 
   it('round-trips every field', () => {
     const saved = store.insertEvent({
-      source: 'claude-code',
+      source: 'agent-hook',
       kind: 'edit',
       sessionId: 's1',
       filePath: 'src/a.ts',
@@ -208,7 +216,7 @@ describe('events', () => {
     expect(Object.isFrozen(saved)).toBe(true);
     expect(store.listEvents()).toEqual([saved]);
     expect(saved).toMatchObject({
-      source: 'claude-code',
+      source: 'agent-hook',
       kind: 'edit',
       sessionId: 's1',
       filePath: 'src/a.ts',
@@ -223,22 +231,22 @@ describe('events', () => {
   });
 
   it('filters by file, kind and time, oldest first', () => {
-    store.insertEvent({ source: 'claude-code', kind: 'prompt', payload: {}, createdAt: '2026-11-01T00:00:00.000Z' });
+    store.insertEvent({ source: 'agent-hook', kind: 'prompt', payload: {}, createdAt: '2026-11-01T00:00:00.000Z' });
     const a = store.insertEvent({
-      source: 'claude-code',
+      source: 'agent-hook',
       kind: 'edit',
       filePath: 'a.ts',
       payload: {},
       createdAt: '2026-11-02T00:00:00.000Z',
     });
     const b = store.insertEvent({
-      source: 'claude-code',
+      source: 'agent-hook',
       kind: 'edit',
       filePath: 'a.ts',
       payload: {},
       createdAt: '2026-11-03T00:00:00.000Z',
     });
-    store.insertEvent({ source: 'claude-code', kind: 'edit', filePath: 'b.ts', payload: {} });
+    store.insertEvent({ source: 'agent-hook', kind: 'edit', filePath: 'b.ts', payload: {} });
 
     expect(store.listEvents({ filePath: 'a.ts' }).map((e) => e.id)).toEqual([a.id, b.id]);
     expect(store.listEvents({ kinds: ['prompt'] })).toHaveLength(1);
@@ -247,7 +255,7 @@ describe('events', () => {
   });
 
   it('only creates files inside .nightowl/', async () => {
-    store.insertEvent({ source: 'claude-code', kind: 'edit', filePath: 'a.ts', payload: {} });
+    store.insertEvent({ source: 'agent-hook', kind: 'edit', filePath: 'a.ts', payload: {} });
     const files = (await listFiles(repo.path)).filter((file) => !file.startsWith('.git'));
     expect(files.length).toBeGreaterThan(0);
     expect(files.every((file) => file.startsWith('.nightowl/'))).toBe(true);

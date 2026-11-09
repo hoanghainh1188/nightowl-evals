@@ -14,10 +14,18 @@ export interface Rate {
   readonly rate: number | null;
 }
 
+export interface HeadToHeadRow {
+  readonly agent: string;
+  readonly failures: number;
+  readonly checked: number;
+  readonly rate: number | null;
+}
+
 export interface Report {
   readonly generatedAt: string;
   readonly since: string | null;
   readonly depth: number;
+  readonly agents: readonly string[] | null;
   readonly total: number;
   readonly unclassified: number;
   readonly dismissed: number;
@@ -26,6 +34,8 @@ export interface Report {
   readonly bySource: Readonly<Record<string, number>>;
   // Dismissed included: how much of the review is done.
   readonly byStatus: Readonly<Record<string, number>>;
+  readonly byAgent: Readonly<Record<string, number>>;
+  readonly headToHead: readonly HeadToHeadRow[];
   readonly byModule: ReadonlyArray<{ readonly module: string; readonly failures: number }>;
   readonly byWeek: ReadonlyArray<{ readonly week: string } & Rate & { readonly recorded: number }>;
 }
@@ -36,6 +46,7 @@ export interface ReportInput {
   readonly depth: number;
   readonly since: string | null;
   readonly generatedAt: string;
+  readonly agents?: readonly string[] | null;
 }
 
 function add(map: Map<string, number>, key: string, n: number): void {
@@ -54,29 +65,40 @@ export function buildReport(input: ReportInput): Report {
   for (const row of input.failures) add(byStatus, row.status, row.count);
   const byCategory = new Map<string, number>([...Object.keys(CATEGORIES), UNCLASSIFIED].map((name) => [name, 0]));
   const bySource = new Map<string, number>(SOURCES.map((name) => [name, 0]));
+  const byAgent = new Map<string, number>();
   const byModule = new Map<string, number>();
   const recordedByWeek = new Map<string, number>();
   for (const row of counted) {
     add(byCategory, row.category ?? UNCLASSIFIED, row.count);
     add(bySource, row.source, row.count);
+    add(byAgent, row.agent ?? 'unknown', row.count);
     add(byModule, moduleOf(row.filePath, input.depth), row.count);
     add(recordedByWeek, isoWeek(row.day), row.count);
   }
 
   const checkedByWeek = new Map<string, number>();
   const failedByWeek = new Map<string, number>();
+  const checkedByAgent = new Map<string, number>();
+  const failedByAgent = new Map<string, number>();
   for (const row of input.checks) {
     const week = isoWeek(row.day);
+    const agent = row.agent ?? 'unknown';
     add(checkedByWeek, week, row.count);
-    if (row.outcome === 'failure') add(failedByWeek, week, row.count);
+    add(checkedByAgent, agent, row.count);
+    if (row.outcome === 'failure') {
+      add(failedByWeek, week, row.count);
+      add(failedByAgent, agent, row.count);
+    }
   }
   const sum = (map: Map<string, number>) => [...map.values()].reduce((total, n) => total + n, 0);
 
   const weeks = [...new Set([...recordedByWeek.keys(), ...checkedByWeek.keys()])].sort();
+  const headAgents = [...new Set([...byAgent.keys(), ...checkedByAgent.keys()])].sort();
   return Object.freeze({
     generatedAt: input.generatedAt,
     since: input.since,
     depth: input.depth,
+    agents: input.agents ?? null,
     total: sum(recordedByWeek),
     unclassified: byCategory.get(UNCLASSIFIED) ?? 0,
     dismissed,
@@ -84,6 +106,13 @@ export function buildReport(input: ReportInput): Report {
     byCategory: Object.freeze(Object.fromEntries(byCategory)),
     bySource: Object.freeze(Object.fromEntries(bySource)),
     byStatus: Object.freeze(Object.fromEntries(byStatus)),
+    byAgent: Object.freeze(Object.fromEntries([...byAgent].sort((a, b) => a[0].localeCompare(b[0])))),
+    headToHead: Object.freeze(
+      headAgents.map((agent) => ({
+        agent,
+        ...rate(failedByAgent.get(agent) ?? 0, checkedByAgent.get(agent) ?? 0),
+      })),
+    ),
     byModule: Object.freeze(
       [...byModule]
         .map(([module, failures]) => ({ module, failures }))

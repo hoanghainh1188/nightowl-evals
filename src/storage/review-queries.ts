@@ -8,6 +8,7 @@ export interface ReviewFilter {
   // null for every status.
   readonly statuses: readonly FailureStatus[] | null;
   readonly source: FailureSource | null;
+  readonly agents: readonly string[] | null;
   readonly limit: number;
 }
 
@@ -17,6 +18,7 @@ export interface FailureForReview {
   readonly filePath: string;
   readonly commitSha: string | null;
   readonly source: FailureSource;
+  readonly agent: string | null;
   readonly status: FailureStatus;
   readonly category: string | null;
   readonly categoryReason: string | null;
@@ -31,7 +33,7 @@ export type StatusChange =
   | { readonly ok: true; readonly changed: readonly number[]; readonly unchanged: readonly number[] }
   | { readonly ok: false; readonly missing: readonly number[] };
 
-const SELECT = `SELECT f.id, f.created_at, f.file_path, f.commit_sha, f.source, f.status, f.category, f.category_reason,
+const SELECT = `SELECT f.id, f.created_at, f.file_path, f.commit_sha, f.source, f.agent, f.status, f.category, f.category_reason,
          f.category_confidence, json_extract(p.payload, '$.prompt') AS prompt, json_extract(b.payload, '$.prompt') AS feedback,
          f.ai_content, f.final_content
        FROM failures f
@@ -44,6 +46,7 @@ interface Row {
   file_path: string;
   commit_sha: string | null;
   source: FailureSource;
+  agent: string | null;
   status: FailureStatus;
   category: string | null;
   category_reason: string | null;
@@ -63,6 +66,7 @@ function toFailure(row: Row): FailureForReview {
     filePath: row.file_path,
     commitSha: row.commit_sha,
     source: row.source,
+    agent: row.agent,
     status: row.status,
     category: row.category,
     categoryReason: row.category_reason,
@@ -77,14 +81,16 @@ function toFailure(row: Row): FailureForReview {
 // Newest first. Plain `?` placeholders: numbered ones fail to bind on Node 22.13's node:sqlite.
 export function listFailuresForReview(db: DatabaseSync, filter: ReviewFilter): readonly FailureForReview[] {
   const statuses = filter.statuses === null ? null : JSON.stringify(filter.statuses);
+  const agents = filter.agents === null || filter.agents.length === 0 ? null : JSON.stringify(filter.agents);
   const rows = db
     .prepare(
       `${SELECT}
        WHERE (? IS NULL OR f.status IN (SELECT value FROM json_each(?)))
          AND (? IS NULL OR f.source = ?)
+         AND (? IS NULL OR f.agent IN (SELECT value FROM json_each(?)))
        ORDER BY f.id DESC LIMIT ?`,
     )
-    .all(statuses, statuses, filter.source, filter.source, filter.limit) as unknown as Row[];
+    .all(statuses, statuses, filter.source, filter.source, agents, agents, filter.limit) as unknown as Row[];
   return Object.freeze(rows.map(toFailure));
 }
 

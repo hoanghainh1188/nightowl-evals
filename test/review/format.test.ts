@@ -8,6 +8,7 @@ const failure = (overrides: Partial<FailureForReview> = {}): FailureForReview =>
   filePath: 'src/age.ts',
   commitSha: '3f2a9c1d8e07aa55',
   source: 'ai-self-fix',
+  agent: 'claude-code',
   status: 'flagged',
   category: 'logic',
   categoryReason: 'wrong boundary',

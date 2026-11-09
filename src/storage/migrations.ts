@@ -58,6 +58,43 @@ export const migrations: readonly string[] = Object.freeze([
     CHECK (source IN ('manual-fix', 'ai-self-fix'));
   ALTER TABLE failures ADD COLUMN feedback_event_id INTEGER REFERENCES events (id);
   `,
+  `
+  -- Multi-agent: channel (agent-hook|git) + which assistant wrote the edit.
+  CREATE TABLE events_v5 (
+    id          INTEGER PRIMARY KEY,
+    created_at  TEXT    NOT NULL,
+    source      TEXT    NOT NULL CHECK (source IN ('agent-hook', 'git')),
+    kind        TEXT    NOT NULL,
+    session_id  TEXT,
+    file_path   TEXT,
+    payload     TEXT    NOT NULL CHECK (json_valid(payload)),
+    agent       TEXT    CHECK (
+      agent IS NULL OR agent IN (
+        'claude-code', 'cursor', 'windsurf', 'cline', 'roo', 'copilot-workspace', 'aider', 'unknown'
+      )
+    )
+  );
+  INSERT INTO events_v5 (id, created_at, source, kind, session_id, file_path, payload, agent)
+  SELECT id, created_at,
+         CASE WHEN source = 'claude-code' THEN 'agent-hook' ELSE source END,
+         kind, session_id, file_path, payload,
+         CASE WHEN source = 'claude-code' THEN 'claude-code' ELSE NULL END
+  FROM events;
+  DROP TABLE events;
+  ALTER TABLE events_v5 RENAME TO events;
+  CREATE INDEX events_file_time ON events (file_path, created_at);
+  CREATE INDEX events_session   ON events (session_id, created_at);
+  CREATE INDEX events_agent     ON events (agent, created_at);
+
+  ALTER TABLE failures ADD COLUMN agent TEXT CHECK (
+    agent IS NULL OR agent IN (
+      'claude-code', 'cursor', 'windsurf', 'cline', 'roo', 'copilot-workspace', 'aider', 'unknown'
+    )
+  );
+  UPDATE failures SET agent = (
+    SELECT e.agent FROM events e WHERE e.id = failures.ai_event_id
+  ) WHERE ai_event_id IS NOT NULL;
+  `,
 ]);
 
 export const CURRENT_SCHEMA_VERSION = migrations.length;
@@ -80,6 +117,8 @@ export function migrate(db: DatabaseSync): void {
   if (userVersion(db) > CURRENT_SCHEMA_VERSION) throw new SchemaTooNewError(userVersion(db));
   if (userVersion(db) === CURRENT_SCHEMA_VERSION) return;
 
+  // Table rebuilds (v5) need FKs off; cannot change this pragma inside a transaction.
+  db.exec('PRAGMA foreign_keys = OFF');
   db.exec('BEGIN IMMEDIATE');
   try {
     // Re-read inside the write lock: another process may have migrated meanwhile.
@@ -91,6 +130,8 @@ export function migrate(db: DatabaseSync): void {
   } catch (error) {
     rollbackQuietly(db);
     throw error;
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON');
   }
 }
 

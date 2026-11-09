@@ -38,8 +38,8 @@ describe('nightowl classify', () => {
       const ids: number[] = [];
       for (let i = 0; i < count; i++) {
         const promptId =
-          prompt === null ? null : store.insertEvent({ source: 'claude-code', kind: 'prompt', sessionId: 's', payload: { prompt } }).id;
-        const edit = store.insertEvent({ source: 'claude-code', kind: 'edit', sessionId: 's', filePath: `f${i}.ts`, payload: {} });
+          prompt === null ? null : store.insertEvent({ source: 'agent-hook', kind: 'prompt', sessionId: 's', payload: { prompt } }).id;
+        const edit = store.insertEvent({ source: 'agent-hook', kind: 'edit', sessionId: 's', filePath: `f${i}.ts`, payload: {} });
         const check = store.insertEvent({ source: 'git', kind: 'commit-check', filePath: `f${i}.ts`, payload: {} });
         store.attachChecks('sha', [
           {

@@ -101,7 +101,21 @@ Generic benchmarks (like HumanEval or SWE-bench) evaluate AI on standardized alg
 
 - **Node.js**: `22.13.0` or newer (uses native `node:sqlite`)
 - **Git**: `2.20` or newer
-- **Claude Code**: (Optional for capture; required for local `classify` and `eval`)
+- **Claude Code** (or another supported agent): Optional for capture; Claude Code CLI is required for local `classify` and `eval`
+
+### Supported agents
+
+| Agent | Id | Capture path |
+|-------|----|--------------|
+| Claude Code | `claude-code` | `.claude/settings(.local).json` hooks |
+| Cursor | `cursor` | `.cursor/hooks.json` (`beforeSubmitPrompt`, `afterFileEdit`) |
+| Windsurf | `windsurf` | `.windsurf/hooks.json` (NightOwl entry) |
+| Cline | `cline` | `.cline/nightowl.json` |
+| Roo Code | `roo` | `.roo/nightowl.json` |
+| Copilot Workspace | `copilot-workspace` | `.github/copilot-nightowl.json` |
+| Aider | `aider` | `.aider/nightowl.json` |
+
+**Git fallback:** if a commit changes a file with no recent agent snapshot, NightOwl records an `unattributed-change` observation (optionally inferring the agent from branch names like `cursor/...`). It does **not** invent `ai_content` or create a full failure pair without a real snapshot.
 
 ---
 
@@ -140,7 +154,7 @@ cd your-project
 nightowl init
 ```
 
-*This non-destructively injects personal Claude Code hooks (`.claude/settings.local.json`) and Git hooks without modifying existing workflows.*
+*This non-destructively injects agent hooks (Claude Code, Cursor, and other supported tools) plus Git hooks without modifying existing workflows. Use `--agents cursor,claude-code` to install a subset.*
 
 ### 2. Verify environment health
 
@@ -207,10 +221,11 @@ Run `nightowl <command> --help` for options on any command.
 Sets up NightOwl hooks and creates the local SQLite database. Safe to run multiple times (idempotent).
 
 ```bash
-nightowl init [--shared]
+nightowl init [--shared] [--agents <list>]
 ```
 
 - `--shared`: Places Claude Code hooks in `.claude/settings.json` (tracked in git for the whole team) instead of `.claude/settings.local.json`.
+- `--agents <list>`: Comma-separated agent ids to install (default: all). Example: `nightowl init --agents cursor,claude-code`.
 - Automatically detects **Husky** (`.husky/`) or **Lefthook** (`lefthook.yml`) and displays copy-paste integration snippets without overriding files.
 
 #### `nightowl doctor`
@@ -226,7 +241,7 @@ nightowl doctor [--strict] [--json]
 
 #### `nightowl uninstall`
 
-Cleanly removes Git hooks and Claude Code hook configurations. Leaves `.nightowl/` database and historical records intact.
+Cleanly removes Git hooks and NightOwl agent hook configurations (Claude Code, Cursor, and the other supported agents). Leaves `.nightowl/` database and historical records intact.
 
 ```bash
 nightowl uninstall [--purge]
@@ -240,7 +255,7 @@ nightowl uninstall [--purge]
 
 #### `nightowl report`
 
-Summarizes AI failures by category, source, module path, and week.
+Summarizes AI failures by category, source, agent, module path, and week. JSON includes `by_agent` and `head_to_head` (edit-change rate per agent).
 
 ```bash
 nightowl report [options]
@@ -250,6 +265,7 @@ nightowl report [options]
 | :--- | :--- |
 | `--since <YYYY-MM-DD>` | Filter records created from this date forward |
 | `--depth <1-5>` | Number of folder levels that make up a module (default: `2`) |
+| `--agent <id>` | Only include this agent (repeatable) |
 | `--json` | Output full breakdown as structured JSON |
 | `-o, --output <file>` | Write report directly to a file (creates parent directories) |
 | `--fail-on-rate <0-100>` | **CI Quality Gate**: Exit with code `1` if failure rate exceeds threshold |
@@ -260,7 +276,7 @@ Interactive triage tool to review recorded failures and distinguish genuine AI b
 
 ```bash
 # List unreviewed failures (flagged)
-nightowl review [--status flagged|confirmed|dismissed|all] [--source manual-fix|ai-self-fix] [--limit N] [--json]
+nightowl review [--status flagged|confirmed|dismissed|all] [--source manual-fix|ai-self-fix] [--agent <id>] [--limit N] [--json]
 
 # Inspect full details and unified diff of a failure
 nightowl review show <id> [--json]

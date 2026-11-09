@@ -3,6 +3,7 @@ import { join, relative } from 'node:path';
 import { renderCommandHelp } from '../cli/help.js';
 import { errorMessage } from '../cli/errors.js';
 import { printable } from '../shared/printable.js';
+import { uninstallAllAgentHooks } from '../setup/agents-install.js';
 import {
   assertNotSymlinked,
   PERSONAL_SETTINGS,
@@ -72,6 +73,7 @@ export function createUninstallCommand(deps: UninstallDeps = { cwd: () => proces
       usage: '',
       description: [
         `Removes NightOwl's Claude Code hooks from ${PERSONAL_SETTINGS} and ${SHARED_SETTINGS},`,
+        'Cursor / Windsurf / Cline / Roo / Copilot Workspace / Aider NightOwl config entries,',
         'and its line from .git/hooks/pre-commit and post-commit. Everything else is kept.',
         `Recorded data in ${DATA_DIR}/ and .gitignore are left as they are.`,
       ],
@@ -95,6 +97,16 @@ export function createUninstallCommand(deps: UninstallDeps = { cwd: () => proces
         if (!(error instanceof SetupError)) throw error;
         io.stderr(`nightowl uninstall: ${printable(error.message)}\nFix it and run 'nightowl uninstall' again.\n`);
         return 1;
+      }
+      for (const row of await uninstallAllAgentHooks(root)) {
+        if (row.warning) io.stderr(`nightowl uninstall: warning: ${row.file}: ${row.warning}\n`);
+        if (row.status !== 'unchanged') {
+          lines.push(
+            row.status === 'removed'
+              ? `  removed ${row.file}`
+              : `  updated ${row.file} (${row.detail})`,
+          );
+        }
       }
       const manual: Array<string | null> = [];
       try {

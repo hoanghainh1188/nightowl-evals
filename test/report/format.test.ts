@@ -9,6 +9,7 @@ const row = (filePath: string, category: string | null, day: string, count = 1):
   category,
   status: 'flagged',
   source: 'manual-fix',
+  agent: 'claude-code',
   day,
   count,
 });
@@ -20,8 +21,8 @@ describe('formatText', () => {
         ...base,
         failures: [row('src/hooks/a.ts', 'logic', '2026-11-02', 3), row('src/cli/b.ts', 'convention', '2026-11-04')],
         checks: [
-          { day: '2026-11-02', outcome: 'failure', count: 4 },
-          { day: '2026-11-02', outcome: 'not-a-failure', count: 12 },
+          { day: '2026-11-02', outcome: 'failure', agent: 'claude-code', count: 4 },
+          { day: '2026-11-02', outcome: 'not-a-failure', agent: 'claude-code', count: 12 },
         ],
       }),
     );
@@ -72,6 +73,9 @@ describe('formatJson', () => {
       'by_category',
       'by_source',
       'by_status',
+      'by_agent',
+      'head_to_head',
+      'agents',
       'by_module',
       'by_week',
     ]);

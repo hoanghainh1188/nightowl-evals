@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { retryWhileBusy } from './busy.js';
 import { DATA_DIR, ensureDataDir } from './data-dir.js';
+import type { AnyAgentId } from '../agents/ids.js';
 import {
   type EventFilter,
   getSnapshot,
@@ -67,7 +68,7 @@ export interface Store {
   readonly insertEvent: (event: NewEvent) => StoredEvent;
   readonly listEvents: (filter?: EventFilter) => readonly StoredEvent[];
   readonly listUncheckedEdits: (filePaths: readonly string[]) => readonly PendingEdit[];
-  readonly listOpenEdits: (filePath: string) => readonly PendingEdit[];
+  readonly listOpenEdits: (filePath: string, agent?: AnyAgentId | null) => readonly PendingEdit[];
   readonly getSnapshot: (editId: number) => string | null;
   readonly recordCommitCheck: (event: NewEvent, editIds: readonly number[]) => StoredEvent;
   readonly listUnattachedChecks: () => readonly UnattachedCheck[];
@@ -81,8 +82,8 @@ export interface Store {
   readonly saveClassification: (failureId: number, value: SavedClassification) => void;
   readonly recordClassifyError: (failureId: number, error: string) => void;
   readonly listFailuresToExport: (filter: ExportFilter) => readonly FailureToExport[];
-  readonly countFailuresForReport: (since: string | null) => readonly FailureCountRow[];
-  readonly countChecksForReport: (since: string | null) => readonly CheckCountRow[];
+  readonly countFailuresForReport: (since: string | null, agents?: readonly string[] | null) => readonly FailureCountRow[];
+  readonly countChecksForReport: (since: string | null, agents?: readonly string[] | null) => readonly CheckCountRow[];
   readonly listFailuresForReview: (filter: ReviewFilter) => readonly FailureForReview[];
   readonly getFailureForReview: (id: number) => FailureForReview | null;
   readonly setFailureStatus: (ids: readonly number[], status: FailureStatus) => StatusChange;
@@ -153,7 +154,7 @@ function storeApi(db: import('node:sqlite').DatabaseSync, root: string): Store {
     insertEvent: (event: NewEvent) => insertEvent(db, event),
     listEvents: (filter?: EventFilter) => listEvents(db, filter),
     listUncheckedEdits: (filePaths: readonly string[]) => listUncheckedEdits(db, filePaths),
-    listOpenEdits: (filePath: string) => listOpenEdits(db, filePath),
+    listOpenEdits: (filePath: string, agent?: AnyAgentId | null) => listOpenEdits(db, filePath, agent),
     getSnapshot: (editId: number) => getSnapshot(db, editId),
     recordCommitCheck: (event: NewEvent, editIds: readonly number[]) => recordCommitCheck(db, event, editIds),
     listUnattachedChecks: () => listUnattachedChecks(db),
@@ -167,8 +168,10 @@ function storeApi(db: import('node:sqlite').DatabaseSync, root: string): Store {
     saveClassification: (failureId: number, value: SavedClassification) => saveClassification(db, failureId, value),
     recordClassifyError: (failureId: number, error: string) => recordClassifyError(db, failureId, error),
     listFailuresToExport: (filter: ExportFilter) => listFailuresToExport(db, filter),
-    countFailuresForReport: (since: string | null) => countFailuresForReport(db, since),
-    countChecksForReport: (since: string | null) => countChecksForReport(db, since),
+    countFailuresForReport: (since: string | null, agents: readonly string[] | null = null) =>
+      countFailuresForReport(db, { since, agents }),
+    countChecksForReport: (since: string | null, agents: readonly string[] | null = null) =>
+      countChecksForReport(db, { since, agents }),
     listFailuresForReview: (filter: ReviewFilter) => listFailuresForReview(db, filter),
     getFailureForReview: (id: number) => getFailureForReview(db, id),
     setFailureStatus: (ids: readonly number[], status: FailureStatus) => setFailureStatus(db, ids, status),

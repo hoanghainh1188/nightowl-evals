@@ -31,15 +31,15 @@ describe('report queries', () => {
 
   it('groups failures by file, category, status, source and UTC day', () => {
     expect(store.countFailuresForReport(null)).toEqual([
-      { filePath: 'src/a.ts', category: 'logic', status: 'flagged', source: 'manual-fix', day: '2026-11-02', count: 2 },
-      { filePath: 'src/b.ts', category: null, status: 'dismissed', source: 'ai-self-fix', day: '2026-11-03', count: 1 },
+      { filePath: 'src/a.ts', category: 'logic', status: 'flagged', source: 'manual-fix', agent: 'claude-code', day: '2026-11-02', count: 2 },
+      { filePath: 'src/b.ts', category: null, status: 'dismissed', source: 'ai-self-fix', agent: 'claude-code', day: '2026-11-03', count: 1 },
     ]);
   });
 
   it('counts judged checks by day and leaves superseded ones out', () => {
     expect(store.countChecksForReport(null)).toEqual([
-      { day: '2026-11-01', outcome: 'not-a-failure', count: 1 },
-      { day: '2026-11-02', outcome: 'failure', count: 1 },
+      { day: '2026-11-01', outcome: 'not-a-failure', agent: 'claude-code', count: 1 },
+      { day: '2026-11-02', outcome: 'failure', agent: 'claude-code', count: 1 },
     ]);
   });
 

@@ -31,20 +31,22 @@ describe('toEvent', () => {
 
   it('turns a prompt into a prompt event', async () => {
     expect(await toEvent(payload('user-prompt-submit', repo.path), repo.path)).toEqual({
-      source: 'claude-code',
+      source: 'agent-hook',
       kind: 'prompt',
       sessionId: 's1',
       filePath: null,
+      agent: 'claude-code',
       payload: { prompt: 'thêm validate email cho form đăng ký', truncated: false },
     });
   });
 
   it('turns an Edit into an edit event with the change and a file snapshot', async () => {
     expect(await toEvent(payload('post-tool-use-edit', repo.path), repo.path)).toEqual({
-      source: 'claude-code',
+      source: 'agent-hook',
       kind: 'edit',
       sessionId: 's1',
       filePath: 'src/a.ts',
+      agent: 'claude-code',
       payload: {
         tool: 'Edit',
         input: { old_string: 'return true;', new_string: 'return EMAIL.test(value);', replace_all: false },

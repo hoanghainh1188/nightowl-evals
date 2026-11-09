@@ -1,4 +1,5 @@
 import { parseArgs } from 'node:util';
+import { AGENT_IDS, isAnyAgentId } from '../agents/ids.js';
 import { unifiedDiff } from '../classify/diff.js';
 import { errorMessage } from '../cli/errors.js';
 import { renderCommandHelp } from '../cli/help.js';
@@ -24,7 +25,14 @@ export interface ReviewDeps {
 }
 
 type Action =
-  | { readonly kind: 'list'; readonly statuses: readonly FailureStatus[] | null; readonly source: FailureSource | null; readonly limit: number; readonly json: boolean }
+  | {
+      readonly kind: 'list';
+      readonly statuses: readonly FailureStatus[] | null;
+      readonly source: FailureSource | null;
+      readonly agents: readonly string[] | null;
+      readonly limit: number;
+      readonly json: boolean;
+    }
   | { readonly kind: 'show'; readonly id: number; readonly json: boolean }
   | { readonly kind: 'mark'; readonly mark: Mark; readonly ids: readonly number[] };
 
@@ -44,6 +52,7 @@ function parseList(args: readonly string[]): Action {
       source: { type: 'string' },
       limit: { type: 'string' },
       json: { type: 'boolean' },
+      agent: { type: 'string', multiple: true },
     },
     strict: true,
     allowPositionals: false,
@@ -55,12 +64,17 @@ function parseList(args: readonly string[]): Action {
   if (values.source !== undefined && !SOURCES.includes(values.source as FailureSource)) {
     throw new UsageError(`--source must be one of ${SOURCES.join(', ')}`);
   }
+  const agentFlags = values.agent ?? [];
+  for (const id of agentFlags) {
+    if (!isAnyAgentId(id)) throw new UsageError(`unknown --agent id: ${id} (known: ${AGENT_IDS.join(', ')}, unknown)`);
+  }
   const limit = values.limit === undefined ? DEFAULT_REVIEW_LIMIT : /^[1-9]\d{0,2}$/.test(values.limit) ? Number(values.limit) : Number.NaN;
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIMIT) throw new UsageError(`--limit must be a whole number from 1 to ${MAX_LIMIT}`);
   return {
     kind: 'list',
     statuses: status === 'all' ? null : [status as FailureStatus],
     source: (values.source as FailureSource | undefined) ?? null,
+    agents: agentFlags.length === 0 ? null : agentFlags,
     limit,
     json: values.json === true,
   };
@@ -158,6 +172,7 @@ export function createReviewCommand(deps: ReviewDeps = { cwd: () => process.cwd(
       options: [
         ['--status <name>', `list only: ${[...STATUSES, 'all'].join(', ')} (default: flagged)`],
         ['--source <name>', `list only: ${SOURCES.join(', ')}`],
+        ['--agent <id>', 'list only: filter by agent (repeatable)'],
         [`--limit <1-${MAX_LIMIT}>`, `list only: at most this many (default: ${DEFAULT_REVIEW_LIMIT})`],
         ['--json', 'Output list or show detail as JSON'],
       ],

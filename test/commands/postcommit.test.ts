@@ -34,7 +34,7 @@ describe('nightowl postcommit', () => {
   async function aiWroteThenDevChanged(): Promise<void> {
     await writeFiles(repo.path, { 'a.ts': 'ai\n' });
     const store = await openStore({ cwd: repo.path });
-    store.insertEvent({ source: 'claude-code', kind: 'edit', filePath: 'a.ts', payload: { snapshot: 'ai\n' } });
+    store.insertEvent({ source: 'agent-hook', kind: 'edit', filePath: 'a.ts', payload: { snapshot: 'ai\n' } });
     store.close();
     await writeFiles(repo.path, { 'a.ts': 'dev\n' });
     git(repo.path, ['add', '-A']);

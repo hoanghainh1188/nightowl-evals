@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { parseArgs } from 'node:util';
+import { AGENT_IDS, isAnyAgentId } from '../agents/ids.js';
 import { errorMessage } from '../cli/errors.js';
 import { renderCommandHelp } from '../cli/help.js';
 import { buildReport } from '../report/build.js';
@@ -24,6 +25,7 @@ interface Options {
   readonly depth: number;
   readonly output: string | null;
   readonly failOnRate: number | null;
+  readonly agents: readonly string[] | null;
 }
 
 function parseOptions(args: readonly string[]): Options | string {
@@ -37,6 +39,7 @@ function parseOptions(args: readonly string[]): Options | string {
         depth: { type: 'string' },
         output: { type: 'string', short: 'o' },
         'fail-on-rate': { type: 'string' },
+        agent: { type: 'string', multiple: true },
       },
       strict: true,
       allowPositionals: false,
@@ -63,7 +66,13 @@ function parseOptions(args: readonly string[]): Options | string {
     return '--output cannot be empty';
   }
 
-  return { json: values.json === true, since, depth, output, failOnRate };
+  const agentFlags = values.agent ?? [];
+  for (const id of agentFlags) {
+    if (!isAnyAgentId(id)) return `unknown --agent id: ${id} (known: ${AGENT_IDS.join(', ')}, unknown)`;
+  }
+  const agents = agentFlags.length === 0 ? null : agentFlags;
+
+  return { json: values.json === true, since, depth, output, failOnRate, agents };
 }
 
 export function createReportCommand(deps: ReportDeps = { cwd: () => process.cwd(), now: () => new Date() }): Command {
@@ -73,10 +82,14 @@ export function createReportCommand(deps: ReportDeps = { cwd: () => process.cwd(
     help: renderCommandHelp({
       name: 'report',
       usage: '[options]',
-      description: ['Summarizes recorded failures by type, module and ISO week. Reads only; changes nothing.'],
+      description: [
+        'Summarizes recorded failures by type, module, agent and ISO week. Reads only; changes nothing.',
+        'Includes by_agent and head_to_head comparison of edit-change rates per agent.',
+      ],
       options: [
         ['--since <YYYY-MM-DD>', 'Only failures from this date on'],
         [`--depth <1-${MAX_DEPTH}>`, `Folder levels that make up a module (default: ${DEFAULT_DEPTH})`],
+        ['--agent <id>', 'Only include this agent (repeatable)'],
         ['--json', 'Print the same data as JSON'],
         ['-o, --output <file>', 'Write report output to a file'],
         ['--fail-on-rate <0-100>', 'Exit with code 1 if changed rate exceeds threshold (CI gate)'],
@@ -95,11 +108,12 @@ export function createReportCommand(deps: ReportDeps = { cwd: () => process.cwd(
       }
       try {
         const report = buildReport({
-          failures: store.countFailuresForReport(options.since),
-          checks: store.countChecksForReport(options.since),
+          failures: store.countFailuresForReport(options.since, options.agents),
+          checks: store.countChecksForReport(options.since, options.agents),
           depth: options.depth,
           since: options.since,
           generatedAt: deps.now().toISOString(),
+          agents: options.agents,
         });
         const outputContent = options.json ? formatJson(report) : formatText(report);
         if (options.output !== null) {
