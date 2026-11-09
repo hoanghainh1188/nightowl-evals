@@ -8,6 +8,7 @@ import { PERSONAL_SETTINGS, SHARED_SETTINGS, type SettingsFile } from '../setup/
 import { SetupError } from '../setup/fs-utils.js';
 import { GIT_HOOKS, type GitHookSpec, hookLine, type InstallResult, installGitHook } from '../setup/git-hook.js';
 import { ensureGitignoreEntry, type FileChange, NIGHTOWL_IGNORE } from '../setup/gitignore.js';
+import { detectHookManager } from '../setup/hook-manager.js';
 import { isOnPath } from '../setup/path.js';
 import { printable } from '../shared/printable.js';
 import { findProjectRoot } from '../storage/project-root.js';
@@ -86,14 +87,14 @@ function reportGitHooks(gitHooks: ReadonlyArray<{ hook: GitHookSpec; result: Ins
   const lines = gitHooks.map(({ hook, result }) =>
     result.status === 'manual' ? null : describeChange(relative(root, result.path), result.status, `runs nightowl ${hook.command}`),
   );
-  const manual = gitHooks.flatMap(({ hook, result }) =>
-    result.status === 'manual'
-      ? [
-          `nightowl init: git ${hook.name} hook not installed (${result.reason}).\n` +
-            `  Add this line to your ${hook.name} hook yourself:\n  ${hookLine(hook.command)}\n`,
-        ]
-      : [],
-  );
+  const manual = gitHooks.flatMap(({ hook, result }) => {
+    if (result.status !== 'manual') return [];
+    const manager = detectHookManager(root, result.reason);
+    return [
+      `nightowl init: git ${hook.name} hook not installed (${result.reason}).\n` +
+      `${manager.getInstructions(hook.name, hook.command)}\n`,
+    ];
+  });
   return { lines, manual };
 }
 

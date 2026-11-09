@@ -203,4 +203,25 @@ describe('nightowl init', () => {
     expect(code).toBe(0);
     expect(fake.err()).toContain('npm i -g @hoanghainh/nightowl-evals');
   });
+
+  it('prints specialized Husky instructions when Husky is detected', async () => {
+    git(repo.path, ['config', 'core.hooksPath', '.husky']);
+    const fake = createFakeIo();
+    expect(await createInitCommand({ cwd: () => repo.path, ...ON_PATH }).run([], fake.io)).toBe(0);
+    expect(fake.err()).toContain('Husky detected (.husky/)');
+    expect(fake.err()).toContain('.husky/pre-commit');
+  });
+
+  it('prints specialized Lefthook snippet when Lefthook config exists', async () => {
+    await writeFile(join(repo.path, 'lefthook.yml'), 'pre-commit:\n');
+    const fake = createFakeIo();
+    const code = await createInitCommand({
+      cwd: () => repo.path,
+      ...ON_PATH,
+      installGitHook: async () => ({ status: 'manual', reason: 'managed by lefthook' }),
+    }).run([], fake.io);
+    expect(code).toBe(0);
+    expect(fake.err()).toContain('Lefthook detected (lefthook.yml)');
+    expect(fake.err()).toContain('nightowl precommit');
+  });
 });
