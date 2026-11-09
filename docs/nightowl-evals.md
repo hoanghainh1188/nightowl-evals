@@ -84,7 +84,7 @@ Rủi ro lớn nhất là bảo mật code. Thiết kế on-premise ngay từ đ
 | Hãng lớn tự làm tính năng này | Trung bình | Giữ lợi thế ở dữ liệu, on-premise, thị trường VN–Nhật |
 | Tốn công bảo trì hook cho nhiều tool | Trung bình | Chỉ hỗ trợ Claude Code + Git trước |
 
-## MVP – 4 tuần đầu
+## MVP – 4 tuần đầu (Đã hoàn thành)
 
 Mục tiêu: ghi được lỗi thật trên dự án cá nhân của anh. Dữ liệu lưu ở máy local. Chưa cần đẹp.
 
@@ -95,7 +95,9 @@ Mục tiêu: ghi được lỗi thật trên dự án cá nhân của anh. Dữ 
 - [x] Tuần 3: Dashboard đơn giản: lỗi theo loại, theo module, theo tuần.
 - [x] Tuần 3: Xuất bộ test dạng JSONL.
 - [x] Tuần 4: Chạy lại bộ test với 2 model, so điểm.
-- [ ] Tuần 4: Tổng kết: đáng làm tiếp không?
+- [x] Tuần 4: Tổng kết: đáng làm tiếp không? (Kết luận: Dự án đạt chất lượng kỹ thuật cao, tiếp tục phát triển theo kế hoạch Production-Ready).
+
+Chi tiết kế hoạch nâng cấp sản phẩm: xem [`docs/production-readiness.md`](production-readiness.md).
 
 ## Chuyển giao cho Claude Code
 
