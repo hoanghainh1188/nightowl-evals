@@ -125,4 +125,68 @@ describe('nightowl report', () => {
       await outside.cleanup();
     }
   });
+
+  it('writes output to a specified file with --output or -o', async () => {
+    await seed(repo.path, spec);
+    const outFile = join(repo.path, 'nested/dir/report.json');
+    const result = await run(['--json', '--output', outFile]);
+    expect(result.code).toBe(0);
+    expect(result.err).toBe('');
+    const content = await readFile(outFile, 'utf8');
+    const parsed = JSON.parse(content);
+    expect(parsed.total).toBe(5);
+    expect(result.out).toBe(content);
+
+    // Test with short flag -o
+    const outTextFile = join(repo.path, 'report.txt');
+    const resultText = await run(['-o', outTextFile]);
+    expect(resultText.code).toBe(0);
+    const textContent = await readFile(outTextFile, 'utf8');
+    expect(textContent).toContain('NightOwl report');
+    expect(resultText.out).toBe(textContent);
+  });
+
+  it('enforces CI quality gate with --fail-on-rate', async () => {
+    // 2 failures, 2 non-failures -> 4 checks, failure rate = 50%
+    const checks = [
+      { createdAt: '2026-11-04T10:00:00.000Z', outcome: 'failure' as const },
+      { createdAt: '2026-11-04T10:01:00.000Z', outcome: 'failure' as const },
+      { createdAt: '2026-11-04T10:02:00.000Z', outcome: 'not-a-failure' as const },
+      { createdAt: '2026-11-04T10:03:00.000Z', outcome: 'not-a-failure' as const },
+    ];
+    await seed(repo.path, spec, checks);
+
+    // Exceeds threshold: 50% > 40% -> code 1
+    const failResult = await run(['--fail-on-rate', '40']);
+    expect(failResult.code).toBe(1);
+    expect(failResult.err).toContain('failure rate (50%) exceeds threshold of 40%');
+    expect(failResult.out).toContain('5 failures');
+
+    // Within threshold: 50% <= 60% -> code 0
+    const passResult = await run(['--fail-on-rate', '60']);
+    expect(passResult.code).toBe(0);
+    expect(passResult.err).toBe('');
+
+    // Exact threshold: 50% <= 50% -> code 0
+    const exactResult = await run(['--fail-on-rate', '50']);
+    expect(exactResult.code).toBe(0);
+    expect(exactResult.err).toBe('');
+  });
+
+  it('allows --fail-on-rate to pass when no checks exist', async () => {
+    await seed(repo.path, spec, []);
+    const result = await run(['--fail-on-rate', '10']);
+    expect(result.code).toBe(0);
+    expect(result.err).toBe('');
+  });
+
+  it.each([[['--fail-on-rate', '-1']], [['--fail-on-rate', '101']], [['--fail-on-rate', 'invalid']], [['--output', '   ']]])(
+    'rejects invalid gate and output arguments %j',
+    async (args) => {
+      await seed(repo.path, spec);
+      const result = await run(args);
+      expect(result.code).toBe(1);
+      expect(result.err).toMatch(/^nightowl report: /);
+    },
+  );
 });

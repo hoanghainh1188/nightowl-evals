@@ -54,6 +54,21 @@ describe('nightowl review', () => {
       expect((await review(['--status', 'dismissed'])).out).toContain('b.ts');
       expect((await review(['--status', 'all', '--limit', '1'])).out.match(/^#/gm)).toHaveLength(1);
     });
+
+    it('outputs list as JSON with --json', async () => {
+      const result = await review(['--json']);
+      expect(result.code).toBe(0);
+      expect(result.err).toBe('');
+      const list = JSON.parse(result.out);
+      expect(Array.isArray(list)).toBe(true);
+      expect(list).toHaveLength(2); // Only flagged by default (c.ts and a.ts)
+      expect(list.map((item: { id: number }) => item.id)).toEqual([ids[2], ids[0]]);
+      expect(list[0]).toMatchObject({
+        filePath: 'c.ts',
+        source: 'ai-self-fix',
+        status: 'flagged',
+      });
+    });
   });
 
   describe('show', () => {
@@ -61,6 +76,22 @@ describe('nightowl review', () => {
       const result = await review(['show', `#${ids[2]}`]);
       expect(result.code).toBe(0);
       expect(result.out).toContain('Feedback\n  wrong, 18 counts');
+    });
+
+    it('outputs show details as JSON with --json', async () => {
+      const result = await review(['show', String(ids[2]), '--json']);
+      expect(result.code).toBe(0);
+      expect(result.err).toBe('');
+      const detail = JSON.parse(result.out);
+      expect(detail).toMatchObject({
+        id: ids[2],
+        filePath: 'c.ts',
+        source: 'ai-self-fix',
+        status: 'flagged',
+        prompt: 'isAdult',
+        feedback: 'wrong, 18 counts',
+      });
+      expect(detail.diff).toBeDefined();
     });
 
     it('fails on an unknown id', async () => {
@@ -181,7 +212,7 @@ describe('nightowl review', () => {
   it('is registered, with help for every subcommand', async () => {
     const fake = createFakeIo();
     expect(await run(['review', '--help'], fake.io)).toBe(0);
-    for (const word of ['list', 'show', 'confirm', 'dismiss', 'reset', '--status', '--source', '--limit']) {
+    for (const word of ['list', 'show', 'confirm', 'dismiss', 'reset', '--status', '--source', '--limit', '--json']) {
       expect(fake.out()).toContain(word);
     }
     const general = createFakeIo();

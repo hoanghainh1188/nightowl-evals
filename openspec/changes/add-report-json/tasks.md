@@ -1,0 +1,21 @@
+# Nhiệm vụ: Machine-Readable Outputs & CI/CD Quality Gate (`add-report-json`)
+
+- [x] 1. Cập nhật `src/commands/report.ts` <!-- id: report-cli -->
+  - [x] 1.1. Bổ sung `writeFile` vào `ReportDeps`
+  - [x] 1.2. Mở rộng `parseOptions` hỗ trợ `--output` (`-o`) và `--fail-on-rate`
+  - [x] 1.3. Cập nhật logic `run` để ghi file và kiểm tra ngưỡng lỗi vượt mức
+  - [x] 1.4. Cập nhật `help` của lệnh `report`
+- [x] 2. Bổ sung kiểm thử cho `nightowl report` <!-- id: report-tests -->
+  - [x] 2.1. Viết test cho `--output` (tạo thư mục, nội dung tương ứng text/JSON)
+  - [x] 2.2. Viết test cho `--fail-on-rate` (vượt ngưỡng fail 1, trong ngưỡng pass 0, chưa có data pass 0, giá trị không hợp lệ)
+- [x] 3. Cập nhật `src/commands/review.ts` <!-- id: review-cli -->
+  - [x] 3.1. Mở rộng kiểu `Action` hỗ trợ trường `json: boolean`
+  - [x] 3.2. Cập nhật `parseList` và `parseAction` (cho `show`) nhận cờ `--json`
+  - [x] 3.3. Cập nhật `runRead` để in JSON khi cờ `json === true`
+  - [x] 3.4. Cập nhật `help` của lệnh `review`
+- [x] 4. Bổ sung kiểm thử cho `nightowl review` <!-- id: review-tests -->
+  - [x] 4.1. Viết test cho `nightowl review --json` (mảng JSON các failure)
+  - [x] 4.2. Viết test cho `nightowl review show <id> --json` (object JSON chi tiết failure)
+- [x] 5. Kiểm tra toàn diện & Hoàn thiện <!-- id: verify -->
+  - [x] 5.1. Chạy toàn bộ test suite, policy checks và type check
+  - [x] 5.2. Chạy `npx openspec validate add-report-json --strict`
