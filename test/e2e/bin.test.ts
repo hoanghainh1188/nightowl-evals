@@ -74,7 +74,7 @@ describe('nightowl bin (built)', () => {
     try {
       const result = await runBin(args, { cwd: repo.path });
       expect(result.code).toBe(0);
-      expect(result.stdout).toMatch(/^Usage: nightowl init \[--shared\]\n/);
+      expect(result.stdout).toMatch(/^Usage: nightowl init \[--shared\](?: \[--agents <list>\])?\n/);
       expect(result.stderr).toBe('');
       expect((await readdir(repo.path)).filter((name) => name !== '.git')).toEqual([]);
       expect((await readdir(join(repo.path, '.git/hooks'))).filter((name) => !name.endsWith('.sample'))).toEqual([]);

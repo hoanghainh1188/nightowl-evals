@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import type { AnyAgentId } from '../agents/ids.js';
 import { rollbackQuietly } from './migrations.js';
 
 export interface UnattachedCheck {
@@ -20,6 +21,7 @@ export interface NewFailure {
   readonly source?: FailureSource;
   // The prompt that made the AI redo its edit, for 'ai-self-fix'.
   readonly feedbackEventId?: number | null;
+  readonly agent?: AnyAgentId | null;
 }
 
 export type Attachment =
@@ -58,27 +60,28 @@ export function getEventPayload(db: DatabaseSync, id: number): unknown {
   return row === undefined ? null : (JSON.parse(row.payload) as unknown);
 }
 
-// The latest prompt of the edit's Claude Code session sent before that edit.
+// The latest prompt of the edit's agent session sent before that edit.
 export function findPromptBefore(db: DatabaseSync, editId: number): number | null {
   const row = db
     .prepare(
       `SELECT p.id FROM events p JOIN events e ON e.id = ?
-       WHERE p.source = 'claude-code' AND p.kind = 'prompt'
-         AND p.session_id = e.session_id AND p.id < e.id
+       WHERE p.source = 'agent-hook' AND p.kind = 'prompt'
+         AND p.session_id = e.session_id AND p.agent IS e.agent AND p.id < e.id
        ORDER BY p.id DESC LIMIT 1`,
     )
     .get(editId) as { id: number } | undefined;
   return row?.id ?? null;
 }
 
-// The first prompt of the edits' shared Claude Code session sent between the two edits.
+// The first prompt of the edits' shared agent session sent between the two edits.
 export function findPromptBetween(db: DatabaseSync, afterEditId: number, beforeEditId: number): number | null {
   const row = db
     .prepare(
       `SELECT p.id FROM events p
        JOIN events a ON a.id = ? JOIN events b ON b.id = ?
        WHERE p.session_id = a.session_id AND a.session_id = b.session_id
-         AND p.source = 'claude-code' AND p.kind = 'prompt'
+         AND p.source = 'agent-hook' AND p.kind = 'prompt'
+         AND p.agent IS a.agent AND a.agent IS b.agent
          AND p.id > a.id AND p.id < b.id
        ORDER BY p.id LIMIT 1`,
     )
@@ -87,17 +90,18 @@ export function findPromptBetween(db: DatabaseSync, afterEditId: number, beforeE
 }
 
 // True when `feedbackId` is a prompt of the edit's session sent after that edit of `filePath`
-// and before a later AI edit of the same file in that session.
+// and before a later AI edit of the same file in that session (same agent).
 export function isFeedbackFor(db: DatabaseSync, editId: number, feedbackId: number, filePath: string): boolean {
   const row = db
     .prepare(
       `SELECT 1 FROM events e JOIN events p ON p.id = ?
-       WHERE e.id = ? AND e.source = 'claude-code' AND e.kind = 'edit' AND e.file_path = ?
-         AND p.source = 'claude-code' AND p.kind = 'prompt' AND p.session_id = e.session_id AND p.id > e.id
+       WHERE e.id = ? AND e.source = 'agent-hook' AND e.kind = 'edit' AND e.file_path = ?
+         AND p.source = 'agent-hook' AND p.kind = 'prompt' AND p.session_id = e.session_id
+         AND p.agent IS e.agent AND p.id > e.id
          AND EXISTS (
            SELECT 1 FROM events n
-           WHERE n.source = 'claude-code' AND n.kind = 'edit' AND n.file_path = e.file_path
-             AND n.session_id = e.session_id AND n.id > p.id
+           WHERE n.source = 'agent-hook' AND n.kind = 'edit' AND n.file_path = e.file_path
+             AND n.session_id = e.session_id AND n.agent IS e.agent AND n.id > p.id
          )`,
     )
     .get(feedbackId, editId, filePath);
@@ -111,9 +115,10 @@ export function attachChecks(db: DatabaseSync, commitSha: string, attachments: r
   try {
     const attached = db.prepare('SELECT 1 FROM checks_attached WHERE check_id = ?');
     const insertFailure = db.prepare(
-      `INSERT INTO failures (created_at, file_path, ai_event_id, prompt_event_id, ai_content, final_content, commit_sha, source, feedback_event_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+      `INSERT INTO failures (created_at, file_path, ai_event_id, prompt_event_id, ai_content, final_content, commit_sha, source, feedback_event_id, agent)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
     );
+    const agentOf = db.prepare('SELECT agent FROM events WHERE id = ?');
     const attach = db.prepare('INSERT INTO checks_attached (check_id, outcome, commit_sha, failure_id) VALUES (?, ?, ?, ?)');
     let created = 0;
     for (const item of attachments) {
@@ -121,6 +126,7 @@ export function attachChecks(db: DatabaseSync, commitSha: string, attachments: r
       let failureId: number | null = null;
       if (item.outcome === 'failure') {
         for (const f of item.failures) {
+          const fromEdit = agentOf.get(f.aiEventId) as { agent: AnyAgentId | null } | undefined;
           const row = insertFailure.get(
             new Date().toISOString(),
             f.filePath,
@@ -131,6 +137,7 @@ export function attachChecks(db: DatabaseSync, commitSha: string, attachments: r
             commitSha,
             f.source ?? 'manual-fix',
             f.feedbackEventId ?? null,
+            f.agent ?? fromEdit?.agent ?? null,
           ) as { id: number };
           failureId ??= row.id;
           created += 1;

@@ -81,16 +81,20 @@ function attachFile(store: Store, checks: readonly UnattachedCheck[], file: File
     .filter((check) => check.stagedBlob === null)
     .map((check) => ({ checkId: check.id, outcome: 'not-a-failure' }));
   const comparable = checks.filter((check) => check.stagedBlob !== null);
-  const match = comparable.findLastIndex((check) => check.stagedBlob === file.headBlob);
-  if (match === -1) {
+  const lastMatch = comparable.findLastIndex((check) => check.stagedBlob === file.headBlob);
+  if (lastMatch === -1) {
     if (!file.touched) return closed;
     return [...closed, ...comparable.map((check) => ({ checkId: check.id, outcome: 'superseded' as const }))];
   }
-  // Only checks older than the committed one are replaced; newer ones may belong to the next commit.
+  // Judge every check whose staged blob is HEAD (one per agent is common). Supersede older
+  // non-matching checks; leave anything after the last match for a later commit.
   return [
     ...closed,
-    ...comparable.slice(0, match).map((check) => ({ checkId: check.id, outcome: 'superseded' as const })),
-    judge(store, comparable[match] as UnattachedCheck),
+    ...comparable.slice(0, lastMatch + 1).map((check) =>
+      check.stagedBlob === file.headBlob
+        ? judge(store, check)
+        : { checkId: check.id, outcome: 'superseded' as const },
+    ),
   ];
 }
 

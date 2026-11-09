@@ -20,7 +20,7 @@ describe('nightowl precommit', () => {
     const store = await openStore({ cwd: repo.path });
     try {
       return store.insertEvent({
-        source: 'claude-code',
+        source: 'agent-hook',
         kind: 'edit',
         sessionId,
         filePath: file,
@@ -34,7 +34,7 @@ describe('nightowl precommit', () => {
   async function devSaid(prompt: string, sessionId = 's1'): Promise<number> {
     const store = await openStore({ cwd: repo.path });
     try {
-      return store.insertEvent({ source: 'claude-code', kind: 'prompt', sessionId, payload: { prompt } }).id;
+      return store.insertEvent({ source: 'agent-hook', kind: 'prompt', sessionId, payload: { prompt } }).id;
     } finally {
       store.close();
     }
@@ -131,7 +131,7 @@ describe('nightowl precommit', () => {
     const first = await aiWrote('src/a.ts', 'v1\n');
     const store = await openStore({ cwd: repo.path });
     const second = store.insertEvent({
-      source: 'claude-code',
+      source: 'agent-hook',
       kind: 'edit',
       filePath: 'src/a.ts',
       payload: { tool: 'Write', snapshot: null, snapshot_skipped: 'too_large' },
@@ -193,7 +193,7 @@ describe('nightowl precommit', () => {
     await writeFiles(repo.path, files);
     const store = await openStore({ cwd: repo.path });
     for (const [file, content] of Object.entries(files)) {
-      store.insertEvent({ source: 'claude-code', kind: 'edit', filePath: file, payload: { snapshot: content } });
+      store.insertEvent({ source: 'agent-hook', kind: 'edit', filePath: file, payload: { snapshot: content } });
     }
     store.close();
     git(repo.path, ['add', '-A']);

@@ -32,7 +32,7 @@ describe('review queries', () => {
   });
 
   const listed = (filter: Partial<Parameters<Store['listFailuresForReview']>[0]> = {}) =>
-    store.listFailuresForReview({ statuses: ['flagged'], source: null, limit: 20, ...filter }).map((f) => f.filePath);
+    store.listFailuresForReview({ statuses: ['flagged'], source: null, agents: null, limit: 20, ...filter }).map((f) => f.filePath);
 
   it('lists flagged failures, newest first', () => {
     expect(listed()).toEqual(['c.ts', 'a.ts']);

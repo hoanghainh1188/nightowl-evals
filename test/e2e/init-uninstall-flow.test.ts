@@ -39,7 +39,7 @@ describe('init, the personal hook and uninstall (built bin)', () => {
   }
 
   it('records through the personal hook, stays out of git, and uninstalls cleanly', async () => {
-    expect(nightowl(['init']).status).toBe(0);
+    expect(nightowl(['init', '--agents', 'claude-code']).status).toBe(0);
     expect(git(repo.path, ['status', '--porcelain', '--untracked-files=all'])).toBe('?? .gitignore\n');
 
     const hook = await runClaudeHook('UserPromptSubmit', hookFixture('user-prompt-submit', repo.path));

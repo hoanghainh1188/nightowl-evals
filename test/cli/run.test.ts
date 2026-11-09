@@ -121,7 +121,7 @@ describe('run', () => {
     it('shows hook help without reading stdin', async () => {
       const fake = createFakeIo({ stdin: '{"hook_event_name":"UserPromptSubmit"}' });
       expect(await run(['log', '--help'], fake.io)).toBe(0);
-      expect(fake.out()).toMatch(/^Usage: nightowl log\n/);
+      expect(fake.out()).toMatch(/^Usage: nightowl log(?: \[--agent <id>\])?\n/);
       expect(fake.stdinReads()).toBe(0);
     });
 

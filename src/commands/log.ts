@@ -1,20 +1,40 @@
-import { recordClaudeCodeEvent } from '../hooks/claude-code/record.js';
+import { recordAgentEvent } from '../agents/record.js';
+import { AGENT_IDS } from '../agents/ids.js';
 import { renderCommandHelp } from '../cli/help.js';
 import type { StdinRead } from '../cli/io.js';
 import { INTERNAL_ENV } from '../shared/internal-env.js';
 import type { Command } from './command.js';
+import { parseArgs } from 'node:util';
 
-// Claude Code closes stdin right after writing the event; anything slower is a stuck pipe.
+// Agent hooks close stdin right after writing the event; anything slower is a stuck pipe.
 export const LOG_STDIN_TIMEOUT_MS = 500;
 
 export interface LogDeps {
   readonly cwd: () => string;
-  readonly record: (input: StdinRead, cwd: string) => Promise<void>;
+  readonly record: (input: StdinRead, cwd: string, forcedAgent?: string | null) => Promise<void>;
   readonly isInternal?: () => boolean;
 }
 
-const defaultDeps: LogDeps = { cwd: () => process.cwd(), record: recordClaudeCodeEvent };
+const defaultDeps: LogDeps = {
+  cwd: () => process.cwd(),
+  record: (input, cwd, forcedAgent) =>
+    recordAgentEvent(input, cwd, forcedAgent === undefined ? {} : { forcedAgent }),
+};
 const isInternalRun = () => process.env[INTERNAL_ENV] === '1';
+
+function parseAgentFlag(args: readonly string[]): string | null | 'error' {
+  try {
+    const { values } = parseArgs({
+      args: [...args],
+      options: { agent: { type: 'string' } },
+      strict: true,
+      allowPositionals: false,
+    });
+    return values.agent ?? null;
+  } catch {
+    return 'error';
+  }
+}
 
 // Called by agent hooks on every tool use: it must never fail, print or block.
 export function createLogCommand(deps: LogDeps = defaultDeps): Command {
@@ -23,22 +43,25 @@ export function createLogCommand(deps: LogDeps = defaultDeps): Command {
     summary: 'Record a hook event read from stdin (used by hooks)',
     help: renderCommandHelp({
       name: 'log',
-      usage: '',
+      usage: '[--agent <id>]',
       description: [
-        'Records a Claude Code hook event (prompt or file edit) read from stdin.',
-        'Called by the Claude Code hooks; you do not run it yourself. Always exits 0 and prints nothing.',
+        'Records an agent hook event (prompt or file edit) read from stdin.',
+        'Supports Claude Code, Cursor, Windsurf, Cline, Roo, Copilot Workspace, and Aider.',
+        'Called by agent hooks; you do not run it yourself. Always exits 0 and prints nothing.',
       ],
-      options: [],
+      options: [[`--agent <id>`, `Force agent id (${AGENT_IDS.join(', ')}) when stdin is generic`]],
     }),
-    run: async (_args, io) => {
+    run: async (args, io) => {
       try {
+        const forced = parseAgentFlag(args);
+        // Bad flags still exit 0: never block an agent hook.
+        const forcedAgent = forced === 'error' ? null : forced;
         if (!io.stdin.isTTY) {
-          // Drain stdin either way so the writer never sees a broken pipe.
           const input = await io.stdin.readAll(LOG_STDIN_TIMEOUT_MS);
-          if (!(deps.isInternal ?? isInternalRun)()) await deps.record(input, deps.cwd());
+          if (!(deps.isInternal ?? isInternalRun)()) await deps.record(input, deps.cwd(), forcedAgent);
         }
       } catch {
-        // Swallowed on purpose: a broken event must not stop Claude Code or git.
+        // Swallowed on purpose: a broken event must not stop the agent or git.
       }
       return 0;
     },

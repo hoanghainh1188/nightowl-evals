@@ -147,3 +147,10 @@ Với mọi lệnh con đã đăng ký, khi `-h` hoặc `--help` có ở bất k
 #### Scenario: Lệnh con gõ sai
 - **WHEN** chạy `nightowl review dismis 12`
 - **THEN** stderr chứa `dismis` và `--help`, không lỗi nào đổi trạng thái, mã thoát là 1
+
+### Requirement: help nêu đa agent
+Help của `init`, `log`, `report`, `review`, `uninstall` SHALL mô tả ngắn hỗ trợ đa agent và các flag `--agents` / `--agent` khi có.
+
+#### Scenario: init --help
+- **WHEN** chạy `nightowl init --help`
+- **THEN** stdout có `--agents` và liệt kê hoặc trỏ tới danh sách agent hỗ trợ

@@ -36,7 +36,8 @@ const row = (
   count = 1,
   status = 'flagged',
   source = 'manual-fix',
-): FailureCountRow => ({ filePath, category, status, source, day, count });
+  agent: string | null = 'claude-code',
+): FailureCountRow => ({ filePath, category, status, source, agent, day, count });
 
 describe('buildReport', () => {
   const base = { depth: 2, since: null, generatedAt: '2026-11-04T12:00:00.000Z' };
@@ -77,8 +78,8 @@ describe('buildReport', () => {
       ...base,
       failures: [],
       checks: [
-        { day: '2026-11-02', outcome: 'failure', count: 1 },
-        { day: '2026-11-03', outcome: 'not-a-failure', count: 3 },
+        { day: '2026-11-02', outcome: 'failure', agent: 'claude-code', count: 1 },
+        { day: '2026-11-03', outcome: 'not-a-failure', agent: 'claude-code', count: 3 },
       ],
     });
     expect(report.changedRate).toEqual({ failures: 1, checked: 4, rate: 0.25 });

@@ -17,7 +17,14 @@ describe('failure records storage', () => {
   });
 
   const event = (kind: string, sessionId: string | null, filePath: string | null = null) =>
-    store.insertEvent({ source: kind === 'commit-check' ? 'git' : 'claude-code', kind, sessionId, filePath, payload: { n: 1 } });
+    store.insertEvent({
+      source: kind === 'commit-check' ? 'git' : 'agent-hook',
+      kind,
+      sessionId,
+      filePath,
+      agent: kind === 'commit-check' ? null : 'claude-code',
+      payload: { n: 1 },
+    });
 
   const failure = (aiEventId: number, overrides: Partial<NewFailure> = {}): NewFailure => ({
     filePath: 'a.ts',
@@ -88,9 +95,9 @@ describe('failure records storage', () => {
   });
 
   it('lists failures to classify with their feedback prompt', () => {
-    const prompt = store.insertEvent({ source: 'claude-code', kind: 'prompt', sessionId: 's1', payload: { prompt: 'write it' } });
+    const prompt = store.insertEvent({ source: 'agent-hook', kind: 'prompt', sessionId: 's1', payload: { prompt: 'write it' } });
     const edit = event('edit', 's1', 'a.ts');
-    const feedback = store.insertEvent({ source: 'claude-code', kind: 'prompt', sessionId: 's1', payload: { prompt: 'wrong' } });
+    const feedback = store.insertEvent({ source: 'agent-hook', kind: 'prompt', sessionId: 's1', payload: { prompt: 'wrong' } });
     const check = event('commit-check', null, 'a.ts');
     store.attachChecks('abc', [
       {

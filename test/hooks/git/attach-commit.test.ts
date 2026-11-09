@@ -33,7 +33,7 @@ describe('attachCommit', () => {
   async function insert(kind: 'edit' | 'prompt', sessionId: string, filePath: string | null, payload: unknown): Promise<number> {
     const store = await openStore({ cwd: repo.path });
     try {
-      return store.insertEvent({ source: 'claude-code', kind, sessionId, filePath, payload }).id;
+      return store.insertEvent({ source: 'agent-hook', kind, sessionId, filePath, payload }).id;
     } finally {
       store.close();
     }
@@ -288,7 +288,7 @@ describe('attachCommit', () => {
       await checkStagedChanges(repo.path, far());
       const db = new DatabaseSync(join(repo.path, '.nightowl/nightowl.db'));
       try {
-        const other = db.prepare(`INSERT INTO events (created_at, source, kind, session_id, payload) VALUES ('t', 'claude-code', 'prompt', 's9', '{"prompt":"secret"}') RETURNING id`).get() as { id: number };
+        const other = db.prepare(`INSERT INTO events (created_at, source, kind, session_id, payload, agent) VALUES ('t', 'agent-hook', 'prompt', 's9', '{"prompt":"secret"}', 'claude-code') RETURNING id`).get() as { id: number };
         db.prepare(`UPDATE events SET payload = json_set(payload, '$.self_fix.feedback_event_id', ?) WHERE kind = 'commit-check'`).run(other.id);
       } finally {
         db.close();

@@ -16,7 +16,7 @@ describe('pending AI edits', () => {
   });
 
   const edit = (filePath: string, snapshot: string | null) =>
-    store.insertEvent({ source: 'claude-code', kind: 'edit', sessionId: 's1', filePath, payload: { snapshot } });
+    store.insertEvent({ source: 'agent-hook', kind: 'edit', sessionId: 's1', filePath, payload: { snapshot } });
 
   const check = (filePath: string, editIds: readonly number[]) =>
     store.recordCommitCheck({ source: 'git', kind: 'commit-check', filePath, payload: { ai_event_ids: editIds } }, editIds);
@@ -26,8 +26,8 @@ describe('pending AI edits', () => {
     const a2 = edit('a.ts', null);
     edit('b.ts', 'x');
     expect(store.listUncheckedEdits(['a.ts'])).toEqual([
-      { id: a1.id, filePath: 'a.ts', sessionId: 's1' },
-      { id: a2.id, filePath: 'a.ts', sessionId: 's1' },
+      { id: a1.id, filePath: 'a.ts', sessionId: 's1', agent: null },
+      { id: a2.id, filePath: 'a.ts', sessionId: 's1', agent: null },
     ]);
   });
 

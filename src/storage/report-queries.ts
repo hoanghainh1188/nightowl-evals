@@ -5,6 +5,7 @@ export interface FailureCountRow {
   readonly category: string | null;
   readonly status: string;
   readonly source: string;
+  readonly agent: string | null;
   // YYYY-MM-DD in UTC.
   readonly day: string;
   readonly count: number;
@@ -13,27 +14,39 @@ export interface FailureCountRow {
 export interface CheckCountRow {
   readonly day: string;
   readonly outcome: 'failure' | 'not-a-failure';
+  readonly agent: string | null;
   readonly count: number;
 }
 
-// Failure counts grouped by file, category, status, source and day. Never reads code columns.
-export function countFailuresForReport(db: DatabaseSync, since: string | null): readonly FailureCountRow[] {
+export interface ReportQueryFilter {
+  readonly since: string | null;
+  readonly agents: readonly string[] | null;
+}
+
+function agentsJson(agents: readonly string[] | null): string | null {
+  return agents === null || agents.length === 0 ? null : JSON.stringify(agents);
+}
+
+// Failure counts grouped by file, category, status, source, agent and day. Never reads code columns.
+export function countFailuresForReport(db: DatabaseSync, filter: ReportQueryFilter): readonly FailureCountRow[] {
+  const agents = agentsJson(filter.agents);
   const rows = db
     .prepare(
-      `SELECT file_path, category, status, source, substr(created_at, 1, 10) AS day, COUNT(*) AS n
-       FROM failures WHERE ? IS NULL OR created_at >= ?
-       GROUP BY file_path, category, status, source, day ORDER BY day, file_path, source`,
+      `SELECT file_path, category, status, source, agent, substr(created_at, 1, 10) AS day, COUNT(*) AS n
+       FROM failures
+       WHERE (? IS NULL OR created_at >= ?)
+         AND (? IS NULL OR agent IN (SELECT value FROM json_each(?)))
+       GROUP BY file_path, category, status, source, agent, day ORDER BY day, file_path, source, agent`,
     )
-    
-    // Plain `?` placeholders: numbered ones (?1) fail to bind on Node 22.13's node:sqlite.
-    .all(since, since) as unknown as Array<{
-      file_path: string;
-      category: string | null;
-      status: string;
-      source: string;
-      day: string;
-      n: number;
-    }>;
+    .all(filter.since, filter.since, agents, agents) as unknown as Array<{
+    file_path: string;
+    category: string | null;
+    status: string;
+    source: string;
+    agent: string | null;
+    day: string;
+    n: number;
+  }>;
   return Object.freeze(
     rows.map((row) =>
       Object.freeze({
@@ -41,6 +54,7 @@ export function countFailuresForReport(db: DatabaseSync, since: string | null): 
         category: row.category,
         status: row.status,
         source: row.source,
+        agent: row.agent,
         day: row.day,
         count: row.n,
       }),
@@ -49,15 +63,24 @@ export function countFailuresForReport(db: DatabaseSync, since: string | null): 
 }
 
 // Commit-checks judged after a commit, by day of the check. Superseded checks never reached a commit.
-export function countChecksForReport(db: DatabaseSync, since: string | null): readonly CheckCountRow[] {
+export function countChecksForReport(db: DatabaseSync, filter: ReportQueryFilter): readonly CheckCountRow[] {
+  const agents = agentsJson(filter.agents);
   const rows = db
     .prepare(
-      `SELECT substr(e.created_at, 1, 10) AS day, a.outcome, COUNT(*) AS n
+      `SELECT substr(e.created_at, 1, 10) AS day, a.outcome, e.agent, COUNT(*) AS n
        FROM checks_attached a JOIN events e ON e.id = a.check_id
-       WHERE a.outcome != 'superseded' AND (? IS NULL OR e.created_at >= ?)
-       GROUP BY day, a.outcome ORDER BY day`,
+       WHERE a.outcome != 'superseded'
+         AND (? IS NULL OR e.created_at >= ?)
+         AND (? IS NULL OR e.agent IN (SELECT value FROM json_each(?)))
+       GROUP BY day, a.outcome, e.agent ORDER BY day`,
     )
-    
-    .all(since, since) as unknown as Array<{ day: string; outcome: 'failure' | 'not-a-failure'; n: number }>;
-  return Object.freeze(rows.map((row) => Object.freeze({ day: row.day, outcome: row.outcome, count: row.n })));
+    .all(filter.since, filter.since, agents, agents) as unknown as Array<{
+    day: string;
+    outcome: 'failure' | 'not-a-failure';
+    agent: string | null;
+    n: number;
+  }>;
+  return Object.freeze(
+    rows.map((row) => Object.freeze({ day: row.day, outcome: row.outcome, agent: row.agent, count: row.n })),
+  );
 }

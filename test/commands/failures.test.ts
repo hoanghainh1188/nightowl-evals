@@ -15,7 +15,7 @@ describe('nightowl failures', () => {
   async function addFailures(statuses: readonly string[]): Promise<void> {
     const store = await openStore({ cwd: repo.path });
     try {
-      const edit = store.insertEvent({ source: 'claude-code', kind: 'edit', filePath: 'a.ts', payload: {} });
+      const edit = store.insertEvent({ source: 'agent-hook', kind: 'edit', filePath: 'a.ts', payload: {} });
       for (const status of statuses) {
         const check = store.insertEvent({ source: 'git', kind: 'commit-check', filePath: 'a.ts', payload: {} });
         store.attachChecks('sha', [
