@@ -1,4 +1,5 @@
 import { parseArgs } from 'node:util';
+import { unifiedDiff } from '../classify/diff.js';
 import { errorMessage } from '../cli/errors.js';
 import { renderCommandHelp } from '../cli/help.js';
 import type { Io } from '../cli/io.js';
@@ -23,8 +24,8 @@ export interface ReviewDeps {
 }
 
 type Action =
-  | { readonly kind: 'list'; readonly statuses: readonly FailureStatus[] | null; readonly source: FailureSource | null; readonly limit: number }
-  | { readonly kind: 'show'; readonly id: number }
+  | { readonly kind: 'list'; readonly statuses: readonly FailureStatus[] | null; readonly source: FailureSource | null; readonly limit: number; readonly json: boolean }
+  | { readonly kind: 'show'; readonly id: number; readonly json: boolean }
   | { readonly kind: 'mark'; readonly mark: Mark; readonly ids: readonly number[] };
 
 class UsageError extends Error {}
@@ -38,7 +39,12 @@ function parseId(value: string): number {
 function parseList(args: readonly string[]): Action {
   const { values } = parseArgs({
     args: [...args],
-    options: { status: { type: 'string' }, source: { type: 'string' }, limit: { type: 'string' } },
+    options: {
+      status: { type: 'string' },
+      source: { type: 'string' },
+      limit: { type: 'string' },
+      json: { type: 'boolean' },
+    },
     strict: true,
     allowPositionals: false,
   });
@@ -56,6 +62,7 @@ function parseList(args: readonly string[]): Action {
     statuses: status === 'all' ? null : [status as FailureStatus],
     source: (values.source as FailureSource | undefined) ?? null,
     limit,
+    json: values.json === true,
   };
 }
 
@@ -68,9 +75,14 @@ function parseAction(args: readonly string[]): Action {
   if (first === undefined || first.startsWith('-')) return parseList(args);
   if (first === 'list') return parseList(rest);
   if (first === 'show') {
-    const ids = positionals(rest);
-    if (ids.length !== 1) throw new UsageError('show takes exactly one id');
-    return { kind: 'show', id: parseId(ids[0] as string) };
+    const { values, positionals } = parseArgs({
+      args: [...rest],
+      options: { json: { type: 'boolean' } },
+      strict: true,
+      allowPositionals: true,
+    });
+    if (positionals.length !== 1) throw new UsageError('show takes exactly one id');
+    return { kind: 'show', id: parseId(positionals[0] as string), json: values.json === true };
   }
   if (Object.hasOwn(MARKS, first)) {
     const ids = positionals(rest);
@@ -111,11 +123,20 @@ function runRead(store: Store, action: Exclude<Action, { kind: 'mark' }>, io: Io
       io.stderr(`nightowl review: no failure #${action.id}\n`);
       return 1;
     }
-    io.stdout(formatDetail(failure));
+    if (action.json) {
+      const diff = unifiedDiff(failure.aiContent, failure.finalContent);
+      io.stdout(`${JSON.stringify({ ...failure, diff }, null, 2)}\n`);
+    } else {
+      io.stdout(formatDetail(failure));
+    }
     return 0;
   }
   const failures = store.listFailuresForReview(action);
-  io.stdout(formatList(failures, action.statuses === null ? null : (action.statuses[0] as string)));
+  if (action.json) {
+    io.stdout(`${JSON.stringify(failures, null, 2)}\n`);
+  } else {
+    io.stdout(formatList(failures, action.statuses === null ? null : (action.statuses[0] as string)));
+  }
   return 0;
 }
 
@@ -138,6 +159,7 @@ export function createReviewCommand(deps: ReviewDeps = { cwd: () => process.cwd(
         ['--status <name>', `list only: ${[...STATUSES, 'all'].join(', ')} (default: flagged)`],
         ['--source <name>', `list only: ${SOURCES.join(', ')}`],
         [`--limit <1-${MAX_LIMIT}>`, `list only: at most this many (default: ${DEFAULT_REVIEW_LIMIT})`],
+        ['--json', 'Output list or show detail as JSON'],
       ],
     }),
     run: async (args, io) => {
