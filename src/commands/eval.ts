@@ -8,6 +8,15 @@ import { type RunClaude, runClaude } from '../classify/run-claude.js';
 import { type EvalCase, type LoadedCases, loadCases, type SkipReason } from '../eval/cases.js';
 import { parseGeneratedFile } from '../eval/parse.js';
 import { buildEvalPrompt, GENERATED_FILE_SCHEMA } from '../eval/prompt.js';
+import {
+  DEFAULT_TEST_TIMEOUT_SEC,
+  MAX_TEST_TIMEOUT_SEC,
+  MIN_TEST_TIMEOUT_SEC,
+  type RunShellCommand,
+  runShellCommand,
+  type TestRunResult,
+  withSwappedFile,
+} from '../eval/run-tests.js';
 import { type Score, scoreOutput } from '../eval/score.js';
 import { isOnPath } from '../setup/path.js';
 import { writeFileAtomic } from '../setup/fs-utils.js';
@@ -29,6 +38,7 @@ const MAX_LISTED_DIFFERENCES = 20;
 export interface EvalDeps {
   readonly cwd: () => string;
   readonly runClaude: RunClaude;
+  readonly runShell: RunShellCommand;
   readonly isOnPath: (command: string) => boolean;
   readonly now: () => Date;
 }
@@ -36,6 +46,7 @@ export interface EvalDeps {
 const defaultDeps: EvalDeps = {
   cwd: () => process.cwd(),
   runClaude,
+  runShell: runShellCommand,
   isOnPath: (command) => isOnPath(command, process.env.PATH),
   now: () => new Date(),
 };
@@ -46,6 +57,9 @@ interface Options {
   readonly models: readonly string[];
   readonly customModels: boolean;
   readonly limit: number;
+  readonly testCommand: string | null;
+  readonly testTimeoutSec: number;
+  readonly requireTests: boolean;
 }
 
 interface Result {
@@ -54,6 +68,9 @@ interface Result {
   readonly output: string | null;
   readonly score: Score | null;
   readonly error: string | null;
+  readonly testsPassed: boolean | null;
+  readonly testsExitCode: number | null;
+  readonly testsError: string | null;
 }
 
 function parseOptions(args: readonly string[]): Options | string {
@@ -66,6 +83,9 @@ function parseOptions(args: readonly string[]): Options | string {
         input: { type: 'string' },
         model: { type: 'string', multiple: true },
         limit: { type: 'string' },
+        'test-command': { type: 'string' },
+        'test-timeout': { type: 'string' },
+        'require-tests': { type: 'boolean' },
       },
       strict: true,
       allowPositionals: false,
@@ -79,7 +99,29 @@ function parseOptions(args: readonly string[]): Options | string {
   const bad = models.find((model) => !MODEL_NAME.test(model));
   if (bad !== undefined) return `invalid --model: ${bad}`;
   if (values.input === '') return '--input needs a file path';
-  return { yes: values.yes === true, input: values.input ?? null, models, customModels: values.model !== undefined, limit };
+  const testCommand = values['test-command'] ?? null;
+  if (testCommand === '') return '--test-command needs a shell command';
+  const testTimeoutSec =
+    values['test-timeout'] === undefined ? DEFAULT_TEST_TIMEOUT_SEC : Number(values['test-timeout']);
+  if (
+    !Number.isInteger(testTimeoutSec) ||
+    testTimeoutSec < MIN_TEST_TIMEOUT_SEC ||
+    testTimeoutSec > MAX_TEST_TIMEOUT_SEC
+  ) {
+    return `--test-timeout must be a whole number from ${MIN_TEST_TIMEOUT_SEC} to ${MAX_TEST_TIMEOUT_SEC}`;
+  }
+  const requireTests = values['require-tests'] === true;
+  if (requireTests && testCommand === null) return '--require-tests needs --test-command';
+  return {
+    yes: values.yes === true,
+    input: values.input ?? null,
+    models,
+    customModels: values.model !== undefined,
+    limit,
+    testCommand,
+    testTimeoutSec,
+    requireTests,
+  };
 }
 
 const SKIP_LABELS: Readonly<Record<SkipReason, string>> = {
@@ -111,24 +153,62 @@ function listFiles(cases: readonly EvalCase[]): string {
   return shown.join('') + (files.length > shown.length ? `  … and ${files.length - shown.length} more\n` : '');
 }
 
-function dryRun(cases: readonly EvalCase[], loaded: LoadedCases, options: Options, io: Io): number {
-  const bytes = cases.reduce((sum, evalCase) => sum + Buffer.byteLength(buildEvalPrompt(evalCase)), 0) * options.models.length;
-  const rerun = [
+function rerunHint(options: Options): string {
+  return [
     'nightowl eval --yes',
     ...(options.input === null ? [] : [`--input ${shellQuote(options.input)}`]),
     ...(options.customModels ? options.models.map((model) => `--model ${model}`) : []),
     ...(options.limit === DEFAULT_EVAL_LIMIT ? [] : [`--limit ${options.limit}`]),
+    ...(options.testCommand === null ? [] : [`--test-command ${shellQuote(options.testCommand)}`]),
+    ...(options.testTimeoutSec === DEFAULT_TEST_TIMEOUT_SEC ? [] : [`--test-timeout ${options.testTimeoutSec}`]),
+    ...(options.requireTests ? ['--require-tests'] : []),
   ].join(' ');
+}
+
+function dryRun(cases: readonly EvalCase[], loaded: LoadedCases, options: Options, io: Io): number {
+  const bytes = cases.reduce((sum, evalCase) => sum + Buffer.byteLength(buildEvalPrompt(evalCase)), 0) * options.models.length;
+  const testNote =
+    options.testCommand === null
+      ? ''
+      : `After each answer, would run ${printable(options.testCommand)} in the project root ` +
+        `(timeout ${options.testTimeoutSec}s${options.requireTests ? '; pass requires tests' : ''}).\n`;
   io.stdout(
     `Would run ${cases.length} cases × ${options.models.length} models (${options.models.join(', ')}) = ` +
       `${cases.length * options.models.length} calls to Claude Code, ${(bytes / 1024).toFixed(1)} KB${skippedNote(loaded)}.\n` +
       `Files whose content would be sent:\n${listFiles(cases)}` +
-      `Nothing was sent. The code leaves your machine only if you run:\n  ${printable(rerun)}\n`,
+      testNote +
+      `Nothing was sent. The code leaves your machine only if you run:\n  ${printable(rerunHint(options))}\n`,
   );
   return 0;
 }
 
-async function runOne(evalCase: EvalCase, model: string, deps: EvalDeps): Promise<Result> {
+function applyRequireTests(score: Score, tests: TestRunResult | null, requireTests: boolean): Score {
+  if (!requireTests || tests === null) return score;
+  return { ...score, pass: score.pass && tests.passed };
+}
+
+function emptyTests(): Pick<Result, 'testsPassed' | 'testsExitCode' | 'testsError'> {
+  return { testsPassed: null, testsExitCode: null, testsError: null };
+}
+
+async function runTestsIfConfigured(
+  evalCase: EvalCase,
+  content: string,
+  root: string,
+  options: Options,
+  deps: EvalDeps,
+): Promise<TestRunResult | null> {
+  if (options.testCommand === null) return null;
+  const absolutePath = join(root, evalCase.filePath);
+  return withSwappedFile(absolutePath, content, () =>
+    deps.runShell(options.testCommand as string, {
+      cwd: root,
+      timeoutMs: options.testTimeoutSec * 1000,
+    }),
+  );
+}
+
+async function runOne(evalCase: EvalCase, model: string, root: string, options: Options, deps: EvalDeps): Promise<Result> {
   try {
     const stdout = await deps.runClaude(buildEvalPrompt(evalCase), {
       model,
@@ -136,23 +216,55 @@ async function runOne(evalCase: EvalCase, model: string, deps: EvalDeps): Promis
       timeoutMs: EVAL_TIMEOUT_MS,
     });
     const generated = parseGeneratedFile(stdout);
-    if (!generated.ok) return { caseId: evalCase.id, model, output: null, score: null, error: generated.error };
-    const score = scoreOutput({ rejected: evalCase.rejected, expected: evalCase.expected, output: generated.content });
-    return { caseId: evalCase.id, model, output: generated.content, score, error: null };
+    if (!generated.ok) {
+      return { caseId: evalCase.id, model, output: null, score: null, error: generated.error, ...emptyTests() };
+    }
+    const textual = scoreOutput({ rejected: evalCase.rejected, expected: evalCase.expected, output: generated.content });
+    let tests: TestRunResult | null = null;
+    try {
+      tests = await runTestsIfConfigured(evalCase, generated.content, root, options, deps);
+    } catch (error) {
+      return {
+        caseId: evalCase.id,
+        model,
+        output: generated.content,
+        score: applyRequireTests(textual, { passed: false, exitCode: null, error: errorMessage(error) }, options.requireTests),
+        error: null,
+        testsPassed: false,
+        testsExitCode: null,
+        testsError: errorMessage(error),
+      };
+    }
+    return {
+      caseId: evalCase.id,
+      model,
+      output: generated.content,
+      score: applyRequireTests(textual, tests, options.requireTests),
+      error: null,
+      testsPassed: tests?.passed ?? null,
+      testsExitCode: tests?.exitCode ?? null,
+      testsError: tests?.error ?? null,
+    };
   } catch (error) {
-    return { caseId: evalCase.id, model, output: null, score: null, error: errorMessage(error) };
+    return { caseId: evalCase.id, model, output: null, score: null, error: errorMessage(error), ...emptyTests() };
   }
 }
 
-function summary(results: readonly Result[], models: readonly string[]): string {
+function summary(results: readonly Result[], models: readonly string[], withTests: boolean): string {
   const rows = models.map((model) => {
     const mine = results.filter((r) => r.model === model);
     const scored = mine.filter((r) => r.score !== null);
     const passed = scored.filter((r) => r.score?.pass).length;
     const mean = scored.length === 0 ? 'n/a' : (scored.reduce((sum, r) => sum + (r.score?.score ?? 0), 0) / scored.length).toFixed(2);
-    return [model, String(scored.length), String(passed), mean, String(mine.length - scored.length)];
+    const base = [model, String(scored.length), String(passed), mean, String(mine.length - scored.length)];
+    if (!withTests) return base;
+    const tested = mine.filter((r) => r.testsPassed !== null);
+    const testsOk = tested.filter((r) => r.testsPassed).length;
+    return [...base, String(testsOk), String(tested.length)];
   });
-  const header = ['model', 'scored', 'passed', 'mean score', 'failed calls'];
+  const header = withTests
+    ? ['model', 'scored', 'passed', 'mean score', 'failed calls', 'tests ok', 'tested']
+    : ['model', 'scored', 'passed', 'mean score', 'failed calls'];
   const widths = header.map((h, i) => Math.max(h.length, ...rows.map((row) => (row[i] as string).length)));
   const format = (row: readonly string[]) =>
     `  ${row.map((cell, i) => (i === 0 ? cell.padEnd(widths[i] as number) : cell.padStart(widths[i] as number))).join('  ')}`;
@@ -199,6 +311,9 @@ async function saveResults(file: string, runAt: Date, results: readonly Result[]
       repeat: r.score?.repeat ?? null,
       score: r.score?.score ?? null,
       pass: r.score?.pass ?? null,
+      tests_passed: r.testsPassed,
+      tests_exit_code: r.testsExitCode,
+      tests_error: r.testsError,
       error: r.error,
     }),
   );
@@ -222,11 +337,12 @@ async function runAll(
     return 1;
   }
   const byCase: CaseResults[] = [];
-  // Sequential, case by case, so every model sees the same cases in the same conditions.
+  // Sequential, case by case, so every model sees the same cases in the same conditions
+  // and --test-command never races on the same file.
   for (const evalCase of cases) {
     const results: Result[] = [];
     for (const model of options.models) {
-      const result = await runOne(evalCase, model, deps);
+      const result = await runOne(evalCase, model, root, options, deps);
       if (result.error !== null) io.stderr(`nightowl eval: ${printable(evalCase.id)} with ${model}: ${printable(result.error)}\n`);
       results.push(result);
     }
@@ -241,9 +357,10 @@ async function runAll(
     io.stderr(`nightowl eval: could not save the results: ${printable(errorMessage(error))}\n`);
     saved = '';
   }
+  const withTests = options.testCommand !== null;
   io.stdout(
     `Ran ${cases.length} cases × ${options.models.length} models${skippedNote(loaded)}\n` +
-      `${summary(all, options.models)}\n` +
+      `${summary(all, options.models, withTests)}\n` +
       differences(byCase, options.models) +
       saved +
       'Scores compare the lines each model changed with the lines the developer changed; a different but valid fix scores low.\n',
@@ -261,12 +378,19 @@ export function createEvalCommand(deps: EvalDeps = defaultDeps): Command {
       description: [
         'Gives each exported case to Claude models and scores how close each answer is to your fix.',
         'Without --yes it only says what would be sent. With --yes it sends file content to `claude -p`.',
+        'With --test-command, each answer is written into the project file, the command runs, then the file is restored.',
       ],
       options: [
         ['--yes', 'Actually call Claude (default: dry run)'],
         ['--input <file>', `Suite to run (default: ${DATA_DIR}/${EXPORT_DIR}/${EXPORT_FILE})`],
         ['--model <name>', `Model to compare; repeatable (default: ${DEFAULT_MODELS.join(', ')})`],
         [`--limit <1-${MAX_LIMIT}>`, `At most this many cases (default: ${DEFAULT_EVAL_LIMIT})`],
+        ['--test-command <cmd>', 'Shell command to verify each answer in the project root'],
+        [
+          `--test-timeout <${MIN_TEST_TIMEOUT_SEC}-${MAX_TEST_TIMEOUT_SEC}>`,
+          `Seconds before the test command is killed (default: ${DEFAULT_TEST_TIMEOUT_SEC})`,
+        ],
+        ['--require-tests', 'Count as pass only when textual score passes and the test command exits 0'],
       ],
     }),
     run: async (args, io) => {

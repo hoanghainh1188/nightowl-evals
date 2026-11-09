@@ -85,7 +85,7 @@ Chi tiết xem [`docs/production-readiness.md`](../docs/production-readiness.md)
 | 13 | `add-storage-prune` | Cơ chế dọn dẹp snapshot cũ và tối ưu dung lượng SQLite | Hoàn thành |
 | 14 | `add-hook-manager-support` | Hỗ trợ cấu hình tích hợp Husky và Lefthook | Hoàn thành |
 | 15 | `add-report-json` | Thêm cờ `--json` cho `nightowl report` | Hoàn thành |
-| 16 | `add-eval-test-runner` | Hỗ trợ chạy kiểm thử tự động (unit tests) để verify eval | P2 |
+| 16 | `add-eval-test-runner` | Hỗ trợ chạy kiểm thử tự động (unit tests) để verify eval | Hoàn thành |
 | 17 | `add-direct-api-classify` | Hỗ trợ gọi phân loại trực tiếp qua LLM API key | P2 |
 
 ### Định hướng mở rộng tương lai (v0.3.0+ Ideation)

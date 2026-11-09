@@ -205,7 +205,8 @@ nightowl classify [--yes] [--model <name>] [--limit <1-100>] [--redo]
 Feeds each exported test case back to Claude models to benchmark whether new model versions or system rules solve the defect.
 
 ```bash
-nightowl eval [--yes] [--input <file>] [--model <name>] [--limit <1-100>]
+nightowl eval [--yes] [--input <file>] [--model <name>] [--limit <1-100>] \
+  [--test-command <cmd>] [--test-timeout <1-600>] [--require-tests]
 ```
 
 | Option | Meaning |
@@ -214,11 +215,14 @@ nightowl eval [--yes] [--input <file>] [--model <name>] [--limit <1-100>]
 | `--input <file>` | Test suite file to evaluate (default: `.nightowl/export/evals.jsonl`) |
 | `--model <name>` | Models to test; repeatable (default: `haiku` and `sonnet`) |
 | `--limit <1-100>` | Maximum cases to evaluate (default: 20) |
+| `--test-command <cmd>` | After each answer, write it into the case file, run this shell command in the project root, then restore the file |
+| `--test-timeout <1-600>` | Seconds before the test command is killed (default: 120) |
+| `--require-tests` | Count as pass only when the textual score passes **and** the test command exits 0 (needs `--test-command`) |
 
 **Scoring metrics:**
 - **coverage**: share of your intended changes that the model reproduced.
 - **repeat**: share of the defective AI code that the model repeated.
-- **score** = `coverage × (1 − repeat)`. A score ≥ 0.5 is considered passing.
+- **score** = `coverage × (1 − repeat)`. A score ≥ 0.5 is considered passing (unless `--require-tests` also demands a green test command).
 
 Results and detailed metrics are saved to `.nightowl/runs/<timestamp>.jsonl`.
 
