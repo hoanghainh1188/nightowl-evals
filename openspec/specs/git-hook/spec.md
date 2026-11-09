@@ -6,7 +6,7 @@ So code AI viết với code dev thật sự commit, ngay lúc commit, và lưu 
 ## Requirements
 
 ### Requirement: Kiểm tra file AI đã sửa
-Khi chạy `nightowl precommit`, với mỗi file staged (thêm mới hoặc sửa) có sự kiện `edit` kèm ảnh chụp chưa được kiểm tra, NightOwl SHALL so nội dung staged với ảnh chụp mới nhất của file đó và lưu một sự kiện nguồn `git`, loại `commit-check`, tham chiếu tới sự kiện `edit` đó.
+Khi chạy `nightowl precommit`, với mỗi file staged (thêm mới hoặc sửa) có sự kiện `edit` kèm ảnh chụp chưa được kiểm tra, NightOwl SHALL so nội dung staged với ảnh chụp mới nhất của file đó và lưu một sự kiện nguồn `git`, loại `commit-check`, tham chiếu tới sự kiện `edit` đó. Nếu nội dung staged chứa secret inline, NightOwl SHALL NOT lưu `staged_content` mà đánh dấu `staged_skipped: 'contains_secret'`.
 
 #### Scenario: Dev giữ nguyên code AI
 - **WHEN** AI ghi `src/a.ts`, dev stage đúng file đó không sửa gì rồi commit
@@ -23,6 +23,10 @@ Khi chạy `nightowl precommit`, với mỗi file staged (thêm mới hoặc s�
 #### Scenario: Git coi file AI viết là đổi tên
 - **WHEN** AI ghi `new.ts` gần giống `old.ts`, `old.ts` bị xoá, và git nhận ra cặp này là đổi tên
 - **THEN** `new.ts` vẫn được kiểm tra như một file thêm mới
+
+#### Scenario: Staged file chứa secret inline
+- **WHEN** file staged có chứa API token hoặc private key
+- **THEN** sự kiện `commit-check` có `payload.staged_content: null` và `payload.staged_skipped: "contains_secret"`
 
 ### Requirement: Không so với ảnh chụp cũ
 Khi sự kiện `edit` mới nhất của một file không có ảnh chụp (file quá lớn, không đọc được, nhạy cảm hoặc bị git bỏ qua), NightOwl SHALL NOT so với ảnh chụp của sự kiện cũ hơn, mà SHALL lưu `commit-check` với kết quả `skipped`, lý do `no_snapshot`, và đánh dấu mọi sự kiện `edit` đó là đã được tính.
