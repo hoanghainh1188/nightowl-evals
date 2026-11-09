@@ -120,6 +120,24 @@ describe('toEvent', () => {
     expect(JSON.stringify(event)).not.toContain('supersecret');
   });
 
+  it('stores no content when an ordinary file contains an inline secret', async () => {
+    await writeFiles(repo.path, { 'src/config.ts': 'export const key = "ghp_123456789012345678901234567890123456";\n' });
+    const payloadIn: HookPayload = {
+      event: 'PostToolUse',
+      sessionId: 's1',
+      cwd: repo.path,
+      toolName: 'Edit',
+      toolInput: {
+        file_path: join(repo.path, 'src/config.ts'),
+        old_string: 'A',
+        new_string: 'export const key = "ghp_123456789012345678901234567890123456";',
+      },
+    };
+    const event = await toEvent(payloadIn, repo.path);
+    expect(event?.payload).toEqual({ tool: 'Edit', input: { skipped: 'contains_secret' }, snapshot: null, snapshot_skipped: 'contains_secret' });
+    expect(JSON.stringify(event)).not.toContain('ghp_');
+  });
+
   it('stores no content for files git ignores', async () => {
     const gitRepo = await createGitRepo();
     try {

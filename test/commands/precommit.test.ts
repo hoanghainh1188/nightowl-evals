@@ -309,5 +309,18 @@ describe('nightowl precommit', () => {
       await precommit();
       expect(await selfFix()).toBeNull();
     });
+
+    it('marks staged_skipped as contains_secret when staged content has inline secrets', async () => {
+      await aiWrote('config.ts', 'const x = 1;\n');
+      await writeFiles(repo.path, { 'config.ts': 'export const key = "ghp_123456789012345678901234567890123456";\n' });
+      git(repo.path, ['add', 'config.ts']);
+      await precommit();
+      const [check] = await checks();
+      expect(check?.filePath).toBe('config.ts');
+      expect(check?.payload).toMatchObject({
+        staged_content: null,
+        staged_skipped: 'contains_secret',
+      });
+    });
   });
 });

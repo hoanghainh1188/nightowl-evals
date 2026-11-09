@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { NewEvent, PendingEdit } from '../../storage/events.js';
 import { DATA_DIR, openStore, type Store } from '../../storage/store.js';
+import { containsInlineSecret } from '../claude-code/sensitive.js';
 import { compareContent } from './compare.js';
 import { listStagedFiles, readStagedFiles, type StagedFile } from './staged.js';
 
@@ -63,15 +64,16 @@ function commitCheck(store: Store, filePath: string, edits: readonly PendingEdit
     return { ...base, payload: { ai_event_ids: aiEventIds, outcome: 'skipped', skipped_reason: 'no_snapshot' } };
   }
   const tooLarge = Buffer.byteLength(staged.content) > MAX_STAGED_BYTES;
+  const hasSecret = containsInlineSecret(staged.content);
   return {
     ...base,
     payload: {
       ai_event_ids: aiEventIds,
       ...compareContent(snapshot, staged.content),
       staged_blob: staged.blob,
-      staged_content: tooLarge ? null : staged.content,
-      staged_skipped: tooLarge ? 'too_large' : null,
-      self_fix: tooLarge ? null : safeSelfFix(store, filePath, snapshot, staged.content),
+      staged_content: tooLarge || hasSecret ? null : staged.content,
+      staged_skipped: tooLarge ? 'too_large' : hasSecret ? 'contains_secret' : null,
+      self_fix: tooLarge || hasSecret ? null : safeSelfFix(store, filePath, snapshot, staged.content),
     },
   };
 }
