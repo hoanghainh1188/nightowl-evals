@@ -34,6 +34,7 @@ import {
   type UnattachedCheck,
 } from './failures.js';
 import { CURRENT_SCHEMA_VERSION, migrate, SchemaTooNewError } from './migrations.js';
+import { type PruneOptions, type PruneResult, pruneStorage, vacuumDatabase } from './prune.js';
 import { type CheckCountRow, countChecksForReport, countFailuresForReport, type FailureCountRow } from './report-queries.js';
 import {
   type FailureForReview,
@@ -85,6 +86,8 @@ export interface Store {
   readonly listFailuresForReview: (filter: ReviewFilter) => readonly FailureForReview[];
   readonly getFailureForReview: (id: number) => FailureForReview | null;
   readonly setFailureStatus: (ids: readonly number[], status: FailureStatus) => StatusChange;
+  readonly prune: (options: PruneOptions) => PruneResult;
+  readonly vacuum: () => void;
   // Hooks shorten the lock wait to what is left of their budget before writing.
   readonly setBusyTimeout: (ms: number) => void;
   readonly pragma: (name: string) => unknown;
@@ -169,6 +172,8 @@ function storeApi(db: import('node:sqlite').DatabaseSync, root: string): Store {
     listFailuresForReview: (filter: ReviewFilter) => listFailuresForReview(db, filter),
     getFailureForReview: (id: number) => getFailureForReview(db, id),
     setFailureStatus: (ids: readonly number[], status: FailureStatus) => setFailureStatus(db, ids, status),
+    prune: (options: PruneOptions) => pruneStorage(db, options),
+    vacuum: () => vacuumDatabase(db),
     setBusyTimeout: (ms: number) => db.exec(`PRAGMA busy_timeout = ${Math.max(1, Math.floor(ms))}`),
     pragma: (name: string) => {
       if (!READABLE_PRAGMAS.has(name)) throw new Error(`Unsupported pragma: ${name}`);
