@@ -1,5 +1,5 @@
 import { readFile, stat } from 'node:fs/promises';
-import { isSensitivePath } from '../hooks/claude-code/sensitive.js';
+import { containsInlineSecret, isSensitivePath } from '../hooks/claude-code/sensitive.js';
 import { isRecord } from '../shared/claude-answer.js';
 import { hasScorableChange } from './score.js';
 
@@ -48,7 +48,14 @@ function parseLine(line: string): EvalCase | SkipReason {
   const { prompt, file_before: fileBefore } = input;
   if (fileBefore !== null && typeof fileBefore !== 'string') return 'invalid';
   // Never sent, even from a hand-edited suite: same rule as the hook and export.
-  if (isSensitivePath(filePath)) return 'sensitive';
+  if (
+    isSensitivePath(filePath) ||
+    containsInlineSecret(rejected) ||
+    containsInlineSecret(expected) ||
+    containsInlineSecret(fileBefore)
+  ) {
+    return 'sensitive';
+  }
   if (typeof prompt !== 'string' || prompt.trim() === '') return 'no-prompt';
   const tooLarge =
     Buffer.byteLength(prompt) > MAX_PROMPT_BYTES ||

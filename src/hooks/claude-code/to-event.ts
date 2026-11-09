@@ -5,7 +5,7 @@ import type { NewEvent } from '../../storage/events.js';
 import { runGit } from '../git/run-git.js';
 import type { HookPayload } from './payload.js';
 import { projectRelativePath } from './paths.js';
-import { isSensitivePath } from './sensitive.js';
+import { containsInlineSecret, isSensitivePath } from './sensitive.js';
 import { truncateUtf8 } from '../../shared/truncate.js';
 
 export const MAX_PROMPT_BYTES = 64 * 1024;
@@ -14,7 +14,7 @@ const MAX_INPUT_BYTES = 512 * 1024;
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit']);
 const CHECK_IGNORE_TIMEOUT_MS = 300;
 
-type SnapshotSkip = 'too_large' | 'unreadable' | 'sensitive' | 'ignored';
+type SnapshotSkip = 'too_large' | 'unreadable' | 'sensitive' | 'ignored' | 'contains_secret';
 
 async function readSnapshot(path: string): Promise<{ snapshot: string | null; snapshot_skipped: SnapshotSkip | null }> {
   // O_NOFOLLOW: if the file was swapped for a symlink after the path check, refuse it.
@@ -24,7 +24,9 @@ async function readSnapshot(path: string): Promise<{ snapshot: string | null; sn
     const info = await handle.stat();
     if (!info.isFile()) return { snapshot: null, snapshot_skipped: 'unreadable' };
     if (info.size > MAX_SNAPSHOT_BYTES) return { snapshot: null, snapshot_skipped: 'too_large' };
-    return { snapshot: await handle.readFile('utf8'), snapshot_skipped: null };
+    const content = await handle.readFile('utf8');
+    if (containsInlineSecret(content)) return { snapshot: null, snapshot_skipped: 'contains_secret' };
+    return { snapshot: content, snapshot_skipped: null };
   } catch {
     return { snapshot: null, snapshot_skipped: 'unreadable' };
   } finally {
@@ -47,7 +49,24 @@ async function contentSkipReason(root: string, relativePath: string): Promise<Sn
   return (await isGitIgnored(root, relativePath)) ? 'ignored' : null;
 }
 
+function hasSecretInInput(tool: string, input: Readonly<Record<string, unknown>>): boolean {
+  if (tool === 'Write') {
+    return typeof input.content === 'string' && containsInlineSecret(input.content);
+  }
+  if (tool === 'MultiEdit') {
+    return Array.isArray(input.edits) && input.edits.some((e: Record<string, unknown>) =>
+      (typeof e?.old_string === 'string' && containsInlineSecret(e.old_string)) ||
+      (typeof e?.new_string === 'string' && containsInlineSecret(e.new_string)),
+    );
+  }
+  return (
+    (typeof input.old_string === 'string' && containsInlineSecret(input.old_string)) ||
+    (typeof input.new_string === 'string' && containsInlineSecret(input.new_string))
+  );
+}
+
 function pickInput(tool: string, input: Readonly<Record<string, unknown>>): unknown {
+  if (hasSecretInInput(tool, input)) return { skipped: 'contains_secret' };
   const picked =
     tool === 'Write'
       ? { content_length: typeof input.content === 'string' ? input.content.length : null }

@@ -100,6 +100,17 @@ describe('nightowl export', () => {
     expect(await readFile(defaultFile(), 'utf8')).not.toContain('API_KEY');
   });
 
+  it('never exports failures containing inline secrets', async () => {
+    await seed(repo.path, [
+      { filePath: 'a.ts' },
+      { filePath: 'config.ts', aiContent: 'const key = "ghp_123456789012345678901234567890123456";\n' },
+    ]);
+    const result = await run();
+    expect(result.err).toContain('exported 1 eval cases');
+    expect(result.err).toContain('Left out 1 failures in sensitive files');
+    expect(await readFile(defaultFile(), 'utf8')).not.toContain('ghp_');
+  });
+
   it('filters by --since and repeated --category', async () => {
     await seed(repo.path, [
       { filePath: 'a.ts', category: 'logic', createdAt: '2026-11-01T00:00:00.000Z' },

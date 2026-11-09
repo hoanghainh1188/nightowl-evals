@@ -7,7 +7,7 @@ import type { Io } from '../cli/io.js';
 import { CATEGORIES } from '../classify/prompt.js';
 import { EVAL_SCHEMA, evalId, toEvalCase } from '../export/eval-case.js';
 import { fileBeforeKey, readFilesBefore } from '../export/file-before.js';
-import { isSensitivePath } from '../hooks/claude-code/sensitive.js';
+import { containsInlineSecret, isSensitivePath } from '../hooks/claude-code/sensitive.js';
 import { GitError, runGit } from '../hooks/git/run-git.js';
 import { UNCLASSIFIED } from '../report/build.js';
 import { isSymlink, writeFileAtomic } from '../setup/fs-utils.js';
@@ -67,7 +67,12 @@ interface Built {
 async function buildLines(store: Store, options: Options): Promise<Built> {
   const all = store.listFailuresToExport({ since: options.since, categories: options.categories });
   // The hook never stores such files, but rows from an older NightOwl or another tool might.
-  const failures = all.filter((failure) => !isSensitivePath(failure.filePath));
+  const failures = all.filter(
+    (failure) =>
+      !isSensitivePath(failure.filePath) &&
+      !containsInlineSecret(failure.aiContent) &&
+      !containsInlineSecret(failure.finalContent),
+  );
   const committed = failures.flatMap((f) => (f.commitSha === null ? [] : [{ commitSha: f.commitSha, filePath: f.filePath }]));
   const before = await readFilesBefore(store.root, committed);
   const lines = failures.map((failure) => {

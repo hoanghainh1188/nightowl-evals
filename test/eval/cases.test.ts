@@ -57,6 +57,18 @@ describe('parseCases', () => {
     expect(loaded.cases).toHaveLength(1);
   });
 
+  it('skips cases containing inline secrets', () => {
+    const loaded = parseCases(
+      [
+        line({ rejected: 'const key = "ghp_123456789012345678901234567890123456";\n' }),
+        line({ expected: 'const key = "sk-ant-api03-abcdefghijklmnopqrstuvwxyz1234567890";\n' }),
+        line({}, { file_before: 'const key = "AKIAIOSFODNN7EXAMPLE";\n' }),
+      ].join('\n'),
+    );
+    expect(loaded.skipped.sensitive).toBe(3);
+    expect(loaded.cases).toHaveLength(0);
+  });
+
   it('reports a missing file and refuses anything but a regular file of at most 32 MB', async () => {
     await expect(loadCases('/nonexistent/evals.jsonl')).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(loadCases('/dev/null')).rejects.toBeInstanceOf(SuiteError);
