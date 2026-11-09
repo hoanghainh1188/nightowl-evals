@@ -84,6 +84,6 @@ Chi tiết xem [`docs/production-readiness.md`](../docs/production-readiness.md)
 | 12 | `add-doctor-command` | Lệnh `nightowl doctor` chẩn đoán cấu hình môi trường | Hoàn thành |
 | 13 | `add-storage-prune` | Cơ chế dọn dẹp snapshot cũ và tối ưu dung lượng SQLite | Hoàn thành |
 | 14 | `add-hook-manager-support` | Hỗ trợ cấu hình tích hợp Husky và Lefthook | Hoàn thành |
-| 15 | `add-report-json` | Thêm cờ `--json` cho `nightowl report` | P1 |
+| 15 | `add-report-json` | Thêm cờ `--json` cho `nightowl report` | Hoàn thành |
 | 16 | `add-eval-test-runner` | Hỗ trợ chạy kiểm thử tự động (unit tests) để verify eval | P2 |
 | 17 | `add-direct-api-classify` | Hỗ trợ gọi phân loại trực tiếp qua LLM API key | P2 |
