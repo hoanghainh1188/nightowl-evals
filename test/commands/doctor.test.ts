@@ -300,4 +300,44 @@ describe('nightowl doctor', () => {
     expect(code).toBe(1);
     expect(out).toContain('✗ Failed to inspect database: permission denied');
   });
+
+  it('verifies hooks configured in Husky (.husky/)', async () => {
+    await writeFiles(repo.path, {
+      '.husky/pre-commit': '#!/bin/sh\nnightowl precommit\n',
+      '.husky/post-commit': '#!/bin/sh\nnightowl postcommit\n',
+    });
+
+    const deps = createTestDeps({
+      readTextIfExists: async (path) => {
+        if (path.includes('.husky/pre-commit')) return '#!/bin/sh\nnightowl precommit\n';
+        if (path.includes('.husky/post-commit')) return '#!/bin/sh\nnightowl postcommit\n';
+        if (path.includes('.gitignore')) return '.nightowl/\n';
+        return null;
+      },
+    });
+
+    const { out } = await runDoctor([], deps);
+    expect(out).toContain('✓ pre-commit (husky) runs \'nightowl precommit\'');
+    expect(out).toContain('✓ post-commit (husky) runs \'nightowl postcommit\'');
+  });
+
+  it('verifies hooks configured in Lefthook (lefthook.yml)', async () => {
+    await writeFiles(repo.path, {
+      'lefthook.yml': 'pre-commit:\n  commands:\n    nightowl: run: nightowl precommit\npost-commit:\n  commands:\n    nightowl: run: nightowl postcommit\n',
+    });
+
+    const deps = createTestDeps({
+      readTextIfExists: async (path) => {
+        if (path.includes('lefthook.yml')) {
+          return 'pre-commit:\n  nightowl precommit\npost-commit:\n  nightowl postcommit\n';
+        }
+        if (path.includes('.gitignore')) return '.nightowl/\n';
+        return null;
+      },
+    });
+
+    const { out } = await runDoctor([], deps);
+    expect(out).toContain('✓ pre-commit (lefthook) runs \'nightowl precommit\'');
+    expect(out).toContain('✓ post-commit (lefthook) runs \'nightowl postcommit\'');
+  });
 });

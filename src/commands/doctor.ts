@@ -14,6 +14,7 @@ import {
 import { readTextIfExists } from '../setup/fs-utils.js';
 import { GIT_HOOKS } from '../setup/git-hook.js';
 import { NIGHTOWL_IGNORE } from '../setup/gitignore.js';
+import { detectHookManager } from '../setup/hook-manager.js';
 import { isOnPath } from '../setup/path.js';
 import { printable } from '../shared/printable.js';
 import { CURRENT_SCHEMA_VERSION } from '../storage/migrations.js';
@@ -233,26 +234,75 @@ export async function checkHooks(deps: DoctorDeps, root: string | null): Promise
   const checks: DoctorCheck[] = [];
   if (!root) return checks;
 
-  for (const hook of GIT_HOOKS) {
-    const hookPath = join(root, '.git', 'hooks', hook.name);
-    const content = await deps.readTextIfExists(hookPath);
-    const runsCommand = content !== null && content.includes(`nightowl ${hook.command}`);
+  const manager = detectHookManager(root);
+  if (manager.kind === 'husky') {
+    for (const hook of GIT_HOOKS) {
+      const hookPath = join(root, '.husky', hook.name);
+      const content = await deps.readTextIfExists(hookPath);
+      const runsCommand = content !== null && content.includes(`nightowl ${hook.command}`);
 
-    if (runsCommand) {
-      checks.push({
-        category: 'Git Hooks',
-        name: `${hook.name} hook`,
-        status: 'ok',
-        message: `${hook.name} runs 'nightowl ${hook.command}'`,
-      });
-    } else {
-      checks.push({
-        category: 'Git Hooks',
-        name: `${hook.name} hook`,
-        status: 'warn',
-        message: `${hook.name} does not call 'nightowl ${hook.command}'`,
-        remedy: `Run 'nightowl init' to install the ${hook.name} hook.`,
-      });
+      if (runsCommand) {
+        checks.push({
+          category: 'Git Hooks',
+          name: `${hook.name} hook (husky)`,
+          status: 'ok',
+          message: `${hook.name} (husky) runs 'nightowl ${hook.command}'`,
+        });
+      } else {
+        checks.push({
+          category: 'Git Hooks',
+          name: `${hook.name} hook (husky)`,
+          status: 'warn',
+          message: `.husky/${hook.name} does not call 'nightowl ${hook.command}'`,
+          remedy: `Add 'command -v nightowl >/dev/null 2>&1 && nightowl ${hook.command} || true' to .husky/${hook.name}.`,
+        });
+      }
+    }
+  } else if (manager.kind === 'lefthook') {
+    const configPath = join(root, manager.configPath!);
+    const content = await deps.readTextIfExists(configPath);
+    for (const hook of GIT_HOOKS) {
+      const runsCommand = content !== null && content.includes(`nightowl ${hook.command}`);
+
+      if (runsCommand) {
+        checks.push({
+          category: 'Git Hooks',
+          name: `${hook.name} hook (lefthook)`,
+          status: 'ok',
+          message: `${hook.name} (lefthook) runs 'nightowl ${hook.command}'`,
+        });
+      } else {
+        checks.push({
+          category: 'Git Hooks',
+          name: `${hook.name} hook (lefthook)`,
+          status: 'warn',
+          message: `${manager.configPath} does not configure ${hook.name} to call 'nightowl ${hook.command}'`,
+          remedy: `Add nightowl ${hook.command} command under ${hook.name} in ${manager.configPath}.`,
+        });
+      }
+    }
+  } else {
+    for (const hook of GIT_HOOKS) {
+      const hookPath = join(root, '.git', 'hooks', hook.name);
+      const content = await deps.readTextIfExists(hookPath);
+      const runsCommand = content !== null && content.includes(`nightowl ${hook.command}`);
+
+      if (runsCommand) {
+        checks.push({
+          category: 'Git Hooks',
+          name: `${hook.name} hook`,
+          status: 'ok',
+          message: `${hook.name} runs 'nightowl ${hook.command}'`,
+        });
+      } else {
+        checks.push({
+          category: 'Git Hooks',
+          name: `${hook.name} hook`,
+          status: 'warn',
+          message: `${hook.name} does not call 'nightowl ${hook.command}'`,
+          remedy: `Run 'nightowl init' to install the ${hook.name} hook.`,
+        });
+      }
     }
   }
 
