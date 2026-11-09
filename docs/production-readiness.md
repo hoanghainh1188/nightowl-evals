@@ -59,13 +59,13 @@ Giai đoạn 3: Mở rộng đánh giá (Advanced Evals - P2)
 
 ### Chi tiết các Change đề xuất
 
-| Thứ tự | Tên Change | Nội dung | Mức độ ưu tiên |
-| :---: | :--- | --- | :---: |
-| 1 | `fix-cross-platform-process` | Khắc phục kill process group trên Windows trong `run-claude.ts` | P0 |
-| 2 | `add-inline-secret-filter` | Bổ sung regex quét secret inline cho snapshot | P0 |
-| 3 | `add-doctor-command` | Lệnh `nightowl doctor` chẩn đoán cấu hình môi trường | P0 |
-| 4 | `add-storage-prune` | Cơ chế dọn dẹp snapshot cũ và tối ưu dung lượng SQLite | P1 |
-| 5 | `add-hook-manager-support` | Hỗ trợ cấu hình tích hợp Husky và Lefthook | P1 |
-| 6 | `add-report-json` | Thêm cờ `--json` cho `nightowl report` | P1 |
-| 7 | `add-eval-test-runner` | Hỗ trợ chạy kiểm thử tự động (unit tests) để verify eval | P2 |
-| 8 | `add-direct-api-classify` | Hỗ trợ gọi phân loại trực tiếp qua LLM API key | P2 |
+| Thứ tự | Tên Change | Nội dung | Mức độ ưu tiên | Trạng thái |
+| :---: | :--- | --- | :---: | :---: |
+| 1 | `fix-cross-platform-process` | Khắc phục kill process group trên Windows trong `run-claude.ts` | P0 | Hoàn thành |
+| 2 | `add-inline-secret-filter` | Bổ sung regex quét secret inline cho snapshot | P0 | Hoàn thành |
+| 3 | `add-doctor-command` | Lệnh `nightowl doctor` chẩn đoán cấu hình môi trường | P0 | Hoàn thành |
+| 4 | `add-storage-prune` | Cơ chế dọn dẹp snapshot cũ và tối ưu dung lượng SQLite | P1 | Hoàn thành |
+| 5 | `add-hook-manager-support` | Hỗ trợ cấu hình tích hợp Husky và Lefthook | P1 | Hoàn thành |
+| 6 | `add-report-json` | Thêm cờ `--json` cho `nightowl report` | P1 | Chưa bắt đầu |
+| 7 | `add-eval-test-runner` | Hỗ trợ chạy kiểm thử tự động (unit tests) để verify eval | P2 | Chưa bắt đầu |
+| 8 | `add-direct-api-classify` | Hỗ trợ gọi phân loại trực tiếp qua LLM API key | P2 | Chưa bắt đầu |

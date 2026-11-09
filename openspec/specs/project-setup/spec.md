@@ -84,11 +84,15 @@ Chạy `nightowl init` (với cùng tuỳ chọn) nhiều lần SHALL cho cùng 
 - **THEN** commit thành công như không có NightOwl
 
 ### Requirement: Không sửa hook do công cụ khác quản lý
-Khi repo đặt `core.hooksPath`, hoặc hook `pre-commit` có sẵn không phải script shell, `nightowl init` SHALL NOT sửa file hook nào, và SHALL in ra stderr dòng lệnh cần tự thêm vào hook `pre-commit`, rồi thoát mã 0.
+Khi repo đặt `core.hooksPath`, sử dụng công cụ quản lý hook (như Husky hoặc Lefthook), hoặc hook có sẵn không phải shell, `nightowl init` SHALL NOT sửa file hook nào. Thay vào đó, lệnh SHALL in ra stderr thông tin nhận diện công cụ kèm snippet cấu hình phù hợp rồi thoát mã 0.
 
 #### Scenario: Repo dùng husky
-- **WHEN** `core.hooksPath` là `.husky` và chạy `nightowl init`
-- **THEN** không file nào trong `.husky/` bị sửa, stderr có hướng dẫn thêm dòng gọi `nightowl precommit`, mã thoát 0
+- **WHEN** repo có thư mục `.husky` hoặc `core.hooksPath` đặt tới `.husky` và chạy `nightowl init`
+- **THEN** không file nào trong `.husky/` bị sửa, stderr có hướng dẫn thêm dòng gọi `nightowl precommit` cho Husky, mã thoát 0
+
+#### Scenario: Repo dùng lefthook
+- **WHEN** repo có file `lefthook.yml` hoặc `lefthook.yaml` và chạy `nightowl init`
+- **THEN** file cấu hình không bị ghi đè, stderr in snippet cấu hình YAML mẫu cho Lefthook, mã thoát 0
 
 #### Scenario: Hook viết bằng Node
 - **WHEN** `.git/hooks/pre-commit` bắt đầu bằng `#!/usr/bin/env node`
@@ -168,11 +172,15 @@ Khi repo đặt `core.hooksPath`, hoặc hook là symlink, `nightowl uninstall` 
 - **THEN** không file nào trong `.husky/` bị sửa và stderr nêu dòng gọi `nightowl precommit` cần tự xoá
 
 ### Requirement: Chẩn đoán môi trường và cấu hình
-`nightowl doctor` SHALL kiểm tra Node.js (>= 22.13.0, `node:sqlite`), Git repo, cấu hình hook Claude Code, Git hooks (`pre-commit`, `post-commit`), cùng thư mục `.nightowl/` và database SQLite. Lệnh SHALL in kết quả chẩn đoán ra stdout. Khi gặp lỗi nghiêm trọng (Node không hợp lệ, ngoài Git repo, database hỏng), lệnh SHALL thoát mã 1. Khi môi trường sẵn sàng hoặc chỉ có cảnh báo, lệnh SHALL thoát mã 0.
+`nightowl doctor` SHALL kiểm tra Node.js (>= 22.13.0, `node:sqlite`), Git repo, cấu hình hook Claude Code, Git hooks (`pre-commit`, `post-commit` hoặc hook manager), cùng `.nightowl/` và database SQLite. Lệnh SHALL in kết quả ra stdout. Khi gặp lỗi nghiêm trọng (Node không hợp lệ, ngoài Git repo, database hỏng), lệnh SHALL thoát mã 1. Khi môi trường sẵn sàng hoặc chỉ có cảnh báo, lệnh SHALL thoát mã 0.
 
 #### Scenario: Chẩn đoán trên dự án đầy đủ hợp lệ
 - **WHEN** chạy `nightowl doctor` trong repo đã cài đặt đầy đủ hook, Node >= 22.13 và SQLite toàn vẹn
 - **THEN** stdout hiển thị trạng thái hợp lệ cho toàn bộ 5 nhóm kiểm tra và lệnh thoát mã 0
+
+#### Scenario: Chẩn đoán khi dùng hook manager
+- **WHEN** chạy `nightowl doctor` trong repo dùng Husky hoặc Lefthook đã cấu hình gọi NightOwl
+- **THEN** nhóm kiểm tra Git hooks nhận diện đúng hook manager tương ứng và báo cáo hợp lệ
 
 #### Scenario: Chẩn đoán trong dự án chưa khởi tạo
 - **WHEN** chạy `nightowl doctor` trong repo git chưa chạy `nightowl init`
