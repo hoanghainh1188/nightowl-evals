@@ -81,7 +81,7 @@ Chi tiết xem [`docs/production-readiness.md`](../docs/production-readiness.md)
 | --- | --- | --- | --- |
 | 10 | `fix-cross-platform-process` | Khắc phục kill process group trên Windows trong `run-claude.ts` | Hoàn thành |
 | 11 | `add-inline-secret-filter` | Bổ sung regex quét secret inline cho snapshot | Hoàn thành |
-| 12 | `add-doctor-command` | Lệnh `nightowl doctor` chẩn đoán cấu hình môi trường | P0 |
+| 12 | `add-doctor-command` | Lệnh `nightowl doctor` chẩn đoán cấu hình môi trường | Hoàn thành |
 | 13 | `add-storage-prune` | Cơ chế dọn dẹp snapshot cũ và tối ưu dung lượng SQLite | P1 |
 | 14 | `add-hook-manager-support` | Hỗ trợ cấu hình tích hợp Husky và Lefthook | P1 |
 | 15 | `add-report-json` | Thêm cờ `--json` cho `nightowl report` | P1 |
