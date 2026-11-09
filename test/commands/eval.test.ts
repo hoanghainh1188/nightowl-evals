@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ClaudeError } from '../../src/classify/run-claude.js';
 import { createEvalCommand, type EvalDeps } from '../../src/commands/eval.js';
+import type { TestRunResult } from '../../src/eval/run-tests.js';
 import { createFakeIo } from '../helpers/fake-io.js';
 import { createFakeRepo, createTempDir, type TempDir } from '../helpers/temp-repo.js';
 
@@ -24,10 +25,12 @@ const BAD = answer('export const isAdult = (age) => age > 18;\n');
 describe('nightowl eval', () => {
   let repo: TempDir;
   let calls: Array<{ model: string; prompt: string; timeoutMs: number | undefined; schema: object }>;
+  let shellCalls: Array<{ command: string; cwd: string; timeoutMs: number }>;
 
   beforeEach(async () => {
     repo = await createFakeRepo();
     calls = [];
+    shellCalls = [];
   });
   afterEach(() => repo.cleanup());
 
@@ -37,7 +40,15 @@ describe('nightowl eval', () => {
   }
 
   // Answers per model; an Error is thrown for that call.
-  function deps(byModel: Record<string, ReadonlyArray<string | Error>>, overrides: Partial<EvalDeps> = {}): EvalDeps {
+  function deps(
+    byModel: Record<string, ReadonlyArray<string | Error>>,
+    overrides: Partial<EvalDeps> = {},
+    shell: TestRunResult | ((command: string) => TestRunResult | Promise<TestRunResult>) = {
+      passed: true,
+      exitCode: 0,
+      error: null,
+    },
+  ): EvalDeps {
     const seen = new Map<string, number>();
     return {
       cwd: () => repo.path,
@@ -51,6 +62,10 @@ describe('nightowl eval', () => {
         const response = list[n % list.length] as string | Error;
         if (response instanceof Error) throw response;
         return response;
+      },
+      runShell: async (command, options) => {
+        shellCalls.push({ command, cwd: options.cwd, timeoutMs: options.timeoutMs });
+        return typeof shell === 'function' ? shell(command) : shell;
       },
       ...overrides,
     };
@@ -113,8 +128,12 @@ describe('nightowl eval', () => {
         repeat: 0,
         score: 1,
         pass: true,
+        tests_passed: null,
+        tests_exit_code: null,
+        tests_error: null,
         error: null,
       });
+      expect(shellCalls).toEqual([]);
       expect((await stat(file)).mode & 0o777).toBe(0o600);
       expect((await stat(runsDir())).mode & 0o777).toBe(0o700);
     });
@@ -208,16 +227,78 @@ describe('nightowl eval', () => {
     expect(await run([], deps({}))).toEqual({ code: 0, out: 'No runnable cases in the suite (skipped: 1 without prompt).\n', err: '' });
   });
 
-  it.each([[['--limit', '0']], [['--limit', '101']], [['--model', '-x']], [['--input', '']], [['--weird']], [['extra']]])(
-    'rejects %j',
-    async (args) => {
+  it.each([
+    [['--limit', '0']],
+    [['--limit', '101']],
+    [['--model', '-x']],
+    [['--input', '']],
+    [['--weird']],
+    [['extra']],
+    [['--test-command', '']],
+    [['--test-timeout', '0']],
+    [['--test-timeout', '601']],
+    [['--require-tests']],
+    [['--yes', '--require-tests']],
+  ])('rejects %j', async (args) => {
+    await writeSuite([evalLine('a')]);
+    const result = await run(args, deps({}));
+    expect(result.code).toBe(1);
+    expect(result.err).toMatch(/^nightowl eval: /);
+    expect(calls).toEqual([]);
+    expect(shellCalls).toEqual([]);
+  });
+
+  describe('test command', () => {
+    it('dry-run mentions the test command and does not spawn shell', async () => {
       await writeSuite([evalLine('a')]);
-      const result = await run(args, deps({}));
-      expect(result.code).toBe(1);
-      expect(result.err).toMatch(/^nightowl eval: /);
+      const result = await run(['--test-command', 'npm test', '--test-timeout', '30', '--require-tests'], deps({}));
+      expect(result.code).toBe(0);
+      expect(result.out).toContain('After each answer, would run npm test');
+      expect(result.out).toContain('timeout 30s; pass requires tests');
+      expect(result.out).toContain("nightowl eval --yes --test-command 'npm test' --test-timeout 30 --require-tests");
       expect(calls).toEqual([]);
-    },
-  );
+      expect(shellCalls).toEqual([]);
+    });
+
+    it('runs the shell command after each answer and records the result', async () => {
+      await writeSuite([evalLine('a')]);
+      await mkdir(join(repo.path, 'src'), { recursive: true });
+      await writeFile(join(repo.path, 'src/age.ts'), 'export const isAdult = (age) => false;\n');
+      const result = await run(
+        ['--yes', '--model', 'haiku', '--test-command', 'npm test'],
+        deps({ haiku: [GOOD] }, {}, { passed: true, exitCode: 0, error: null }),
+      );
+      expect(result.code).toBe(0);
+      expect(shellCalls).toEqual([{ command: 'npm test', cwd: repo.path, timeoutMs: 120_000 }]);
+      expect(result.out).toMatch(/tests ok/i);
+      expect(await readFile(join(repo.path, 'src/age.ts'), 'utf8')).toBe('export const isAdult = (age) => false;\n');
+      const [name] = await readdir(runsDir());
+      const row = JSON.parse((await readFile(join(runsDir(), name as string), 'utf8')).trim());
+      expect(row).toMatchObject({ tests_passed: true, tests_exit_code: 0, tests_error: null, pass: true });
+    });
+
+    it('with --require-tests, textual pass and failing tests become pass false', async () => {
+      await writeSuite([evalLine('a')]);
+      await mkdir(join(repo.path, 'src'), { recursive: true });
+      await writeFile(join(repo.path, 'src/age.ts'), 'keep\n');
+      const result = await run(
+        ['--yes', '--model', 'haiku', '--test-command', 'npm test', '--require-tests'],
+        deps({ haiku: [GOOD] }, {}, { passed: false, exitCode: 1, error: 'failed' }),
+      );
+      expect(result.code).toBe(0);
+      const [name] = await readdir(runsDir());
+      const row = JSON.parse((await readFile(join(runsDir(), name as string), 'utf8')).trim());
+      expect(row).toMatchObject({
+        coverage: 1,
+        score: 1,
+        pass: false,
+        tests_passed: false,
+        tests_exit_code: 1,
+        tests_error: 'failed',
+      });
+      expect(await readFile(join(repo.path, 'src/age.ts'), 'utf8')).toBe('keep\n');
+    });
+  });
 
   it('fails outside a git repository', async () => {
     const outside = await createTempDir();

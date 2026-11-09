@@ -67,5 +67,5 @@ Giai đoạn 3: Mở rộng đánh giá (Advanced Evals - P2)
 | 4 | `add-storage-prune` | Cơ chế dọn dẹp snapshot cũ và tối ưu dung lượng SQLite | P1 | Hoàn thành |
 | 5 | `add-hook-manager-support` | Hỗ trợ cấu hình tích hợp Husky và Lefthook | P1 | Hoàn thành |
 | 6 | `add-report-json` | Thêm cờ `--json` cho `nightowl report` | P1 | Hoàn thành |
-| 7 | `add-eval-test-runner` | Hỗ trợ chạy kiểm thử tự động (unit tests) để verify eval | P2 | Chưa bắt đầu |
+| 7 | `add-eval-test-runner` | Hỗ trợ chạy kiểm thử tự động (unit tests) để verify eval | P2 | Hoàn thành |
 | 8 | `add-direct-api-classify` | Hỗ trợ gọi phân loại trực tiếp qua LLM API key | P2 | Chưa bắt đầu |
