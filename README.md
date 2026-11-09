@@ -1,48 +1,122 @@
-# NightOwl Evals
+# NightOwl Evals 🦉
 
-Record every time AI writes wrong code, and turn those failures into an eval suite for your own project. Local-first.
+[![npm version](https://img.shields.io/npm/v/@hoanghainh/nightowl-evals.svg?style=flat-square&color=blue)](https://www.npmjs.com/package/@hoanghainh/nightowl-evals)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg?style=flat-square)](LICENSE)
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D22.13-brightgreen.svg?style=flat-square)](https://nodejs.org/)
+[![Runtime Dependencies](https://img.shields.io/badge/dependencies-0-success.svg?style=flat-square)](package.json)
+[![Coverage](https://img.shields.io/badge/coverage-%3E95%25-brightgreen.svg?style=flat-square)](package.json)
+[![OpenSpec Verified](https://img.shields.io/badge/spec-OpenSpec-purple.svg?style=flat-square)](openspec/project.md)
 
-When Claude Code writes buggy code and you fix it—either by hand before committing or by prompting the AI to correct itself—that fix usually disappears, and the AI repeats the mistake later. NightOwl captures the failure automatically at commit time, keeps the AI version and your corrected version side by side, and lets you:
+**Turn AI coding mistakes into a tailored, project-specific evaluation test suite. 100% local-first, zero telemetry, zero runtime dependencies.**
 
-- see where the AI goes wrong, by type, source, module and week (`nightowl report`);
-- export each failure as an evaluation dataset (`nightowl export`);
-- re-run those cases against Claude models and compare scores (`nightowl eval`).
+---
 
-**Everything stays on your machine by default.** Data lives in `.nightowl/` inside your repository (git-ignored, mode `0700`). Nothing is sent anywhere unless you run `classify` or `eval` with `--yes` (local `claude` CLI by default, or Anthropic API when `classify --transport api`).
+## Table of Contents
+
+- [Why NightOwl?](#why-nightowl)
+- [How It Works](#how-it-works)
+- [Key Features](#key-features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Quickstart (30-Second Tour)](#quickstart-30-second-tour)
+- [CLI Reference](#cli-reference)
+  - [Setup & Diagnostics](#1-setup--diagnostics)
+    - [`nightowl init`](#nightowl-init)
+    - [`nightowl doctor`](#nightowl-doctor)
+    - [`nightowl uninstall`](#nightowl-uninstall)
+  - [Analytics, Review & Data Ops](#2-analytics-review--data-ops)
+    - [`nightowl report`](#nightowl-report)
+    - [`nightowl review`](#nightowl-review)
+    - [`nightowl prune`](#nightowl-prune)
+    - [`nightowl failures`](#nightowl-failures)
+  - [Evaluation & Benchmarking Engine](#3-evaluation--benchmarking-engine)
+    - [`nightowl classify`](#nightowl-classify-opt-in)
+    - [`nightowl export`](#nightowl-export)
+    - [`nightowl eval`](#nightowl-eval-opt-in)
+- [CI/CD Quality Gate Integration](#cicd-quality-gate-integration)
+- [Security & Privacy Guarantees](#security--privacy-guarantees)
+- [Development & Contributing](#development--contributing)
+- [License](#license)
+
+---
+
+## Why NightOwl?
+
+When an AI assistant (like Claude Code) writes defective code and you fix it—either by hand before committing or by prompting the AI to self-correct—**that critical feedback usually vanishes forever**. The AI will inevitably repeat the exact same mistake next week on the same codebase.
+
+Generic benchmarks (like HumanEval or SWE-bench) evaluate AI on standardized algorithmic puzzles. They do **not** reflect:
+- Your team's architectural conventions and idiomatic code patterns.
+- Subtle edge cases specific to your domain logic.
+- The recurring blind spots where AI constantly fails in your codebase.
+
+**NightOwl silently captures every AI mistake at commit time**, links the defective code with your verified solution, and turns those mistakes into a permanent, regression-proof evaluation benchmark tailored specifically to your project.
+
+---
+
+## How It Works
 
 ```
-┌──────────────────┐
-│ Claude Code Edit │ ──> Claude hook (PostToolUse) ──> nightowl log ──> Snapshots in SQLite
-└──────────────────┘                                                           │
-         │                                                                     │
- [Dev Fixes Code                                                               │
-  or Prompts AI to Self-Fix]                                                   │
-         │                                                                     ▼
-         ▼
-┌──────────────────┐
-│   git commit     │ ──> pre-commit hook  ──> Compares staged files with AI snapshot
-└──────────────────┘ ──> post-commit hook ──> If code changed: records Failure (manual-fix / ai-self-fix)
-                                                               │
-                           ┌───────────────────────────────────┴───────────────────────────────────┐
-                           ▼                                                                       ▼
-                 nightowl report                                                            nightowl export
-         (Failure trends & error rates)                                            (Standard JSONL test cases)
-                                                                                                   │
-                                                                                                   ▼
-                                                                                            nightowl eval
-                                                                                   (Benchmark Claude models)
+┌────────────────────────┐
+│ Claude Code Tool Usage │ ──> Claude hook (PostToolUse) ──> nightowl log ──> Snapshots in SQLite
+└────────────────────────┘                                                              │
+            │                                                                           │
+   [Developer Fixes Code                                                                │
+ or Prompts AI to Self-Fix]                                                             │
+            │                                                                           │
+            ▼                                                                           ▼
+┌────────────────────────┐
+│       git commit       │ ──> pre-commit hook  ──> Compares staged changes with AI snapshot
+└────────────────────────┘ ──> post-commit hook ──> If code was altered: records Failure
+                                                                │
+                                ┌───────────────────────────────┴───────────────────────────────┐
+                                ▼                                                               ▼
+                         nightowl report                                                 nightowl export
+                  (Trend analytics & CI Gate)                                      (Standard JSONL test cases)
+                                │                                                               │
+                                ▼                                                               ▼
+                         nightowl review                                                  nightowl eval
+                     (Inspect & triage diffs)                                      (Benchmark models via tests)
 ```
+
+1. **Snapshot on Edit**: Whenever Claude Code edits or creates a file, NightOwl creates a lightweight local snapshot.
+2. **Detection at Commit**: At `git commit`, the pre-commit hook compares the staged files against the AI snapshot.
+3. **Failure Classification**: If you modified the AI's code (or prompted the AI to self-correct a bug), NightOwl records the prompt, the buggy AI code (`rejected`), and your final verified code (`expected`).
+4. **Benchmark & Defend**: Export the failures into standard evaluation datasets and benchmark future models or prompt instructions.
+
+---
+
+## Key Features
+
+- 🛡️ **100% Local-First & Zero Telemetry**: All data stays in your local `.nightowl/` directory (mode `0700`). Zero analytics, zero hidden network pings.
+- ⚡ **Fail-Open & Frictionless**: Hooks are strictly capped to a 2-second budget and always exit `0`. They will **never** block a developer commit or freeze Claude Code.
+- 📦 **Zero Dependencies**: Engineered with pure Node.js built-ins (`node:sqlite`, `node:util`, `node:fs`, `node:crypto`). Nothing to download, audit, or break.
+- 🔒 **Inline Secret Protection**: Automatically detects and blocks API keys (AWS, GitHub, OpenAI, Anthropic, private keys) and credentials from entering snapshots.
+- 🚦 **CI/CD Quality Gates**: Built-in `--fail-on-rate` option to enforce quality standards in continuous integration pipelines.
+- 🧩 **Hook Manager Friendly**: Automatic configuration detection for **Husky** (`.husky/`) and **Lefthook** (`lefthook.yml`).
+- 🧪 **Execution-Based Evals**: Benchmark models not just with textual diff metrics, but by running real project test suites (`--test-command`).
+
+---
 
 ## Requirements
 
-- Node.js 22.13 or newer
-- git
-- [Claude Code](https://docs.claude.com/claude-code) — the AI whose edits are recorded, and the `claude` CLI used by `classify` and `eval`
+- **Node.js**: `22.13.0` or newer (uses native `node:sqlite`)
+- **Git**: `2.20` or newer
+- **Claude Code**: (Optional for capture; required for local `classify` and `eval`)
 
-## Install
+---
+
+## Installation
+
+Install globally via npm:
 
 ```bash
-npm i -g @hoanghainh/nightowl-evals
+npm install -g @hoanghainh/nightowl-evals
+```
+
+Or run directly with `npx`:
+
+```bash
+npx @hoanghainh/nightowl-evals doctor
 ```
 
 From source:
@@ -55,212 +129,286 @@ npm run build
 npm link
 ```
 
-> **Note:** `nightowl` must be on your `PATH`. The hooks call it by name and quietly do nothing if it is missing.
+---
 
-## Quick start
+## Quickstart (30-Second Tour)
 
-In any repository you work on with Claude Code:
+### 1. Initialize NightOwl in your Git repo
 
 ```bash
+cd your-project
 nightowl init
 ```
 
-This adds, without modifying existing settings or hooks:
+*This non-destructively injects personal Claude Code hooks (`.claude/settings.local.json`) and Git hooks without modifying existing workflows.*
 
-| File | What it does |
-| --- | --- |
-| `.claude/settings.local.json` | Claude Code hooks that run `nightowl log` after each prompt and file edit (personal to your machine) |
-| `.git/hooks/pre-commit` | Runs `nightowl precommit`: compares staged files with what the AI last wrote |
-| `.git/hooks/post-commit` | Runs `nightowl postcommit`: records a failure when the committed file differs from the AI version |
-| `.gitignore` | Adds `.nightowl/`, and `.claude/settings.local.json` if git does not ignore it yet |
-
-The hooks go in your personal settings by default, so teammates who share the repository are not affected. If your team agrees to record together, use `nightowl init --shared` to place them in `.claude/settings.json` instead.
-
-Then work as usual: prompt Claude Code, fix what it got wrong, commit. Check what has been collected:
+### 2. Verify environment health
 
 ```bash
-nightowl failures
+nightowl doctor
+```
+
+```text
+NightOwl Doctor: 5 checks
+  ✓ runtime: Node.js v24.13.0 with node:sqlite
+  ✓ git: repository at /Users/dev/your-project
+  ✓ claude: hooks configured in personal settings (.claude/settings.local.json)
+  ✓ hooks: pre-commit and post-commit hooks installed
+  ✓ database: .nightowl/nightowl.db schema version 4 integrity ok
+Ready to record AI edits.
+```
+
+### 3. Code normally with Claude Code & Commit
+
+Prompt Claude Code to write a feature. If it makes a mistake:
+- **Case A (Manual fix)**: You edit the code to fix the logic, then run `git commit`.
+- **Case B (AI self-fix)**: You prompt Claude *"That function has an off-by-one bug"*, Claude fixes it, then you commit.
+
+### 4. View your analytics
+
+```bash
 nightowl report
 ```
 
-The hooks never block Claude Code or a commit: they always exit 0, print nothing, and give up after 2 seconds.
+```text
+NightOwl report: 6 failures (1 unclassified, 0 dismissed not counted)
+AI edits changed by the developer: 6 of 24 checked at commit (25%)
+Reviewed: 2 confirmed, 0 dismissed, 4 still flagged (nightowl review)
 
-## How a failure is detected
+By category
+  logic                  3  ██████████████████████████████
+  convention             1  ██████████
+  misread-requirement    1  ██████████
+  unclassified           1  ██████████
 
-1. After Claude Code edits a file, NightOwl stores a snapshot of what the AI wrote.
-2. At `git commit`, the pre-commit hook compares the latest AI snapshot of each staged file with the staged content.
-3. After the commit, the post-commit hook keeps only comparisons that match the committed file. If you changed the AI's lines (not just whitespace), it records a **failure**: the prompt, the AI version, your final version, and the commit hash.
+By source
+  manual-fix             4  ██████████████████████████████
+  ai-self-fix            2  ███████████████
 
-Failures have a **source**:
+By module (top 2 of 2, depth 2)
+  src/services           4  ██████████████████████████████
+  src/utils              2  ███████████████
 
-- `manual-fix`: you edited the AI's code yourself before committing.
-- `ai-self-fix`: you told the AI it was wrong and it redid the edit. NightOwl detects an AI edit, followed by a prompt from you in the same Claude Code session, followed by another AI edit of the same file. If the AI then dropped or changed lines of the edit you responded to (not just whitespace), that edit is recorded as a failure, and your prompt is preserved as its feedback (`input.feedback`). If your prompt only asked the AI to add code without altering existing lines (e.g., adding a feature), nothing is recorded.
+By week (last 2, UTC; % = AI edits changed)
+  2026-W44               2  ███████████████ 18%
+  2026-W45               4  ██████████████████████████████ 28%
+```
 
-Sensitive files (`.env`, keys, tokens, credentials) are automatically ignored and their contents are never stored.
+---
 
-## Commands
+## CLI Reference
 
-Run `nightowl <command> --help` (or `nightowl help <command>`) for any command's options.
+Run `nightowl <command> --help` for options on any command.
 
-### `nightowl init`
+### 1. Setup & Diagnostics
 
-Sets up NightOwl hooks and database in the current project. Safe to run multiple times (idempotent).
+#### `nightowl init`
+
+Sets up NightOwl hooks and creates the local SQLite database. Safe to run multiple times (idempotent).
 
 ```bash
 nightowl init [--shared]
 ```
 
-| Option | Meaning |
-| --- | --- |
-| `--shared` | Put Claude Code hooks in `.claude/settings.json` (shared with team) instead of `.claude/settings.local.json` |
+- `--shared`: Places Claude Code hooks in `.claude/settings.json` (tracked in git for the whole team) instead of `.claude/settings.local.json`.
+- Automatically detects **Husky** (`.husky/`) or **Lefthook** (`lefthook.yml`) and displays copy-paste integration snippets without overriding files.
 
-### `nightowl report`
+#### `nightowl doctor`
 
-Summarizes recorded failures grouped by category, source, module and ISO week, plus the percentage of AI edits that had to be changed.
-
-```bash
-nightowl report [--since <YYYY-MM-DD>] [--depth <1-5>] [--json]
-```
-
-| Option | Meaning |
-| --- | --- |
-| `--since <YYYY-MM-DD>` | Only failures from this date on |
-| `--depth <1-5>` | How many folder levels make up a module (default: 2) |
-| `--json` | Print output as JSON |
-
-Example report:
-
-```text
-NightOwl report: 12 failures (3 unclassified, 0 dismissed not counted)
-AI edits changed by the developer: 12 of 48 checked at commit (25%)
-
-By category
-  logic                  5  ██████████████████████████████
-  convention             2  ████████████
-  misread-requirement    1  ██████
-  missing-context        1  ██████
-  unclassified           3  ██████████████████
-
-By source
-  manual-fix             8  ██████████████████████████████
-  ai-self-fix            4  ███████████████
-
-By module (top 2 of 2, depth 2)
-  src/storage            7  ██████████████████████████████
-  src/hooks              5  █████████████████████
-
-By week (last 2, UTC; % = AI edits changed)
-  2026-W44               4  ███████████████ 20%
-  2026-W45               8  ██████████████████████████████ 28%
-```
-
-### `nightowl review`
-
-Look at what was recorded and sort real AI mistakes from noise (for example, you simply changed your mind). Nothing is sent anywhere.
-
-| Command | Meaning |
-| --- | --- |
-| `nightowl review` | Failures still to look at, newest first: id, date, source, category, file, lines `+added -removed`, start of the prompt |
-| `nightowl review show <id>` | One failure: prompt, feedback, classification and the diff from the AI version to the final one |
-| `nightowl review confirm <id...>` | Mark as a real AI mistake |
-| `nightowl review dismiss <id...>` | Mark as noise; left out of `report` and `export` |
-| `nightowl review reset <id...>` | Back to flagged |
-
-Ids can be written `12` or `#12`. If one id does not exist, nothing is changed. `review` (list) takes `--status flagged|confirmed|dismissed|all`, `--source manual-fix|ai-self-fix` and `--limit <1-200>`; `nightowl report` shows how many failures are still flagged.
-
-### `nightowl export`
-
-Exports failures as a test suite (`nightowl.eval/v1` format) to `.nightowl/export/evals.jsonl` (mode 0600, readable only by you). Each JSON line includes the prompt, the file before edit, the AI version (`rejected`), your version (`expected`), the `source`, and any correction prompt (`input.feedback`).
+Diagnoses local environment prerequisites and validates hook installations.
 
 ```bash
-nightowl export [--out <file>] [--force] [--since <YYYY-MM-DD>] [--category <name>]
+nightowl doctor [--strict] [--json]
 ```
 
-| Option | Meaning |
-| --- | --- |
-| `--out <file>` | Output file path (`-` for stdout; default: `.nightowl/export/evals.jsonl`) |
-| `--force` | Overwrite target file even if it was not created by NightOwl |
-| `--since <YYYY-MM-DD>` | Only export failures from this date on |
-| `--category <name>` | Filter by category (`logic`, `convention`, `misread-requirement`, `missing-context`, `unclassified`); repeatable |
+- `--strict`: Exits with code `1` if any warnings or missing hooks are detected.
+- `--json`: Outputs diagnostic status as a machine-readable JSON structure.
 
-### `nightowl classify` (opt-in)
+#### `nightowl uninstall`
 
-Uses Claude to classify failures into 4 categories: `logic`, `convention`, `misread-requirement`, `missing-context`.
+Cleanly removes Git hooks and Claude Code hook configurations. Leaves `.nightowl/` database and historical records intact.
 
-Runs locally via `claude -p` in an isolated temporary directory with all tools and MCP disabled. Without `--yes`, it only previews how many failures would be processed. Only one `classify --yes` runs at a time in a project (`.nightowl/classify.lock`), so failures are never sent twice.
+```bash
+nightowl uninstall [--purge]
+```
+
+- `--purge`: Additionally deletes the `.nightowl/` directory and all local history.
+
+---
+
+### 2. Analytics, Review & Data Ops
+
+#### `nightowl report`
+
+Summarizes AI failures by category, source, module path, and week.
+
+```bash
+nightowl report [options]
+```
+
+| Option | Description |
+| :--- | :--- |
+| `--since <YYYY-MM-DD>` | Filter records created from this date forward |
+| `--depth <1-5>` | Number of folder levels that make up a module (default: `2`) |
+| `--json` | Output full breakdown as structured JSON |
+| `-o, --output <file>` | Write report directly to a file (creates parent directories) |
+| `--fail-on-rate <0-100>` | **CI Quality Gate**: Exit with code `1` if failure rate exceeds threshold |
+
+#### `nightowl review`
+
+Interactive triage tool to review recorded failures and distinguish genuine AI bugs from intentional developer changes.
+
+```bash
+# List unreviewed failures (flagged)
+nightowl review [--status flagged|confirmed|dismissed|all] [--source manual-fix|ai-self-fix] [--limit N] [--json]
+
+# Inspect full details and unified diff of a failure
+nightowl review show <id> [--json]
+
+# Mark status
+nightowl review confirm <id...>
+nightowl review dismiss <id...>
+nightowl review reset <id...>
+```
+
+- `--json`: Prints the list or detailed failure object (including unified diff) as JSON.
+- `confirm`: Marks failure as an authentic AI mistake.
+- `dismiss`: Marks failure as false positive/noise (excluded from reports and evaluation datasets).
+
+#### `nightowl prune`
+
+Cleans up old file snapshots to keep database size optimal while preserving permanent failure records.
+
+```bash
+nightowl prune [--days <N>] [--dry-run] [--vacuum]
+```
+
+- `--days <N>`: Prune snapshots older than `N` days (default: `30`).
+- `--dry-run`: Preview how many records would be deleted without changing anything.
+- `--vacuum`: Run SQLite `VACUUM` to reclaim disk space after pruning.
+
+#### `nightowl failures`
+
+Quick terminal summary of total failures grouped by status (`flagged`, `confirmed`, `dismissed`).
+
+---
+
+### 3. Evaluation & Benchmarking Engine
+
+#### `nightowl classify` (opt-in)
+
+Categorizes recorded failures into 4 distinct archetypes: `logic`, `convention`, `misread-requirement`, or `missing-context`.
 
 ```bash
 nightowl classify [--yes] [--transport cli|api] [--model <name>] [--limit <1-100>] [--redo]
 ```
 
-| Option | Meaning |
-| --- | --- |
-| `--yes` | Actually execute calls to Claude |
-| `--transport cli\|api` | `cli` (default) uses local `claude`; `api` calls Anthropic Messages API (`ANTHROPIC_API_KEY` required with `--yes`) |
-| `--limit <1-100>` | Maximum failures to classify in one run (default: 20) |
-| `--model <name>` | Claude model to use (default: `haiku`); with `--transport api`, short names map to pinned API model ids |
-| `--redo` | Re-classify failures that already have a category |
+- `--yes`: Required to execute LLM calls (prevents unexpected API charges).
+- `--transport cli|api`: `cli` (default) spawns local isolated `claude -p`; `api` uses direct Anthropic Messages API (`ANTHROPIC_API_KEY`).
+- `--redo`: Re-analyzes failures that were already classified.
 
-### `nightowl eval` (opt-in)
+#### `nightowl export`
 
-Feeds each exported test case back to Claude models to benchmark whether new model versions or system rules solve the defect.
+Compiles confirmed failures into standardized evaluation datasets (`nightowl.eval/v1` format).
+
+```bash
+nightowl export [--out <file>] [--since <YYYY-MM-DD>] [--category <name>] [--force]
+```
+
+- Target file defaults to `.nightowl/export/evals.jsonl` (mode `0600`, readable only by current user).
+- Each line contains `{ id, filePath, prompt, rejected, expected, source, feedback }`.
+
+#### `nightowl eval` (opt-in)
+
+Executes exported test cases against different AI models to measure accuracy and prevent regressions.
 
 ```bash
 nightowl eval [--yes] [--input <file>] [--model <name>] [--limit <1-100>] \
   [--test-command <cmd>] [--test-timeout <1-600>] [--require-tests]
 ```
 
-| Option | Meaning |
-| --- | --- |
-| `--yes` | Actually execute evaluation calls |
-| `--input <file>` | Test suite file to evaluate (default: `.nightowl/export/evals.jsonl`) |
-| `--model <name>` | Models to test; repeatable (default: `haiku` and `sonnet`) |
-| `--limit <1-100>` | Maximum cases to evaluate (default: 20) |
-| `--test-command <cmd>` | After each answer, write it into the case file, run this shell command in the project root, then restore the file |
-| `--test-timeout <1-600>` | Seconds before the test command is killed (default: 120) |
-| `--require-tests` | Count as pass only when the textual score passes **and** the test command exits 0 (needs `--test-command`) |
+- `--model <name>`: Models to benchmark (repeatable, defaults to `haiku` and `sonnet`).
+- `--test-command <cmd>`: **Execution verifier**: writes the generated output to disk, runs your actual test runner (e.g., `npm test`, `pytest`), and restores the file.
+- `--require-tests`: Declares a test case passing **only** if the test runner exits with code `0`.
 
-**Scoring metrics:**
-- **coverage**: share of your intended changes that the model reproduced.
-- **repeat**: share of the defective AI code that the model repeated.
-- **score** = `coverage × (1 − repeat)`. A score ≥ 0.5 is considered passing (unless `--require-tests` also demands a green test command).
+**Scoring Metrics:**
+- **coverage**: Fraction of developer-corrected lines reproduced.
+- **repeat**: Fraction of defective AI code repeated.
+- **score** = `coverage × (1 - repeat)` (score ≥ 0.5 is passing).
 
-Results and detailed metrics are saved to `.nightowl/runs/<timestamp>.jsonl`.
+---
 
-### Utility commands
+## CI/CD Quality Gate Integration
 
-| Command | Meaning |
-| --- | --- |
-| `nightowl failures` | Print failure count summary by status |
-| `nightowl uninstall` | Safely remove NightOwl git and Claude Code hooks (leaves `.nightowl/` database intact) |
-| `nightowl --help`, `-h` | Display general help |
-| `nightowl --version`, `-v` | Display version |
+Enforce AI code quality standards in your GitHub Actions workflow:
 
-## Data & Privacy
+```yaml
+name: AI Quality Gate
 
-| Path | Purpose |
-| --- | --- |
-| `.nightowl/nightowl.db` | Local SQLite database (schema migrations, events, snapshots, failures) |
-| `.nightowl/export/` | Exported evaluation JSONL datasets |
-| `.nightowl/runs/` | Benchmark run logs and scores |
+on:
+  pull_request:
+    branches: [main]
 
-NightOwl is built with strict privacy guarantees:
-- **0 Telemetry / 0 Network Calls**: No data is sent to external servers.
-- **File Permissions**: `.nightowl/` directory is created with `0700` permissions; exports and eval runs are created with `0600`.
-- **Sensitive Content Blacklist**: Automatically blocks `.env`, secret keys, credentials, and tokens from being stored.
-- **Opt-in LLM Calls**: `classify` and `eval` will never call Claude CLI without explicit `--yes`.
+jobs:
+  nightowl-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-## Development
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install NightOwl
+        run: npm install -g @hoanghainh/nightowl-evals
+
+      - name: Check AI Failure Rate
+        run: |
+          # Fail the build if more than 20% of AI edits required developer intervention
+          nightowl report --since 2026-01-01 --fail-on-rate 20 --output report.json
+
+      - name: Archive NightOwl Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-quality-report
+          path: report.json
+```
+
+---
+
+## Security & Privacy Guarantees
+
+NightOwl is built from the ground up for strict enterprise security:
+
+| Guarantee | How NightOwl Enforces It |
+| :--- | :--- |
+| **Zero Telemetry** | 100% offline-first. No tracking code, no third-party HTTP calls, no analytics. |
+| **Local SQLite** | Stored entirely inside `.nightowl/nightowl.db` using Node.js native `node:sqlite`. |
+| **Strict File Permissions** | Directory initialized with mode `0700` (POSIX); exports and runs stored with `0600`. |
+| **Secret Blacklist** | Files matching `.env*`, `*credential*`, `*token*`, `*.pem`, `*.key` are never snapshotted. |
+| **Inline Secret Scanner** | Scans code diffs for AWS keys, GitHub tokens, Anthropic/OpenAI keys, and private keys before recording. |
+| **Fail-Open Hooks** | 2-second timeout; always returns exit code `0`; will never disrupt normal developer workflows. |
+
+---
+
+## Development & Contributing
+
+NightOwl is developed following strict [OpenSpec](https://github.com/Fission-AI/OpenSpec) specification-driven methodology and Test-Driven Development (TDD).
 
 ```bash
-npm run typecheck       # Run TypeScript compiler checks
-npm test                # Run Vitest test suite (560+ tests)
-npm run test:coverage   # Run tests with V8 code coverage
-npm run spec:validate   # Validate OpenSpec specifications
+npm run typecheck       # Strict TypeScript typechecking
+npm test                # Run 740+ unit and integration tests
+npm run test:coverage   # Verify test coverage (>95% enforced)
+npm run spec:validate   # Validate OpenSpec specifications strictly
 npm run build           # Bundle CLI binary using tsup
 ```
 
-All features and requirements follow [OpenSpec](https://github.com/Fission-AI/OpenSpec). Current specifications live in [`openspec/specs/`](openspec/specs/).
+Specifications are maintained under [`openspec/specs/`](openspec/specs/).
+
+---
 
 ## License
 
