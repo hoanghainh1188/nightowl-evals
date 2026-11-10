@@ -5,6 +5,7 @@ import { errorMessage } from '../cli/errors.js';
 import { renderCommandHelp } from '../cli/help.js';
 import type { Io } from '../cli/io.js';
 import { formatDetail, formatList } from '../review/format.js';
+import { processStdinTerminal, runInteractiveReview, type TuiTerminal } from '../review/tui/session.js';
 import { printable } from '../shared/printable.js';
 import type { FailureSource } from '../storage/failures.js';
 import type { FailureStatus } from '../storage/review-queries.js';
@@ -22,17 +23,19 @@ type Mark = keyof typeof MARKS;
 
 export interface ReviewDeps {
   readonly cwd: () => string;
+  readonly createTerminal?: () => TuiTerminal;
 }
 
+type ListFilter = {
+  readonly statuses: readonly FailureStatus[] | null;
+  readonly source: FailureSource | null;
+  readonly agents: readonly string[] | null;
+  readonly limit: number;
+};
+
 type Action =
-  | {
-      readonly kind: 'list';
-      readonly statuses: readonly FailureStatus[] | null;
-      readonly source: FailureSource | null;
-      readonly agents: readonly string[] | null;
-      readonly limit: number;
-      readonly json: boolean;
-    }
+  | (ListFilter & { readonly kind: 'list'; readonly json: boolean })
+  | (ListFilter & { readonly kind: 'interactive' })
   | { readonly kind: 'show'; readonly id: number; readonly json: boolean }
   | { readonly kind: 'mark'; readonly mark: Mark; readonly ids: readonly number[] };
 
@@ -52,6 +55,7 @@ function parseList(args: readonly string[]): Action {
       source: { type: 'string' },
       limit: { type: 'string' },
       json: { type: 'boolean' },
+      interactive: { type: 'boolean', short: 'i' },
       agent: { type: 'string', multiple: true },
     },
     strict: true,
@@ -70,14 +74,17 @@ function parseList(args: readonly string[]): Action {
   }
   const limit = values.limit === undefined ? DEFAULT_REVIEW_LIMIT : /^[1-9]\d{0,2}$/.test(values.limit) ? Number(values.limit) : Number.NaN;
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIMIT) throw new UsageError(`--limit must be a whole number from 1 to ${MAX_LIMIT}`);
-  return {
-    kind: 'list',
-    statuses: status === 'all' ? null : [status as FailureStatus],
+  const interactive = values.interactive === true;
+  const json = values.json === true;
+  if (interactive && json) throw new UsageError('cannot combine --interactive (-i) with --json');
+  const filter = {
+    statuses: status === 'all' ? null : ([status as FailureStatus] as const),
     source: (values.source as FailureSource | undefined) ?? null,
     agents: agentFlags.length === 0 ? null : agentFlags,
     limit,
-    json: values.json === true,
   };
+  if (interactive) return { kind: 'interactive', ...filter };
+  return { kind: 'list', ...filter, json };
 }
 
 function positionals(args: readonly string[]): readonly string[] {
@@ -130,7 +137,7 @@ function runMark(store: Store, action: Extract<Action, { kind: 'mark' }>, io: Io
   return 0;
 }
 
-function runRead(store: Store, action: Exclude<Action, { kind: 'mark' }>, io: Io): number {
+function runRead(store: Store, action: Extract<Action, { kind: 'list' | 'show' }>, io: Io): number {
   if (action.kind === 'show') {
     const failure = store.getFailureForReview(action.id);
     if (failure === null) {
@@ -154,7 +161,12 @@ function runRead(store: Store, action: Exclude<Action, { kind: 'mark' }>, io: Io
   return 0;
 }
 
-export function createReviewCommand(deps: ReviewDeps = { cwd: () => process.cwd() }): Command {
+const defaultDeps: ReviewDeps = {
+  cwd: () => process.cwd(),
+  createTerminal: () => processStdinTerminal(process.stdin, process.stdout),
+};
+
+export function createReviewCommand(deps: ReviewDeps = defaultDeps): Command {
   return {
     name: 'review',
     summary: 'List recorded failures, show one, and mark them confirmed or dismissed',
@@ -167,13 +179,15 @@ export function createReviewCommand(deps: ReviewDeps = { cwd: () => process.cwd(
         'confirm <id...>   Mark as a real AI mistake',
         'dismiss <id...>   Mark as noise; left out of report and export',
         'reset <id...>     Back to flagged',
+        'With -i/--interactive (TTY only): ↑/↓ move, Space/Enter diff, c confirm, d dismiss, r reset, q quit.',
         "Ids are the numbers list shows (12; '#12' works too, quoted). Nothing is sent anywhere.",
       ],
       options: [
-        ['--status <name>', `list only: ${[...STATUSES, 'all'].join(', ')} (default: flagged)`],
-        ['--source <name>', `list only: ${SOURCES.join(', ')}`],
-        ['--agent <id>', 'list only: filter by agent (repeatable)'],
-        [`--limit <1-${MAX_LIMIT}>`, `list only: at most this many (default: ${DEFAULT_REVIEW_LIMIT})`],
+        ['-i, --interactive', 'Interactive TUI (requires a TTY; cannot combine with --json)'],
+        ['--status <name>', `list / -i: ${[...STATUSES, 'all'].join(', ')} (default: flagged)`],
+        ['--source <name>', `list / -i: ${SOURCES.join(', ')}`],
+        ['--agent <id>', 'list / -i: filter by agent (repeatable)'],
+        [`--limit <1-${MAX_LIMIT}>`, `list / -i: at most this many (default: ${DEFAULT_REVIEW_LIMIT})`],
         ['--json', 'Output list or show detail as JSON'],
       ],
     }),
@@ -185,6 +199,30 @@ export function createReviewCommand(deps: ReviewDeps = { cwd: () => process.cwd(
         io.stderr(`nightowl review: ${printable(errorMessage(error))}\nRun 'nightowl review --help'.\n`);
         return 1;
       }
+
+      if (action.kind === 'interactive') {
+        const createTerminal = deps.createTerminal ?? (() => processStdinTerminal(process.stdin, process.stdout));
+        const terminal = createTerminal();
+        if (!terminal.isTTY) {
+          io.stderr('nightowl review: --interactive (-i) needs a TTY (stdin and stdout).\n');
+          return 1;
+        }
+        const store = await openExistingStoreForWrite(deps.cwd());
+        if (typeof store === 'string') {
+          io.stderr(`nightowl review: ${store}\n`);
+          return 1;
+        }
+        try {
+          const statusLabel = action.statuses === null ? null : (action.statuses[0] as string);
+          return await runInteractiveReview(store, action, statusLabel, terminal);
+        } catch (error) {
+          io.stderr(`nightowl review: ${printable(errorMessage(error))}\n`);
+          return 1;
+        } finally {
+          store.close();
+        }
+      }
+
       const store = action.kind === 'mark' ? await openExistingStoreForWrite(deps.cwd()) : await openExistingStore(deps.cwd());
       if (typeof store === 'string') {
         io.stderr(`nightowl review: ${store}\n`);
