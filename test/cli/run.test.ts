@@ -23,7 +23,7 @@ describe('run', () => {
     const fake = createFakeIo();
     const code = await run(['--help'], fake.io);
     expect(code).toBe(0);
-    for (const name of ['init', 'doctor', 'prune', 'log', 'report', 'export', 'suggest-rules']) {
+    for (const name of ['init', 'doctor', 'prune', 'log', 'report', 'export', 'suggest-rules', 'suggest-regressions']) {
       expect(fake.out()).toMatch(new RegExp(`^\\s+${name}\\s+\\S`, 'm'));
     }
     expect(fake.err()).toBe('');

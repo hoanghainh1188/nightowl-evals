@@ -30,6 +30,7 @@
     - [`nightowl prune`](#nightowl-prune)
     - [`nightowl failures`](#nightowl-failures)
     - [`nightowl suggest-rules`](#nightowl-suggest-rules)
+    - [`nightowl suggest-regressions`](#nightowl-suggest-regressions)
   - [Evaluation & Benchmarking Engine](#3-evaluation--benchmarking-engine)
     - [`nightowl classify`](#nightowl-classify-opt-in)
     - [`nightowl export`](#nightowl-export)
@@ -321,6 +322,20 @@ nightowl suggest-rules [--since <YYYY-MM-DD>] [--category <name>] [--agent <id>]
 - Defaults: status `confirmed`, categories `convention` + `missing-context`, clusters with at least 2 failures.
 - Prints to stdout unless `--output` / `--write` is set. Never auto-edits `CLAUDE.md` or `.cursorrules`.
 - Overwriting an existing non-NightOwl file requires `--force` (files containing `<!-- nightowl-suggested-rules -->` are safe to replace).
+
+#### `nightowl suggest-regressions`
+
+Turns confirmed failures into `nightowl.eval/v1` fixtures (and optional vitest/jest `it.todo` stubs) you can review into the project test suite. Offline templates by default; LLM title rewrite only with `--yes`.
+
+```bash
+nightowl suggest-regressions [--since <YYYY-MM-DD>] [--category <name>] [--agent <id>] \
+  [--status <name>] [--limit <n>] [--framework auto|json|vitest|jest] \
+  [--output <dir>] [--force] [--yes] [--transport cli|api] [--model <name>]
+```
+
+- Defaults: status `confirmed`; preview on stdout until `--output <dir>` is set.
+- `--framework auto` detects vitest/jest from `package.json`, otherwise writes JSON fixtures only.
+- Overwriting unknown files requires `--force` (NightOwl eval JSON / `// nightowl-suggested-regression` stubs are safe to replace).
 
 ---
 
