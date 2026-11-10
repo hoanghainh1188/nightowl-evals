@@ -21,9 +21,13 @@ describe('nightowl review', () => {
   });
   afterEach(() => repo.cleanup());
 
-  async function review(args: readonly string[], cwd = repo.path) {
+  async function review(
+    args: readonly string[],
+    cwd = repo.path,
+    extras: Omit<NonNullable<Parameters<typeof createReviewCommand>[0]>, 'cwd'> = {},
+  ) {
     const fake = createFakeIo();
-    const code = await createReviewCommand({ cwd: () => cwd }).run(args, fake.io);
+    const code = await createReviewCommand({ ...extras, cwd: () => cwd }).run(args, fake.io);
     return { code, out: fake.out(), err: fake.err() };
   }
 
@@ -212,11 +216,79 @@ describe('nightowl review', () => {
   it('is registered, with help for every subcommand', async () => {
     const fake = createFakeIo();
     expect(await run(['review', '--help'], fake.io)).toBe(0);
-    for (const word of ['list', 'show', 'confirm', 'dismiss', 'reset', '--status', '--source', '--limit', '--json']) {
+    for (const word of [
+      'list',
+      'show',
+      'confirm',
+      'dismiss',
+      'reset',
+      '--status',
+      '--source',
+      '--limit',
+      '--json',
+      '--interactive',
+      'c confirm',
+      'd dismiss',
+      'q quit',
+    ]) {
       expect(fake.out()).toContain(word);
     }
     const general = createFakeIo();
     await run(['--help'], general.io);
     expect(general.out()).toMatch(/^ {2}review +\S/m);
+  });
+
+  describe('interactive', () => {
+    it('rejects --interactive with --json', async () => {
+      const result = await review(['-i', '--json']);
+      expect(result.code).toBe(1);
+      expect(result.err).toContain('cannot combine');
+    });
+
+    it('rejects --interactive without a TTY', async () => {
+      const result = await review(['-i'], repo.path, {
+        createTerminal: () => ({
+          isTTY: false,
+          rows: 24,
+          columns: 80,
+          write: () => undefined,
+          setRawMode: () => undefined,
+          onData: () => () => undefined,
+        }),
+      });
+      expect(result.code).toBe(1);
+      expect(result.err).toContain('needs a TTY');
+    });
+
+    it('runs a scripted TUI session and marks confirm then quits', async () => {
+      const writes: string[] = [];
+      let send: ((chunk: string) => void) | null = null;
+      const result = await review(['-i'], repo.path, {
+        createTerminal: () => ({
+          isTTY: true,
+          rows: 24,
+          columns: 80,
+          write: (text) => {
+            writes.push(text);
+          },
+          setRawMode: () => undefined,
+          onData: (handler) => {
+            send = handler;
+            Promise.resolve().then(() => {
+              send?.('c');
+              send?.('q');
+            });
+            return () => {
+              send = null;
+            };
+          },
+        }),
+      });
+      expect(result.code).toBe(0);
+      expect(writes.some((w) => w.includes('nightowl review'))).toBe(true);
+      expect(writes.some((w) => w.includes('Confirmed'))).toBe(true);
+      const after = await statuses();
+      expect(after[2]).toBe('confirmed'); // newest flagged was ids[2]
+    });
   });
 });

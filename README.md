@@ -280,6 +280,9 @@ Interactive triage tool to review recorded failures and distinguish genuine AI b
 # List unreviewed failures (flagged)
 nightowl review [--status flagged|confirmed|dismissed|all] [--source manual-fix|ai-self-fix] [--agent <id>] [--limit N] [--json]
 
+# Interactive TUI (TTY only)
+nightowl review -i [--status ...] [--source ...] [--agent <id>] [--limit N]
+
 # Inspect full details and unified diff of a failure
 nightowl review show <id> [--json]
 
@@ -289,6 +292,7 @@ nightowl review dismiss <id...>
 nightowl review reset <id...>
 ```
 
+- `-i` / `--interactive`: Keyboard triage in the terminal (`↑`/`↓`, Space/Enter for diff, `c`/`d`/`r`, `q` to quit). Requires a TTY; cannot combine with `--json`.
 - `--json`: Prints the list or detailed failure object (including unified diff) as JSON.
 - `confirm`: Marks failure as an authentic AI mistake.
 - `dismiss`: Marks failure as false positive/noise (excluded from reports and evaluation datasets).
