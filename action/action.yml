@@ -1,0 +1,125 @@
+name: NightOwl AI Quality Gate
+description: Run nightowl report with a fail-on-rate CI gate and optionally post a sticky PR comment.
+author: Hoang Hai
+
+branding:
+  icon: activity
+  color: gray-dark
+
+inputs:
+  fail-on-rate:
+    description: Exit non-zero when AI-edit change rate (percent) exceeds this threshold (0–100).
+    required: false
+    default: '25'
+  since:
+    description: Optional YYYY-MM-DD passed to nightowl report --since.
+    required: false
+    default: ''
+  output-path:
+    description: Path (relative to working-directory) for the JSON report file.
+    required: false
+    default: nightowl-report.json
+  working-directory:
+    description: Repository subdirectory that contains .nightowl/nightowl.db.
+    required: false
+    default: '.'
+  nightowl-version:
+    description: npm version of @hoanghainh/nightowl-evals to install (semver or latest).
+    required: false
+    default: latest
+  comment-on-pr:
+    description: When true on pull_request events, upsert a sticky AI Coding Health Report comment.
+    required: false
+    default: 'true'
+  github-token:
+    description: Token used for sticky PR comments (needs pull-requests: write when commenting).
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: '22'
+
+    - name: Install NightOwl
+      shell: bash
+      env:
+        NIGHTOWL_VERSION: ${{ inputs.nightowl-version }}
+      run: |
+        set -euo pipefail
+        if [[ -z "${NIGHTOWL_VERSION}" ]]; then
+          echo "::error::nightowl-version input must not be empty"
+          exit 1
+        fi
+        npm install -g "@hoanghainh/nightowl-evals@${NIGHTOWL_VERSION}"
+
+    - name: Preflight database
+      shell: bash
+      env:
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+      run: |
+        set -euo pipefail
+        db="${WORKING_DIRECTORY%/}/.nightowl/nightowl.db"
+        if [[ ! -f "${db}" ]]; then
+          echo "::error::Missing ${db}. NightOwl does not create the database in CI."
+          echo "::error::Restore .nightowl/nightowl.db onto the runner (cache, artifact, or self-hosted volume), or run nightowl init locally first."
+          echo "::error::.nightowl/ is gitignored by design — checkout alone will not include the DB."
+          exit 1
+        fi
+
+    - name: Validate fail-on-rate
+      shell: bash
+      env:
+        FAIL_ON_RATE: ${{ inputs.fail-on-rate }}
+      run: |
+        set -euo pipefail
+        if ! [[ "${FAIL_ON_RATE}" =~ ^([0-9]+([.][0-9]+)?)$ ]]; then
+          echo "::error::fail-on-rate must be a number from 0 to 100 (got: ${FAIL_ON_RATE})"
+          exit 1
+        fi
+        # bash arithmetic truncates; compare as float via awk
+        ok="$(awk -v r="${FAIL_ON_RATE}" 'BEGIN { print (r >= 0 && r <= 100) ? "yes" : "no" }')"
+        if [[ "${ok}" != "yes" ]]; then
+          echo "::error::fail-on-rate must be a number from 0 to 100 (got: ${FAIL_ON_RATE})"
+          exit 1
+        fi
+
+    - name: Run NightOwl report
+      id: report
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        FAIL_ON_RATE: ${{ inputs.fail-on-rate }}
+        SINCE: ${{ inputs.since }}
+        OUTPUT_PATH: ${{ inputs.output-path }}
+      run: |
+        set -euo pipefail
+        args=(--json --fail-on-rate "${FAIL_ON_RATE}" --output "${OUTPUT_PATH}")
+        if [[ -n "${SINCE}" ]]; then
+          args+=(--since "${SINCE}")
+        fi
+        nightowl report "${args[@]}"
+
+    - name: Sticky PR comment
+      if: ${{ always() && inputs.comment-on-pr == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        OUTPUT_PATH: ${{ inputs.output-path }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -uo pipefail
+        if [[ "${OUTPUT_PATH}" = /* ]]; then
+          report="${OUTPUT_PATH}"
+        else
+          report="${WORKING_DIRECTORY%/}/${OUTPUT_PATH}"
+        fi
+        bash "${ACTION_PATH}/scripts/post-comment.sh" "${report}" "${PR_NUMBER}" || {
+          echo "::warning::NightOwl sticky PR comment failed (gate exit code unchanged)"
+          exit 0
+        }
