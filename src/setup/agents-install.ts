@@ -1,6 +1,12 @@
 import type { AgentId } from '../agents/ids.js';
-import { AGENT_IDS, isAgentId } from '../agents/ids.js';
-import { AGENT_CONFIGS, installAgentConfig, uninstallAgentConfig } from './agent-config.js';
+import { AGENT_IDS, isAgentId, maturityOf } from '../agents/ids.js';
+import {
+  AGENT_CONFIGS,
+  ALL_AGENT_CONFIGS,
+  installAgentConfig,
+  manualWrapHint,
+  uninstallAgentConfig,
+} from './agent-config.js';
 import { installCursorHooks, uninstallCursorHooks } from './cursor-hooks.js';
 import type { FileChange } from './gitignore.js';
 
@@ -42,13 +48,24 @@ export async function installSelectedAgents(root: string, agents: readonly Insta
         });
         continue;
       }
+
+      if (maturityOf(agent) === 'manual') {
+        lines.push({
+          file: agent,
+          status: 'unchanged',
+          detail: 'manual maturity — no native hook file written',
+          warning: manualWrapHint(agent),
+        });
+        continue;
+      }
+
       const spec = AGENT_CONFIGS.find((s) => s.id === agent);
       if (spec === undefined) continue;
       const result = await installAgentConfig(root, spec);
       lines.push({
         file: result.file,
         status: result.status,
-        detail: result.status === 'unchanged' ? 'NightOwl entry already present' : `added NightOwl ${agent} hook entry`,
+        detail: result.status === 'unchanged' ? 'NightOwl entry already present' : `added NightOwl ${agent} hook entry (${maturityOf(agent)})`,
       });
     } catch (error) {
       lines.push({
@@ -81,7 +98,7 @@ export async function uninstallAllAgentHooks(root: string): Promise<readonly Age
       warning: error instanceof Error ? error.message : String(error),
     });
   }
-  for (const spec of AGENT_CONFIGS) {
+  for (const spec of ALL_AGENT_CONFIGS) {
     try {
       const result = await uninstallAgentConfig(root, spec);
       if (result.status !== 'unchanged') {

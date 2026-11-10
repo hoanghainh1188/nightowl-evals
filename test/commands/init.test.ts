@@ -42,7 +42,15 @@ describe('nightowl init', () => {
     expect(await readFile(join(repo.path, '.git/hooks/pre-commit'), 'utf8')).toContain('nightowl precommit');
     expect(fake.out()).toContain('.git/hooks/post-commit');
     expect(await readFile(join(repo.path, '.git/hooks/post-commit'), 'utf8')).toContain('nightowl postcommit');
-    expect(fake.err()).toBe('');
+    expect(await readFile(join(repo.path, '.cursor/hooks.json'), 'utf8')).toContain('nightowl log');
+    expect(await readFile(join(repo.path, '.windsurf/hooks.json'), 'utf8')).toContain('post_file_edit');
+    expect(fake.err()).toMatch(/manual maturity|nightowl log --agent aider/);
+  });
+
+  it('init --help mentions agents and maturity', () => {
+    const cmd = createInitCommand({ cwd: () => repo.path, ...ON_PATH });
+    expect(cmd.help).toContain('--agents');
+    expect(cmd.help).toMatch(/maturity/i);
   });
 
   it.each([[['--force']], [['now']]])('rejects %j and changes nothing', async (args) => {

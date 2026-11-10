@@ -108,7 +108,7 @@ Chi tiết xem [`docs/v0.4-roadmap-ideas.md`](../docs/v0.4-roadmap-ideas.md):
 
 | Thứ tự | Ý tưởng Change | Mô tả tóm tắt | Trạng thái |
 | :---: | :--- | :--- | :---: |
-| 25 | `harden-multi-agent-adapters` | Làm thật adapter/hook Windsurf, Cline, Roo, Copilot, Aider (không chỉ marker) | Dự kiến |
+| 25 | `harden-multi-agent-adapters` | Làm thật adapter/hook Windsurf, Cline, Roo, Copilot, Aider (không chỉ marker) | Done |
 | 26 | `add-ci-pr-failure-signals` | Ingest tín hiệu CI test/build fail và comment review PR thành failure/quan sát | Dự kiến |
 | 27 | `add-rule-impact-metrics` | Đo giảm lỗi lặp trước/sau khi áp rule (vòng kín suggest-rules → report) | Dự kiến |
 | 28 | `add-customer-quality-report` | Xuất báo cáo chất lượng AI cho khách (Markdown, mẫu song ngữ VI–JA) | Dự kiến |

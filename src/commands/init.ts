@@ -144,7 +144,8 @@ export function createInitCommand(deps: InitDeps = defaultDeps): Command {
       usage: '[--shared] [--agents <list>]',
       description: [
         'Adds, without removing anything already there:',
-        `  Claude Code / Cursor / Windsurf / Cline / Roo / Copilot Workspace / Aider hooks that run nightowl log`,
+        '  Claude Code + Cursor (verified) and best-effort agent hook configs that run nightowl log',
+        '  Manual-maturity agents (e.g. aider, copilot-workspace) are not given fake native hooks — see README',
         '  .git/hooks/pre-commit        runs nightowl precommit',
         '  .git/hooks/post-commit       runs nightowl postcommit',
         `  .gitignore                   ${NIGHTOWL_IGNORE} and, if needed, ${PERSONAL_SETTINGS}`,
@@ -155,7 +156,7 @@ export function createInitCommand(deps: InitDeps = defaultDeps): Command {
         ['--shared', `Put the Claude Code hooks in ${SHARED_SETTINGS}, shared with your team`],
         [
           '--agents <list>',
-          `Comma-separated agents to install (default: all). Known: ${AGENT_IDS.join(', ')}`,
+          `Comma-separated agents (default: all). Known: ${AGENT_IDS.join(', ')}. Not every agent has a native hook — see README maturity.`,
         ],
       ],
     }),
