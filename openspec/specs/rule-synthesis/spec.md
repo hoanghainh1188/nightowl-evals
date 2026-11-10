@@ -39,11 +39,7 @@ The command SHALL NOT call an LLM unless the user opts in (for example `--yes` w
 - **THEN** không spawn `claude` và không gọi Anthropic API
 
 ### Requirement: Ghi file chỉ khi chỉ định rõ
-Lệnh SHALL phân biệt hai chế độ ghi tường minh (không dùng đồng thời):
-- `--output <path>`: ghi **toàn bộ** tài liệu đề xuất NightOwl (có marker) vào đường dẫn đó — tạo mới hoặc thay thế file đề xuất NightOwl theo quy tắc replace đã document; từ chối đè file không phải đề xuất NightOwl trừ khi `--force`.
-- `--write <path>`: **chèn hoặc cập nhật** một khối đề xuất giới hạn bởi marker bắt đầu/kết thúc NightOwl bên trong file đích (ví dụ `CLAUDE.md`), giữ nguyên mọi nội dung ngoài khối; lần chạy sau với cùng path SHALL idempotent thay thế đúng khối đó.
-
-`--write` SHALL NOT xoá hay ghi đè nội dung người dùng ngoài vùng marker. Khi file đích chưa có marker: SHALL thêm khối marker (thường append cuối file) trừ khi design chọn từ chối rõ. Khi marker không khớp/hỏng: SHALL báo lỗi rõ và thoát ≠ 0 trừ khi `--force` theo điều kiện an toàn đã document (không biến `--force` thành “đè cả file rule”). Symlink đích SHALL bị từ chối.
+Lệnh SHALL hỗ trợ đúng một trong hai chế độ ghi tường minh: `--output <path>` (file đề xuất NightOwl độc lập) hoặc `--write <path>` (khối marker trong file rule dự án). Không có cả hai cờ thì SHALL NOT ghi file. Symlink đích SHALL bị từ chối.
 
 #### Scenario: Write path
 - **WHEN** `nightowl suggest-rules --write .nightowl/suggested-rules.md`
@@ -60,6 +56,14 @@ Lệnh SHALL phân biệt hai chế độ ghi tường minh (không dùng đồn
 #### Scenario: --write cập nhật idempotent
 - **WHEN** chạy `--write CLAUDE.md` lần hai sau khi đã có khối marker
 - **THEN** chỉ một khối NightOwl còn lại; nội dung ngoài khối không đổi
+
+#### Scenario: --write thêm khối khi chưa có marker
+- **WHEN** file rule chưa có marker NightOwl và chạy `--write` tới path đó
+- **THEN** khối marker được thêm (thường cuối file); phần nội dung sẵn có giữ nguyên
+
+#### Scenario: --write marker lệch
+- **WHEN** file có marker NightOwl không khớp và chạy `--write` không `--force`
+- **THEN** không ghi; stderr nêu rõ; thoát ≠ 0
 
 #### Scenario: Từ chối --output đè file lạ
 - **WHEN** `--output` trỏ tới file đã tồn tại không phải đề xuất NightOwl và không có `--force`
