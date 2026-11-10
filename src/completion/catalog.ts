@@ -1,0 +1,97 @@
+import type { Command } from '../commands/command.js';
+
+export const COMPLETION_SHELLS = Object.freeze(['bash', 'zsh', 'fish'] as const);
+export type CompletionShell = (typeof COMPLETION_SHELLS)[number];
+
+export function isCompletionShell(value: string): value is CompletionShell {
+  return (COMPLETION_SHELLS as readonly string[]).includes(value);
+}
+
+/** Long flags (and notable shorts) offered after each command. Keep in sync with command help. */
+export const COMMAND_FLAGS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  init: ['--shared', '--agents'],
+  doctor: ['--strict'],
+  log: ['--agent'],
+  report: ['--since', '--depth', '--agent', '--json', '--output', '-o', '--fail-on-rate'],
+  export: ['--out', '--format', '--force', '--since', '--category'],
+  precommit: [],
+  postcommit: [],
+  prune: ['--days', '--dry-run', '--vacuum'],
+  failures: [],
+  classify: ['--yes', '--transport', '--limit', '--model', '--redo'],
+  eval: ['--yes', '--input', '--model', '--limit', '--test-command', '--test-timeout', '--require-tests'],
+  review: ['-i', '--interactive', '--status', '--source', '--agent', '--limit', '--json'],
+  'suggest-rules': [
+    '--since',
+    '--category',
+    '--agent',
+    '--status',
+    '--min-count',
+    '--limit',
+    '--output',
+    '--write',
+    '--force',
+    '--yes',
+    '--transport',
+    '--model',
+  ],
+  'suggest-regressions': [
+    '--since',
+    '--category',
+    '--agent',
+    '--status',
+    '--limit',
+    '--framework',
+    '--output',
+    '--force',
+    '--yes',
+    '--transport',
+    '--model',
+  ],
+  uninstall: [],
+  completion: [],
+});
+
+export interface CompletionCommand {
+  readonly name: string;
+  readonly summary: string;
+  readonly flags: readonly string[];
+}
+
+export interface CompletionCatalog {
+  readonly commands: readonly CompletionCommand[];
+}
+
+export function buildCatalog(commands: readonly Command[]): CompletionCatalog {
+  return {
+    commands: commands.map((command) => ({
+      name: command.name,
+      summary: command.summary,
+      flags: COMMAND_FLAGS[command.name] ?? [],
+    })),
+  };
+}
+
+/** Default catalog from the static flag table (avoids importing the command registry). */
+export function buildDefaultCatalog(): CompletionCatalog {
+  return {
+    commands: Object.entries(COMMAND_FLAGS).map(([name, flags]) => ({
+      name,
+      summary: name,
+      flags,
+    })),
+  };
+}
+
+export function assertCatalogCoversCommands(commands: readonly Command[]): void {
+  for (const command of commands) {
+    if (!(command.name in COMMAND_FLAGS)) {
+      throw new Error(`completion catalog missing flags for command: ${command.name}`);
+    }
+  }
+  for (const name of Object.keys(COMMAND_FLAGS)) {
+    if (!commands.some((command) => command.name === name)) {
+      throw new Error(`completion catalog has unknown command: ${name}`);
+    }
+  }
+}

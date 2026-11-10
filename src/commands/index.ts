@@ -1,5 +1,6 @@
 import { classifyCommand } from './classify.js';
 import type { Command } from './command.js';
+import { completionCommand } from './completion.js';
 import { doctorCommand } from './doctor.js';
 import { evalCommand } from './eval.js';
 import { exportCommand } from './export.js';
@@ -31,4 +32,5 @@ export const commands: readonly Command[] = Object.freeze([
   suggestRulesCommand,
   suggestRegressionsCommand,
   uninstallCommand,
+  completionCommand,
 ]);
