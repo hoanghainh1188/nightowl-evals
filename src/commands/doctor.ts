@@ -1,16 +1,19 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
+import { AGENT_IDS, maturityOf } from '../agents/ids.js';
 import { errorMessage } from '../cli/errors.js';
 import { renderCommandHelp } from '../cli/help.js';
 import type { Io } from '../cli/io.js';
 import { runGit } from '../hooks/git/run-git.js';
+import { AGENT_CONFIGS, hasNightowlAgentMarker, LEGACY_AGENT_CONFIGS } from '../setup/agent-config.js';
 import {
   hasNightowlHooks,
   PERSONAL_SETTINGS,
   readSettings,
   SHARED_SETTINGS,
 } from '../setup/claude-settings.js';
+import { hasCursorNightowlHooks } from '../setup/cursor-hooks.js';
 import { readTextIfExists } from '../setup/fs-utils.js';
 import { GIT_HOOKS } from '../setup/git-hook.js';
 import { NIGHTOWL_IGNORE } from '../setup/gitignore.js';
@@ -224,6 +227,115 @@ export async function checkClaude(deps: DoctorDeps, root: string | null): Promis
       status: 'warn',
       message: 'No NightOwl hooks found in Claude Code settings',
       remedy: "Run 'nightowl init' to configure Claude Code hooks.",
+    });
+  }
+
+  return checks;
+}
+
+export async function checkAgentHooks(deps: DoctorDeps, root: string | null): Promise<readonly DoctorCheck[]> {
+  const checks: DoctorCheck[] = [];
+  if (!root) return checks;
+
+  const cursorRaw = await deps.readTextIfExists(join(root, '.cursor/hooks.json'));
+  if (cursorRaw === null) {
+    checks.push({
+      category: 'Agent Hooks',
+      name: 'Cursor hooks',
+      status: 'warn',
+      message: 'No .cursor/hooks.json with NightOwl hooks',
+      remedy: "Run 'nightowl init --agents cursor' to install Cursor hooks.",
+    });
+  } else {
+    try {
+      const doc = JSON.parse(cursorRaw) as unknown;
+      if (hasCursorNightowlHooks(doc)) {
+        checks.push({
+          category: 'Agent Hooks',
+          name: 'Cursor hooks',
+          status: 'ok',
+          message: 'NightOwl hooks present in .cursor/hooks.json (verified)',
+        });
+      } else {
+        checks.push({
+          category: 'Agent Hooks',
+          name: 'Cursor hooks',
+          status: 'warn',
+          message: '.cursor/hooks.json exists but has no NightOwl entries',
+          remedy: "Run 'nightowl init --agents cursor'.",
+        });
+      }
+    } catch {
+      checks.push({
+        category: 'Agent Hooks',
+        name: 'Cursor hooks',
+        status: 'warn',
+        message: '.cursor/hooks.json is not valid JSON',
+        remedy: 'Fix or remove the file, then re-run nightowl init.',
+      });
+    }
+  }
+
+  for (const spec of AGENT_CONFIGS) {
+    const raw = await deps.readTextIfExists(join(root, spec.file));
+    if (raw === null) {
+      checks.push({
+        category: 'Agent Hooks',
+        name: `${spec.id} config`,
+        status: 'warn',
+        message: `Missing ${spec.file} (maturity: ${maturityOf(spec.id)})`,
+        remedy: `Run 'nightowl init --agents ${spec.id}' or ignore if you do not use ${spec.id}.`,
+      });
+      continue;
+    }
+    try {
+      const doc = JSON.parse(raw) as unknown;
+      if (hasNightowlAgentMarker(doc, spec.id)) {
+        checks.push({
+          category: 'Agent Hooks',
+          name: `${spec.id} config`,
+          status: 'ok',
+          message: `NightOwl entry present in ${spec.file} (${maturityOf(spec.id)})`,
+        });
+      } else {
+        checks.push({
+          category: 'Agent Hooks',
+          name: `${spec.id} config`,
+          status: 'warn',
+          message: `${spec.file} exists without a NightOwl entry`,
+          remedy: `Run 'nightowl init --agents ${spec.id}'.`,
+        });
+      }
+    } catch {
+      checks.push({
+        category: 'Agent Hooks',
+        name: `${spec.id} config`,
+        status: 'warn',
+        message: `${spec.file} is not valid JSON`,
+        remedy: 'Fix or remove the file, then re-run nightowl init.',
+      });
+    }
+  }
+
+  for (const id of AGENT_IDS) {
+    if (maturityOf(id) !== 'manual') continue;
+    checks.push({
+      category: 'Agent Hooks',
+      name: `${id} setup`,
+      status: 'ok',
+      message: `${id} is manual maturity — configure a wrap to 'nightowl log --agent ${id}' (see README)`,
+    });
+  }
+
+  for (const spec of LEGACY_AGENT_CONFIGS) {
+    const raw = await deps.readTextIfExists(join(root, spec.file));
+    if (raw === null) continue;
+    checks.push({
+      category: 'Agent Hooks',
+      name: `${spec.id} legacy file`,
+      status: 'warn',
+      message: `Legacy NightOwl marker still present at ${spec.file} (${spec.id} is now manual maturity)`,
+      remedy: "Run 'nightowl uninstall' then 'nightowl init' (or remove the file) and use a manual wrap — see README.",
     });
   }
 
@@ -474,6 +586,7 @@ export function createDoctorCommand(deps: DoctorDeps = defaultDoctorDeps): Comma
       usage: '[options]',
       description: [
         'Diagnoses system requirements, Git repository status, Claude Code hooks,',
+        'multi-agent ingest configs by maturity (verified / best-effort / manual),',
         'Git hooks, and local SQLite database health.',
       ],
       options: [
@@ -506,6 +619,9 @@ export function createDoctorCommand(deps: DoctorDeps = defaultDoctorDeps): Comma
 
       const claudeChecks = await checkClaude(deps, root);
       allChecks.push(...claudeChecks);
+
+      const agentChecks = await checkAgentHooks(deps, root);
+      allChecks.push(...agentChecks);
 
       const hookChecks = await checkHooks(deps, root);
       allChecks.push(...hookChecks);

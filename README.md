@@ -109,15 +109,17 @@ Generic benchmarks (like HumanEval or SWE-bench) evaluate AI on standardized alg
 
 ### Supported agents
 
-| Agent | Id | Capture path |
-|-------|----|--------------|
-| Claude Code | `claude-code` | `.claude/settings(.local).json` hooks |
-| Cursor | `cursor` | `.cursor/hooks.json` (`beforeSubmitPrompt`, `afterFileEdit`) |
-| Windsurf | `windsurf` | `.windsurf/hooks.json` (NightOwl entry) |
-| Cline | `cline` | `.cline/nightowl.json` |
-| Roo Code | `roo` | `.roo/nightowl.json` |
-| Copilot Workspace | `copilot-workspace` | `.github/copilot-nightowl.json` |
-| Aider | `aider` | `.aider/nightowl.json` |
+| Agent | Id | Maturity | Capture / setup |
+|-------|----|----------|-----------------|
+| Claude Code | `claude-code` | **verified** | `.claude/settings(.local).json` hooks via `nightowl init` |
+| Cursor | `cursor` | **verified** | `.cursor/hooks.json` (`beforeSubmitPrompt`, `afterFileEdit`) |
+| Windsurf | `windsurf` | **best-effort** | `.windsurf/hooks.json` NightOwl hook entries (tool may need matching Cascade hook support) |
+| Cline | `cline` | **best-effort** | `.cline/nightowl.json` project marker + pipe events to `nightowl log --agent cline` |
+| Roo Code | `roo` | **best-effort** | `.roo/nightowl.json` project marker + pipe events to `nightowl log --agent roo` |
+| Copilot Workspace | `copilot-workspace` | **manual** | No native project hook file from `init`. Wrap: `echo '<json>' \| nightowl log --agent copilot-workspace` |
+| Aider | `aider` | **manual** | No native project hook file from `init`. Wrap after edits: `nightowl log --agent aider` with JSON on stdin |
+
+**Maturity:** `verified` = NightOwl installs hooks the tool reads and adapters have fixtures; `best-effort` = install + parse documented but the IDE may need extra setup; `manual` = document-only wrap around `nightowl log` (init does not invent a fake native hook).
 
 **Git fallback:** if a commit changes a file with no recent agent snapshot, NightOwl records an `unattributed-change` observation (optionally inferring the agent from branch names like `cursor/...`). It does **not** invent `ai_content` or create a full failure pair without a real snapshot.
 

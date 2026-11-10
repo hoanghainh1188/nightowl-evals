@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createDoctorCommand, type DoctorDeps } from '../../src/commands/doctor.js';
-import { HOOK_COMMAND_LINE } from '../../src/setup/claude-settings.js';
+import { HOOK_COMMAND_LINE as CLAUDE_HOOK_LINE } from '../../src/setup/claude-settings.js';
+import { HOOK_COMMAND_LINE } from '../../src/setup/hook-command.js';
 import { CURRENT_SCHEMA_VERSION } from '../../src/storage/migrations.js';
 import { DATA_DIR, DB_FILE, openStore, type Store } from '../../src/storage/store.js';
 import { createFakeIo } from '../helpers/fake-io.js';
@@ -25,7 +26,7 @@ describe('nightowl doctor', () => {
           hooks: [
             {
               type: 'command',
-              command: HOOK_COMMAND_LINE,
+              command: CLAUDE_HOOK_LINE,
               timeout: 5,
             },
           ],
@@ -55,6 +56,29 @@ describe('nightowl doctor', () => {
         if (path.includes('pre-commit')) return '#!/bin/sh\nnightowl precommit\n';
         if (path.includes('post-commit')) return '#!/bin/sh\nnightowl postcommit\n';
         if (path.includes('.gitignore')) return '.nightowl/\n.claude/settings.local.json\n';
+        if (path.includes('.cursor/hooks.json')) {
+          return JSON.stringify({
+            hooks: {
+              beforeSubmitPrompt: [{ command: HOOK_COMMAND_LINE }],
+              afterFileEdit: [{ command: HOOK_COMMAND_LINE }],
+            },
+          });
+        }
+        if (path.includes('.windsurf/hooks.json')) {
+          return JSON.stringify({
+            hooks: {
+              pre_user_prompt: [{ nightowl: true, command: HOOK_COMMAND_LINE }],
+              post_file_edit: [{ nightowl: true, command: HOOK_COMMAND_LINE }],
+            },
+          });
+        }
+        if (path.includes('.cline/nightowl.json') || path.includes('.roo/nightowl.json')) {
+          return JSON.stringify({
+            nightowl: true,
+            command: HOOK_COMMAND_LINE,
+            events: ['prompt', 'edit'],
+          });
+        }
         return null;
       },
       openStore: async () => {
@@ -81,6 +105,7 @@ describe('nightowl doctor', () => {
     const cmd = createDoctorCommand(createTestDeps());
     expect(cmd.help).toContain('Usage: nightowl doctor');
     expect(cmd.help).toContain('--strict');
+    expect(cmd.help).toMatch(/multi-agent|maturity/i);
   });
 
   it('rejects invalid arguments with exit code 1', async () => {
@@ -109,6 +134,9 @@ describe('nightowl doctor', () => {
     expect(out).toContain('Claude Code Integration');
     expect(out).toContain('✓ claude command is available on PATH');
     expect(out).toContain('✓ Hooks configured in .claude/settings.local.json');
+    expect(out).toContain('Agent Hooks');
+    expect(out).toContain('NightOwl hooks present in .cursor/hooks.json (verified)');
+    expect(out).toMatch(/manual maturity/);
     expect(out).toContain('Git Hooks');
     expect(out).toContain("✓ pre-commit runs 'nightowl precommit'");
     expect(out).toContain("✓ post-commit runs 'nightowl postcommit'");
@@ -132,10 +160,53 @@ describe('nightowl doctor', () => {
     expect(out).toContain('! nightowl command is not on PATH');
     expect(out).toContain('! claude command is not on PATH');
     expect(out).toContain('! No NightOwl hooks found in Claude Code settings');
+    expect(out).toContain('! No .cursor/hooks.json with NightOwl hooks');
     expect(out).toContain("! pre-commit does not call 'nightowl precommit'");
     expect(out).toContain('! Database file .nightowl/nightowl.db does not exist yet');
     expect(out).toContain('Suggestions & Remedies:');
     expect(out).toContain("Run 'nightowl init'");
+  });
+
+  it('warns on missing Cursor hooks and fails under --strict', async () => {
+    const deps = createTestDeps({
+      readTextIfExists: async (path) => {
+        if (path.includes('pre-commit')) return '#!/bin/sh\nnightowl precommit\n';
+        if (path.includes('post-commit')) return '#!/bin/sh\nnightowl postcommit\n';
+        if (path.includes('.gitignore')) return '.nightowl/\n';
+        return null;
+      },
+    });
+    const { code, out } = await runDoctor(['--strict'], deps);
+    expect(code).toBe(1);
+    expect(out).toContain('No .cursor/hooks.json with NightOwl hooks');
+  });
+
+  it('warns when a legacy manual-agent marker file is still on disk', async () => {
+    const deps = createTestDeps({
+      readTextIfExists: async (path) => {
+        if (path.includes('pre-commit')) return '#!/bin/sh\nnightowl precommit\n';
+        if (path.includes('post-commit')) return '#!/bin/sh\nnightowl postcommit\n';
+        if (path.includes('.gitignore')) return '.nightowl/\n';
+        if (path.includes('.cursor/hooks.json')) {
+          return JSON.stringify({
+            hooks: {
+              beforeSubmitPrompt: [{ command: HOOK_COMMAND_LINE }],
+              afterFileEdit: [{ command: HOOK_COMMAND_LINE }],
+            },
+          });
+        }
+        if (path.includes('.windsurf/hooks.json') || path.includes('.cline/') || path.includes('.roo/')) {
+          return JSON.stringify({ nightowl: true, command: HOOK_COMMAND_LINE });
+        }
+        if (path.includes('.aider/nightowl.json')) {
+          return JSON.stringify({ nightowl: true, agent: 'aider', command: HOOK_COMMAND_LINE });
+        }
+        return null;
+      },
+    });
+    const { code, out } = await runDoctor([], deps);
+    expect(code).toBe(0);
+    expect(out).toContain('Legacy NightOwl marker still present at .aider/nightowl.json');
   });
 
   it('exits 1 when uninitialized if --strict is passed', async () => {
