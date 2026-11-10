@@ -29,6 +29,7 @@
     - [`nightowl review`](#nightowl-review)
     - [`nightowl prune`](#nightowl-prune)
     - [`nightowl failures`](#nightowl-failures)
+    - [`nightowl suggest-rules`](#nightowl-suggest-rules)
   - [Evaluation & Benchmarking Engine](#3-evaluation--benchmarking-engine)
     - [`nightowl classify`](#nightowl-classify-opt-in)
     - [`nightowl export`](#nightowl-export)
@@ -306,6 +307,20 @@ nightowl prune [--days <N>] [--dry-run] [--vacuum]
 #### `nightowl failures`
 
 Quick terminal summary of total failures grouped by status (`flagged`, `confirmed`, `dismissed`).
+
+#### `nightowl suggest-rules`
+
+Turns repeated classified failures into Markdown rule drafts you can paste into `CLAUDE.md` or `.cursorrules` after review. Heuristic by default (offline); LLM rewrite only with `--yes`.
+
+```bash
+nightowl suggest-rules [--since <YYYY-MM-DD>] [--category <name>] [--agent <id>] \
+  [--status <name>] [--min-count <n>] [--limit <n>] \
+  [--output <file>] [--force] [--yes] [--transport cli|api] [--model <name>]
+```
+
+- Defaults: status `confirmed`, categories `convention` + `missing-context`, clusters with at least 2 failures.
+- Prints to stdout unless `--output` / `--write` is set. Never auto-edits `CLAUDE.md` or `.cursorrules`.
+- Overwriting an existing non-NightOwl file requires `--force` (files containing `<!-- nightowl-suggested-rules -->` are safe to replace).
 
 ---
 

@@ -46,6 +46,8 @@ import {
   setFailureStatus,
   type StatusChange,
 } from './review-queries.js';
+import { listFailuresForRules } from './rules-queries.js';
+import type { FailureForRules, RulesFilter } from '../rules/types.js';
 import { findProjectRoot } from './project-root.js';
 import { loadSqlite } from './sqlite.js';
 
@@ -85,6 +87,7 @@ export interface Store {
   readonly countFailuresForReport: (since: string | null, agents?: readonly string[] | null) => readonly FailureCountRow[];
   readonly countChecksForReport: (since: string | null, agents?: readonly string[] | null) => readonly CheckCountRow[];
   readonly listFailuresForReview: (filter: ReviewFilter) => readonly FailureForReview[];
+  readonly listFailuresForRules: (filter: RulesFilter) => readonly FailureForRules[];
   readonly getFailureForReview: (id: number) => FailureForReview | null;
   readonly setFailureStatus: (ids: readonly number[], status: FailureStatus) => StatusChange;
   readonly prune: (options: PruneOptions) => PruneResult;
@@ -173,6 +176,7 @@ function storeApi(db: import('node:sqlite').DatabaseSync, root: string): Store {
     countChecksForReport: (since: string | null, agents: readonly string[] | null = null) =>
       countChecksForReport(db, { since, agents }),
     listFailuresForReview: (filter: ReviewFilter) => listFailuresForReview(db, filter),
+    listFailuresForRules: (filter: RulesFilter) => listFailuresForRules(db, filter),
     getFailureForReview: (id: number) => getFailureForReview(db, id),
     setFailureStatus: (ids: readonly number[], status: FailureStatus) => setFailureStatus(db, ids, status),
     prune: (options: PruneOptions) => pruneStorage(db, options),
