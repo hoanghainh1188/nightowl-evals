@@ -2,7 +2,10 @@ import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import type { AnyAgentId } from '../agents/ids.js';
 import { rollbackQuietly } from './migrations.js';
 
-export type EventSource = 'agent-hook' | 'git';
+export type EventSource = 'agent-hook' | 'git' | 'ci' | 'pr';
+
+export const SIGNAL_KINDS = Object.freeze(['ci-fail', 'pr-review'] as const);
+export type SignalKind = (typeof SIGNAL_KINDS)[number];
 
 export interface NewEvent {
   readonly source: EventSource;
@@ -12,6 +15,7 @@ export interface NewEvent {
   readonly payload: unknown;
   readonly createdAt?: string;
   readonly agent?: AnyAgentId | null;
+  readonly dedupeKey?: string | null;
 }
 
 export interface StoredEvent {
@@ -23,6 +27,7 @@ export interface StoredEvent {
   readonly filePath: string | null;
   readonly payload: unknown;
   readonly agent: AnyAgentId | null;
+  readonly dedupeKey: string | null;
 }
 
 export interface EventFilter {
@@ -41,6 +46,7 @@ interface EventRow {
   file_path: string | null;
   payload: string;
   agent: AnyAgentId | null;
+  dedupe_key: string | null;
 }
 
 function toStoredEvent(row: EventRow): StoredEvent {
@@ -53,14 +59,35 @@ function toStoredEvent(row: EventRow): StoredEvent {
     filePath: row.file_path,
     payload: JSON.parse(row.payload) as unknown,
     agent: row.agent,
+    dedupeKey: row.dedupe_key ?? null,
   });
 }
 
 export function insertEvent(db: DatabaseSync, event: NewEvent): StoredEvent {
+  const dedupeKey = event.dedupeKey ?? null;
+  if (dedupeKey !== null) {
+    // INSERT OR IGNORE avoids TOCTOU races with concurrent ingest of the same key.
+    db.prepare(
+      `INSERT OR IGNORE INTO events (created_at, source, kind, session_id, file_path, payload, agent, dedupe_key)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      event.createdAt ?? new Date().toISOString(),
+      event.source,
+      event.kind,
+      event.sessionId ?? null,
+      event.filePath ?? null,
+      JSON.stringify(event.payload),
+      event.agent ?? null,
+      dedupeKey,
+    );
+    const existing = db.prepare('SELECT * FROM events WHERE dedupe_key = ?').get(dedupeKey) as EventRow | undefined;
+    if (existing === undefined) throw new Error(`dedupe insert failed for key: ${dedupeKey}`);
+    return toStoredEvent(existing);
+  }
   const row = db
     .prepare(
-      `INSERT INTO events (created_at, source, kind, session_id, file_path, payload, agent)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO events (created_at, source, kind, session_id, file_path, payload, agent, dedupe_key)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        RETURNING *`,
     )
     .get(
@@ -71,8 +98,29 @@ export function insertEvent(db: DatabaseSync, event: NewEvent): StoredEvent {
       event.filePath ?? null,
       JSON.stringify(event.payload),
       event.agent ?? null,
+      null,
     ) as unknown as EventRow;
   return toStoredEvent(row);
+}
+
+export function countEventsByKind(
+  db: DatabaseSync,
+  kinds: readonly string[],
+  since: string | null,
+): Readonly<Record<string, number>> {
+  const out: Record<string, number> = Object.fromEntries(kinds.map((k) => [k, 0]));
+  if (kinds.length === 0) return Object.freeze(out);
+  const clauses = [`kind IN (${kinds.map(() => '?').join(', ')})`];
+  const params: SQLInputValue[] = [...kinds];
+  if (since !== null) {
+    clauses.push('created_at >= ?');
+    params.push(since);
+  }
+  const rows = db
+    .prepare(`SELECT kind, COUNT(*) AS n FROM events WHERE ${clauses.join(' AND ')} GROUP BY kind`)
+    .all(...params) as Array<{ kind: string; n: number }>;
+  for (const row of rows) out[row.kind] = row.n;
+  return Object.freeze(out);
 }
 
 export function listEvents(db: DatabaseSync, filter: EventFilter = {}): readonly StoredEvent[] {

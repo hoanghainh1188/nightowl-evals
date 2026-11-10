@@ -21,6 +21,11 @@ export interface HeadToHeadRow {
   readonly rate: number | null;
 }
 
+export interface ReportSignals {
+  readonly ciFail: number;
+  readonly prReview: number;
+}
+
 export interface Report {
   readonly generatedAt: string;
   readonly since: string | null;
@@ -38,6 +43,8 @@ export interface Report {
   readonly headToHead: readonly HeadToHeadRow[];
   readonly byModule: ReadonlyArray<{ readonly module: string; readonly failures: number }>;
   readonly byWeek: ReadonlyArray<{ readonly week: string } & Rate & { readonly recorded: number }>;
+  /** CI/PR event counts in the same --since window; not mixed into `total`. */
+  readonly signals: ReportSignals;
 }
 
 export interface ReportInput {
@@ -47,6 +54,7 @@ export interface ReportInput {
   readonly since: string | null;
   readonly generatedAt: string;
   readonly agents?: readonly string[] | null;
+  readonly signals?: ReportSignals;
 }
 
 function add(map: Map<string, number>, key: string, n: number): void {
@@ -125,5 +133,9 @@ export function buildReport(input: ReportInput): Report {
         ...rate(failedByWeek.get(week) ?? 0, checkedByWeek.get(week) ?? 0),
       })),
     ),
+    signals: Object.freeze({
+      ciFail: input.signals?.ciFail ?? 0,
+      prReview: input.signals?.prReview ?? 0,
+    }),
   });
 }

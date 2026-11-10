@@ -95,6 +95,33 @@ export const migrations: readonly string[] = Object.freeze([
     SELECT e.agent FROM events e WHERE e.id = failures.ai_event_id
   ) WHERE ai_event_id IS NOT NULL;
   `,
+  `
+  -- CI / PR signal events (no invented failures.ai_content).
+  CREATE TABLE events_v6 (
+    id          INTEGER PRIMARY KEY,
+    created_at  TEXT    NOT NULL,
+    source      TEXT    NOT NULL CHECK (source IN ('agent-hook', 'git', 'ci', 'pr')),
+    kind        TEXT    NOT NULL,
+    session_id  TEXT,
+    file_path   TEXT,
+    payload     TEXT    NOT NULL CHECK (json_valid(payload)),
+    agent       TEXT    CHECK (
+      agent IS NULL OR agent IN (
+        'claude-code', 'cursor', 'windsurf', 'cline', 'roo', 'copilot-workspace', 'aider', 'unknown'
+      )
+    ),
+    dedupe_key  TEXT
+  );
+  INSERT INTO events_v6 (id, created_at, source, kind, session_id, file_path, payload, agent, dedupe_key)
+  SELECT id, created_at, source, kind, session_id, file_path, payload, agent, NULL FROM events;
+  DROP TABLE events;
+  ALTER TABLE events_v6 RENAME TO events;
+  CREATE INDEX events_file_time ON events (file_path, created_at);
+  CREATE INDEX events_session   ON events (session_id, created_at);
+  CREATE INDEX events_agent     ON events (agent, created_at);
+  CREATE INDEX events_kind_time ON events (kind, created_at);
+  CREATE UNIQUE INDEX events_dedupe ON events (dedupe_key) WHERE dedupe_key IS NOT NULL;
+  `,
 ]);
 
 export const CURRENT_SCHEMA_VERSION = migrations.length;

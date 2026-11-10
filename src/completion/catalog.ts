@@ -14,6 +14,8 @@ export const COMMAND_FLAGS: Readonly<Record<string, readonly string[]>> = Object
   log: ['--agent'],
   report: ['--since', '--depth', '--agent', '--json', '--output', '-o', '--fail-on-rate'],
   export: ['--out', '--format', '--force', '--since', '--category'],
+  'ingest-ci': ['--file', '--format', '--commit'],
+  'ingest-pr': ['--file', '--github', '--pr'],
   precommit: [],
   postcommit: [],
   prune: ['--days', '--dry-run', '--vacuum'],

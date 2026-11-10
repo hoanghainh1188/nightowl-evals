@@ -37,3 +37,10 @@ Script SHALL gợi ý các tuỳ chọn tài liệu hoá của từng lệnh (v�
 #### Scenario: Chỉ stdout
 - **WHEN** chạy `nightowl completion fish` trong thư mục sạch
 - **THEN** không file mới ngoài những gì user/redirect tạo; mã thoát 0
+
+### Requirement: Completion gợi ý lệnh ingest
+Script `nightowl completion` SHALL gợi ý tên lệnh ingest CI và ingest PR đã đăng ký, kèm các flag chính (`--file`, và cờ opt-in GitHub nếu có) trong catalog completion.
+
+#### Scenario: Tên lệnh trong script
+- **WHEN** lấy stdout `nightowl completion bash`
+- **THEN** nội dung có tên lệnh ingest CI và ingest PR

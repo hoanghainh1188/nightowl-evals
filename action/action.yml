@@ -35,6 +35,10 @@ inputs:
     description: Token used for sticky PR comments (needs pull-requests: write when commenting).
     required: false
     default: ${{ github.token }}
+  junit-path:
+    description: Optional path (relative to working-directory) to a JUnit XML or CI JSON summary; when set and the file exists, runs nightowl ingest-ci before report.
+    required: false
+    default: ''
 
 runs:
   using: composite
@@ -85,6 +89,27 @@ runs:
         if [[ "${ok}" != "yes" ]]; then
           echo "::error::fail-on-rate must be a number from 0 to 100 (got: ${FAIL_ON_RATE})"
           exit 1
+        fi
+
+    - name: Ingest CI JUnit (optional)
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        JUNIT_PATH: ${{ inputs.junit-path }}
+        GITHUB_SHA: ${{ github.sha }}
+      run: |
+        set -uo pipefail
+        if [[ -z "${JUNIT_PATH}" ]]; then
+          echo "junit-path not set; skipping ingest-ci"
+          exit 0
+        fi
+        if [[ ! -f "${JUNIT_PATH}" ]]; then
+          echo "::warning::junit-path '${JUNIT_PATH}' not found; skipping ingest-ci"
+          exit 0
+        fi
+        if ! nightowl ingest-ci --file "${JUNIT_PATH}" --commit "${GITHUB_SHA}"; then
+          echo "::warning::nightowl ingest-ci failed; continuing to report"
+          exit 0
         fi
 
     - name: Run NightOwl report
