@@ -35,6 +35,8 @@
     - [`nightowl classify`](#nightowl-classify-opt-in)
     - [`nightowl export`](#nightowl-export)
     - [`nightowl eval`](#nightowl-eval-opt-in)
+  - [Shell completion](#4-shell-completion)
+    - [`nightowl completion`](#nightowl-completion)
 - [CI/CD Quality Gate Integration](#cicd-quality-gate-integration)
 - [Security & Privacy Guarantees](#security--privacy-guarantees)
 - [Development & Contributing](#development--contributing)
@@ -388,6 +390,31 @@ nightowl eval [--yes] [--input <file>] [--model <name>] [--limit <1-100>] \
 - **coverage**: Fraction of developer-corrected lines reproduced.
 - **repeat**: Fraction of defective AI code repeated.
 - **score** = `coverage × (1 - repeat)` (score ≥ 0.5 is passing).
+
+### 4. Shell completion
+
+#### `nightowl completion`
+
+Prints a tab-completion script for Bash, Zsh, or Fish (subcommands + common flags). No network; does not write files.
+
+```bash
+nightowl completion <bash|zsh|fish>
+```
+
+Install examples:
+
+```bash
+# Bash
+eval "$(nightowl completion bash)"
+
+# Zsh
+eval "$(nightowl completion zsh)"
+
+# Fish
+nightowl completion fish | source
+```
+
+Add the same line to your shell rc (`~/.bashrc`, `~/.zshrc`, or Fish config) to load completion in every session.
 
 ---
 
