@@ -88,7 +88,7 @@ Chi tiết xem [`docs/production-readiness.md`](../docs/production-readiness.md)
 | 16 | `add-eval-test-runner` | Hỗ trợ chạy kiểm thử tự động (unit tests) để verify eval | Hoàn thành |
 | 17 | `add-direct-api-classify` | Hỗ trợ gọi phân loại trực tiếp qua LLM API key | Hoàn thành |
 
-### Định hướng mở rộng tương lai (v0.3.0+ Ideation)
+### Định hướng mở rộng đã chốt (v0.3.0 Ideation)
 
 Chi tiết xem [`docs/v0.3-roadmap-ideas.md`](../docs/v0.3-roadmap-ideas.md):
 
@@ -101,4 +101,18 @@ Chi tiết xem [`docs/v0.3-roadmap-ideas.md`](../docs/v0.3-roadmap-ideas.md):
 | 22 | `add-github-action` | Composite GitHub Action chạy CI quality gate & comment báo cáo trên PR | Done |
 | 23 | `add-swebench-export` | Xuất dataset theo format SWE-bench và Promptfoo cho enterprise eval | Done |
 | 24 | `add-shell-completion` | Hỗ trợ tab completion cho Bash, Zsh, Fish | Done |
+
+### Định hướng mở rộng tiếp theo (v0.4.0+ Ideation)
+
+Chi tiết xem [`docs/v0.4-roadmap-ideas.md`](../docs/v0.4-roadmap-ideas.md):
+
+| Thứ tự | Ý tưởng Change | Mô tả tóm tắt | Trạng thái |
+| :---: | :--- | :--- | :---: |
+| 25 | `harden-multi-agent-adapters` | Làm thật adapter/hook Windsurf, Cline, Roo, Copilot, Aider (không chỉ marker) | Dự kiến |
+| 26 | `add-ci-pr-failure-signals` | Ingest tín hiệu CI test/build fail và comment review PR thành failure/quan sát | Dự kiến |
+| 27 | `add-rule-impact-metrics` | Đo giảm lỗi lặp trước/sau khi áp rule (vòng kín suggest-rules → report) | Dự kiến |
+| 28 | `add-customer-quality-report` | Xuất báo cáo chất lượng AI cho khách (Markdown, mẫu song ngữ VI–JA) | Dự kiến |
+| 29 | `add-suggest-rules-write` | `--write` an toàn vào CLAUDE.md / rules với marker NightOwl | Dự kiến |
+| 30 | `improve-swebench-harness` | Bổ sung FAIL_TO_PASS / test patch từ regression fixtures khi export | Dự kiến |
+| 31 | `deepen-doctor-ci-checks` | Doctor kiểm tra hook đa agent; Action/docs restore DB rõ hơn | Dự kiến |
 
