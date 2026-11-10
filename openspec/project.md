@@ -112,7 +112,7 @@ Chi tiết xem [`docs/v0.4-roadmap-ideas.md`](../docs/v0.4-roadmap-ideas.md):
 | 26 | `add-ci-pr-failure-signals` | Ingest tín hiệu CI test/build fail và comment review PR thành failure/quan sát | Done |
 | 27 | `add-rule-impact-metrics` | Đo giảm lỗi lặp trước/sau khi áp rule (vòng kín suggest-rules → report) | Done |
 | 28 | `add-customer-quality-report` | Xuất báo cáo chất lượng AI cho khách (Markdown, mẫu song ngữ VI–JA) | Dự kiến |
-| 29 | `add-suggest-rules-write` | `--write` an toàn vào CLAUDE.md / rules với marker NightOwl | Dự kiến |
+| 29 | `add-suggest-rules-write` | `--write` an toàn vào CLAUDE.md / rules với marker NightOwl | Done |
 | 30 | `improve-swebench-harness` | Bổ sung FAIL_TO_PASS / test patch từ regression fixtures khi export | Dự kiến |
 | 31 | `deepen-doctor-ci-checks` | Doctor kiểm tra hook đa agent; Action/docs restore DB rõ hơn | Dự kiến |
 
