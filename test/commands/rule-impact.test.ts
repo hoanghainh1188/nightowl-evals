@@ -78,4 +78,74 @@ describe('nightowl rule-impact', () => {
     expect(result.code).toBe(1);
     expect(result.err).toMatch(/no rule application/i);
   });
+
+  it('rejects invalid mark/show options', async () => {
+    (await openStore({ cwd: repo.path })).close();
+    expect(await run(['mark'])).toMatchObject({ code: 1 });
+    expect((await run(['mark', '--label', 'x', '--json'])).err).toMatch(/does not accept/);
+    expect((await run(['mark', '--label', 'x', '--category', 'nope'])).err).toMatch(/unknown --category/);
+    expect((await run(['mark', '--label', 'x', '--agent', 'nope'])).err).toMatch(/unknown --agent/);
+    expect((await run(['mark', '--label', 'x', '--depth', '9'])).err).toMatch(/--depth/);
+    expect((await run(['mark', '--label', 'x', '--at', ''])).err).toMatch(/--at/);
+    expect((await run(['mark', '--label', 'x', '--at', 'not-a-date'])).err).toMatch(/invalid --at/);
+    expect((await run(['--before-days', '0'])).err).toMatch(/--before-days/);
+    expect((await run(['--after-days', '9999'])).err).toMatch(/--after-days/);
+    expect((await run(['--category', 'convention'])).err).toMatch(/filters stored on the mark/);
+    expect((await run(['--label', 'a', '--id', '1'])).err).toMatch(/either --label or --id/);
+    expect((await run(['--id', '0'])).err).toMatch(/--id must be a positive/);
+    expect((await run(['--bogus'])).code).toBe(1);
+  });
+
+  it('shows text output and selects by id/label', async () => {
+    await seed(repo.path, [
+      { filePath: 'pkg/a.ts', category: 'convention', createdAt: '2026-10-25T00:00:00.000Z', agent: 'cursor' },
+      { filePath: 'other/b.ts', category: 'convention', createdAt: '2026-10-25T00:00:00.000Z', agent: 'claude-code' },
+    ]);
+    const mark = await run([
+      'mark',
+      '--label',
+      'mod-filter',
+      '--category',
+      'convention',
+      '--agent',
+      'cursor',
+      '--module',
+      'pkg',
+      '--depth',
+      '1',
+      '--at',
+      '2026-11-01T00:00:00.000Z',
+    ]);
+    expect(mark.code).toBe(0);
+    expect(mark.out).toMatch(/baseline_total=1/);
+
+    const byLabel = await run(['--label', 'mod-filter']);
+    expect(byLabel.code).toBe(0);
+    expect(byLabel.out).toMatch(/NightOwl rule impact: mod-filter/);
+    expect(byLabel.out).toMatch(/incomplete/i);
+
+    const store = await openStore({ cwd: repo.path, readOnly: true });
+    let id: number;
+    try {
+      id = store.getLatestRuleApplication()!.id;
+    } finally {
+      store.close();
+    }
+    const byId = await run(['--id', String(id), '--json']);
+    expect(byId.code).toBe(0);
+    expect(JSON.parse(byId.out).label).toBe('mod-filter');
+
+    expect((await run(['--label', 'missing'])).err).toMatch(/no rule application/);
+  });
+
+  it('accepts ISO --at and defaults windows', async () => {
+    await seed(repo.path, [{ filePath: 'src/a.ts', category: 'logic', createdAt: '2026-10-20T00:00:00.000Z' }]);
+    const mark = await run(['mark', '--label', 'iso', '--at', '2026-11-01T15:30:00.000Z']);
+    expect(mark.code).toBe(0);
+    const show = await run(['--json'], new Date('2026-12-01T00:00:00.000Z'));
+    expect(show.code).toBe(0);
+    const json = JSON.parse(show.out) as { after: { incomplete: boolean }; before_days: number };
+    expect(json.after.incomplete).toBe(false);
+    expect(json.before_days).toBe(14);
+  });
 });

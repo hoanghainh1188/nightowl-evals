@@ -54,4 +54,36 @@ describe('rule_applications store', () => {
       store.close();
     }
   });
+
+  it('filters by module and agent', async () => {
+    await seed(repo.path, [
+      { filePath: 'pkg/a.ts', category: 'convention', createdAt: '2026-11-02T00:00:00.000Z', agent: 'cursor' },
+      { filePath: 'other/b.ts', category: 'convention', createdAt: '2026-11-02T00:00:00.000Z', agent: 'claude-code' },
+      { filePath: 'pkg/c.ts', category: 'convention', createdAt: '2026-11-02T00:00:00.000Z', agent: 'cursor' },
+    ]);
+    const store = await openStore({ cwd: repo.path, readOnly: true });
+    try {
+      const byModule = store.countFailuresInWindow({
+        categories: null,
+        agents: null,
+        modules: ['pkg'],
+        depth: 1,
+        fromInclusive: null,
+        toExclusive: null,
+      });
+      expect(byModule.total).toBe(2);
+      const byAgent = store.countFailuresInWindow({
+        categories: ['convention'],
+        agents: ['cursor'],
+        modules: null,
+        depth: 2,
+        fromInclusive: null,
+        toExclusive: null,
+      });
+      expect(byAgent.total).toBe(2);
+      expect(store.getRuleApplicationById(9999)).toBeNull();
+    } finally {
+      store.close();
+    }
+  });
 });
