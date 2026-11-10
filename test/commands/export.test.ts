@@ -180,16 +180,45 @@ describe('nightowl export', () => {
     expect((await readFile(db)).equals(before)).toBe(true);
   });
 
-  it.each([[['--since', 'yesterday']], [['--category', 'typo']], [['--out', '']], [['--weird']], [['extra']]])(
-    'rejects %j without writing',
-    async (args) => {
-      await seed(repo.path, [{ filePath: 'a.ts' }]);
-      const result = await run(args);
-      expect(result.code).toBe(1);
-      expect(result.err).toMatch(/^nightowl export: /);
-      expect(await readdir(join(repo.path, '.nightowl'))).not.toContain('export');
-    },
-  );
+  it.each([
+    [['--since', 'yesterday']],
+    [['--category', 'typo']],
+    [['--out', '']],
+    [['--format', 'parquet']],
+    [['--weird']],
+    [['extra']],
+  ])('rejects %j without writing', async (args) => {
+    await seed(repo.path, [{ filePath: 'a.ts' }]);
+    const result = await run(args);
+    expect(result.code).toBe(1);
+    expect(result.err).toMatch(/^nightowl export: /);
+    expect(await readdir(join(repo.path, '.nightowl'))).not.toContain('export');
+  });
+
+  it('exports swe-bench JSONL with core fields and empty harness lists', async () => {
+    await seed(repo.path, [{ filePath: 'a.ts', aiContent: 'bad\n', finalContent: 'good\n', category: 'logic' }]);
+    const result = await run(['--format', 'swe-bench']);
+    expect(result.code).toBe(0);
+    expect(result.err).toContain('format=swe-bench');
+    expect(result.err).toContain('.nightowl/export/swe-bench.jsonl');
+    const row = (await lines(join(repo.path, '.nightowl/export/swe-bench.jsonl')))[0]!;
+    expect(row.schema).toBe('nightowl.swe-bench/v1');
+    expect(row.instance_id).toBeTruthy();
+    expect(row.patch).toContain('+++ b/a.ts');
+    expect(row.FAIL_TO_PASS).toEqual([]);
+    expect(row.PASS_TO_PASS).toEqual([]);
+  });
+
+  it('exports promptfoo YAML config', async () => {
+    await seed(repo.path, [{ filePath: 'a.ts', aiContent: 'bad\n', finalContent: 'good\n' }]);
+    const result = await run(['--format', 'promptfoo']);
+    expect(result.code).toBe(0);
+    expect(result.err).toContain('format=promptfoo');
+    const yaml = await readFile(join(repo.path, '.nightowl/export/promptfooconfig.yaml'), 'utf8');
+    expect(yaml.startsWith('# nightowl.promptfoo/v1')).toBe(true);
+    expect(yaml).toContain('type: equals');
+    expect(yaml).toContain('providers:');
+  });
 
   it('asks for nightowl init and creates nothing when the project is not set up', async () => {
     const result = await run();
