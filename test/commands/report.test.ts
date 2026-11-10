@@ -52,9 +52,35 @@ describe('nightowl report', () => {
       { module: 'src', failures: 2 },
       { module: '(root)', failures: 1 },
     ]);
+    expect(all.signals).toEqual({ ci_fail: 0, pr_review: 0 });
     const recent = JSON.parse((await run(['--json', '--since', '2026-11-01'])).out);
     expect(recent.total).toBe(2);
     expect(recent.since).toBe('2026-11-01T00:00:00.000Z');
+  });
+
+  it('counts CI/PR signal events separately from failures', async () => {
+    await seed(repo.path, []);
+    const { openStore } = await import('../../src/storage/store.js');
+    const store = await openStore({ cwd: repo.path });
+    store.insertEvent({
+      source: 'ci',
+      kind: 'ci-fail',
+      dedupeKey: 'ci:r1',
+      payload: { test_name: 't' },
+      createdAt: '2026-11-04T00:00:00.000Z',
+    });
+    store.insertEvent({
+      source: 'pr',
+      kind: 'pr-review',
+      dedupeKey: 'pr:id:1',
+      payload: { body: 'nit' },
+      createdAt: '2026-11-04T00:00:00.000Z',
+    });
+    store.close();
+    const json = JSON.parse((await run(['--json'])).out);
+    expect(json.total).toBe(0);
+    expect(json.signals).toEqual({ ci_fail: 1, pr_review: 1 });
+    expect((await run()).out).toContain('Signals (events, not failures): ci-fail 1, pr-review 1');
   });
 
   it('says when nothing is recorded yet', async () => {

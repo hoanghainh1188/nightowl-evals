@@ -30,6 +30,8 @@ describe('run', () => {
       'log',
       'report',
       'export',
+      'ingest-ci',
+      'ingest-pr',
       'suggest-rules',
       'suggest-regressions',
       'completion',

@@ -47,6 +47,9 @@ describe('formatText', () => {
   it('shows n/a when nothing was checked, and says when nothing is recorded', () => {
     expect(formatText(buildReport({ ...base, failures: [row('a/b.ts', null, '2026-11-02')], checks: [] }))).toContain('(n/a)');
     expect(formatText(buildReport({ ...base, failures: [], checks: [] }))).toContain('No failures recorded yet');
+    expect(formatText(buildReport({ ...base, failures: [], checks: [], signals: { ciFail: 2, prReview: 1 } }))).toContain(
+      'Signals (events, not failures): ci-fail 2, pr-review 1',
+    );
   });
 
   it('mentions the since date and strips control characters from paths', () => {
@@ -78,7 +81,9 @@ describe('formatJson', () => {
       'agents',
       'by_module',
       'by_week',
+      'signals',
     ]);
+    expect(json.signals).toEqual({ ci_fail: 0, pr_review: 0 });
     expect(json.by_module).toHaveLength(12);
     expect(json.by_week).toHaveLength(9);
     expect(json.by_week[0]).toEqual({ week: '2026-W03', failures: 2, checked: 0, changed: 0, rate: null });

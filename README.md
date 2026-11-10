@@ -26,6 +26,8 @@
     - [`nightowl uninstall`](#nightowl-uninstall)
   - [Analytics, Review & Data Ops](#2-analytics-review--data-ops)
     - [`nightowl report`](#nightowl-report)
+    - [`nightowl ingest-ci`](#nightowl-ingest-ci)
+    - [`nightowl ingest-pr`](#nightowl-ingest-pr)
     - [`nightowl review`](#nightowl-review)
     - [`nightowl prune`](#nightowl-prune)
     - [`nightowl failures`](#nightowl-failures)
@@ -261,7 +263,7 @@ nightowl uninstall [--purge]
 
 #### `nightowl report`
 
-Summarizes AI failures by category, source, agent, module path, and week. JSON includes `by_agent` and `head_to_head` (edit-change rate per agent).
+Summarizes AI failures by category, source, agent, module path, and week. JSON includes `by_agent`, `head_to_head` (edit-change rate per agent), and `signals` (`ci_fail` / `pr_review` event counts — separate from failure `total`).
 
 ```bash
 nightowl report [options]
@@ -275,6 +277,41 @@ nightowl report [options]
 | `--json` | Output full breakdown as structured JSON |
 | `-o, --output <file>` | Write report directly to a file (creates parent directories) |
 | `--fail-on-rate <0-100>` | **CI Quality Gate**: Exit with code `1` if failure rate exceeds threshold |
+
+#### `nightowl ingest-ci`
+
+Reads a **local** JUnit XML or JSON summary and stores `ci-fail` events. Does **not** invent `failures.ai_content` and does not call the network. Requires an existing DB (`nightowl init`).
+
+```bash
+nightowl ingest-ci --file <path> [--format auto|junit|json] [--commit <sha>]
+```
+
+**JSON summary schema** (minimal):
+
+```json
+{
+  "failures": [
+    { "file": "src/a.ts", "message": "expected true", "name": "test name", "commit": "abc123" }
+  ]
+}
+```
+
+#### `nightowl ingest-pr`
+
+Reads a **local** JSON file of PR review comments into `pr-review` events (default: offline). Does **not** invent `failures.ai_content`. GitHub API fetch is **opt-in only** via `--github` + `GITHUB_TOKEN` (+ `GITHUB_REPOSITORY` and `--pr`).
+
+```bash
+nightowl ingest-pr --file comments.json
+nightowl ingest-pr --github --pr 42   # requires GITHUB_TOKEN and GITHUB_REPOSITORY
+```
+
+**Local comments schema** (array or `{ "comments": [...] }`):
+
+```json
+[
+  { "id": "1", "path": "src/a.ts", "body": "nit: rename", "line": 10, "commit_id": "abc", "user": "reviewer" }
+]
+```
 
 #### `nightowl review`
 
@@ -453,6 +490,8 @@ jobs:
           nightowl-version: '0.3.0' # pin a published semver in production
           comment-on-pr: 'true'
           output-path: nightowl-report.json
+          # optional: ingest JUnit before report (file-first; no invented ai_content)
+          # junit-path: test-results/junit.xml
 
       - name: Archive NightOwl Report
         if: always() && hashFiles('nightowl-report.json') != ''
@@ -462,9 +501,9 @@ jobs:
           path: nightowl-report.json
 ```
 
-**Inputs:** `fail-on-rate` (default `25`), `since`, `output-path`, `working-directory`, `nightowl-version` (default `latest`), `comment-on-pr` (default `true`), `github-token`.
+**Inputs:** `fail-on-rate` (default `25`), `since`, `output-path`, `working-directory`, `nightowl-version` (default `latest`), `comment-on-pr` (default `true`), `github-token`, `junit-path` (optional; when set and the file exists, runs `nightowl ingest-ci` before `report`).
 
-**Notes:** The Action does not create or sync `.nightowl/`. Without `nightowl.db` on the runner the step fails with a clear error. Sticky comments use the GitHub API with your workflow token only — the `nightowl` binary itself still makes no network calls. Comments run only for same-repo PRs (fork PRs skip commenting because `GITHUB_TOKEN` cannot write). If you set `working-directory`, point `upload-artifact` / `hashFiles` at `{working-directory}/{output-path}`.
+**Notes:** The Action does not create or sync `.nightowl/`. Without `nightowl.db` on the runner the step fails with a clear error. Sticky comments use the GitHub API with your workflow token only — the `nightowl` binary itself still makes no network calls by default (`ingest-pr --github` is opt-in CLI only; the Action does not call GitHub for PR comment ingest). Comments run only for same-repo PRs (fork PRs skip commenting because `GITHUB_TOKEN` cannot write). If you set `working-directory`, point `upload-artifact` / `hashFiles` at `{working-directory}/{output-path}`.
 
 ---
 

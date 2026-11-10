@@ -3,6 +3,7 @@ import { retryWhileBusy } from './busy.js';
 import { DATA_DIR, ensureDataDir } from './data-dir.js';
 import type { AnyAgentId } from '../agents/ids.js';
 import {
+  countEventsByKind,
   type EventFilter,
   getSnapshot,
   insertEvent,
@@ -71,6 +72,7 @@ export interface Store {
   readonly root: string;
   readonly insertEvent: (event: NewEvent) => StoredEvent;
   readonly listEvents: (filter?: EventFilter) => readonly StoredEvent[];
+  readonly countEventsByKind: (kinds: readonly string[], since: string | null) => Readonly<Record<string, number>>;
   readonly listUncheckedEdits: (filePaths: readonly string[]) => readonly PendingEdit[];
   readonly listOpenEdits: (filePath: string, agent?: AnyAgentId | null) => readonly PendingEdit[];
   readonly getSnapshot: (editId: number) => string | null;
@@ -159,6 +161,7 @@ function storeApi(db: import('node:sqlite').DatabaseSync, root: string): Store {
     root,
     insertEvent: (event: NewEvent) => insertEvent(db, event),
     listEvents: (filter?: EventFilter) => listEvents(db, filter),
+    countEventsByKind: (kinds: readonly string[], since: string | null) => countEventsByKind(db, kinds, since),
     listUncheckedEdits: (filePaths: readonly string[]) => listUncheckedEdits(db, filePaths),
     listOpenEdits: (filePath: string, agent?: AnyAgentId | null) => listOpenEdits(db, filePath, agent),
     getSnapshot: (editId: number) => getSnapshot(db, editId),

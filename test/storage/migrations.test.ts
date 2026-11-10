@@ -36,7 +36,7 @@ describe('schema v1 → current', () => {
       expect(db.prepare('SELECT file_path, ai_content, prompt_event_id FROM failures').all()).toEqual([
         { file_path: 'a.ts', ai_content: 'x', prompt_event_id: null },
       ]);
-      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(5);
+      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(6);
     } finally {
       db.close();
     }
@@ -128,7 +128,7 @@ describe('migration v3 to v4', () => {
     (await openStore({ cwd: repo.path })).close();
     const db = new DatabaseSync(dbFile);
     try {
-      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(5);
+      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(6);
       expect(db.prepare('SELECT source, feedback_event_id FROM failures').all()).toEqual([
         { source: 'manual-fix', feedback_event_id: null },
         { source: 'manual-fix', feedback_event_id: null },
@@ -172,7 +172,7 @@ describe('migration v4 to v5', () => {
     (await openStore({ cwd: repo.path })).close();
     const db = new DatabaseSync(dbFile);
     try {
-      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(5);
+      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(6);
       expect(columns(db, 'events')).toContain('agent');
       expect(columns(db, 'failures')).toContain('agent');
       expect(db.prepare('SELECT source, agent FROM events ORDER BY id').all()).toEqual([
@@ -180,6 +180,50 @@ describe('migration v4 to v5', () => {
         { source: 'git', agent: null },
       ]);
       expect(db.prepare('SELECT agent FROM failures').all()).toEqual([{ agent: 'claude-code' }]);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe('migration v5 to v6', () => {
+  let repo: Awaited<ReturnType<typeof createFakeRepo>>;
+  let dbFile: string;
+
+  beforeEach(async () => {
+    repo = await createFakeRepo();
+    await mkdir(join(repo.path, '.nightowl'), { mode: 0o700 });
+    dbFile = join(repo.path, '.nightowl', 'nightowl.db');
+    const db = new DatabaseSync(dbFile);
+    for (const sql of migrations.slice(0, 5)) db.exec(sql);
+    db.exec(
+      `INSERT INTO events (created_at, source, kind, file_path, payload, agent) VALUES ('t', 'agent-hook', 'edit', 'a.ts', '{}', 'claude-code')`,
+    );
+    db.exec('PRAGMA user_version = 5');
+    db.close();
+  });
+  afterEach(() => repo.cleanup());
+
+  it('adds dedupe_key and allows ci/pr sources', async () => {
+    (await openStore({ cwd: repo.path })).close();
+    const db = new DatabaseSync(dbFile);
+    try {
+      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(6);
+      expect(columns(db, 'events')).toContain('dedupe_key');
+      expect(db.prepare('SELECT source, dedupe_key FROM events').all()).toEqual([{ source: 'agent-hook', dedupe_key: null }]);
+      db.exec(
+        `INSERT INTO events (created_at, source, kind, payload, dedupe_key) VALUES ('t', 'ci', 'ci-fail', '{"test_name":"x"}', 'ci:abc')`,
+      );
+      db.exec(
+        `INSERT INTO events (created_at, source, kind, payload, dedupe_key) VALUES ('t', 'pr', 'pr-review', '{"body":"nits"}', 'pr:id:1')`,
+      );
+      expect(db.prepare(`SELECT source, kind FROM events WHERE source IN ('ci','pr') ORDER BY id`).all()).toEqual([
+        { source: 'ci', kind: 'ci-fail' },
+        { source: 'pr', kind: 'pr-review' },
+      ]);
+      expect(() =>
+        db.exec(`INSERT INTO events (created_at, source, kind, payload, dedupe_key) VALUES ('t', 'ci', 'ci-fail', '{}', 'ci:abc')`),
+      ).toThrow();
     } finally {
       db.close();
     }

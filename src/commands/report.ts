@@ -7,6 +7,7 @@ import { renderCommandHelp } from '../cli/help.js';
 import { buildReport } from '../report/build.js';
 import { formatJson, formatText } from '../report/format.js';
 import { parseDateOption } from '../shared/date-option.js';
+import { SIGNAL_KINDS } from '../storage/events.js';
 import type { Command } from './command.js';
 import { openExistingStore } from './existing-store.js';
 
@@ -107,6 +108,7 @@ export function createReportCommand(deps: ReportDeps = { cwd: () => process.cwd(
         return 1;
       }
       try {
+        const signalCounts = store.countEventsByKind(SIGNAL_KINDS, options.since);
         const report = buildReport({
           failures: store.countFailuresForReport(options.since, options.agents),
           checks: store.countChecksForReport(options.since, options.agents),
@@ -114,6 +116,10 @@ export function createReportCommand(deps: ReportDeps = { cwd: () => process.cwd(
           since: options.since,
           generatedAt: deps.now().toISOString(),
           agents: options.agents,
+          signals: {
+            ciFail: signalCounts['ci-fail'] ?? 0,
+            prReview: signalCounts['pr-review'] ?? 0,
+          },
         });
         const outputContent = options.json ? formatJson(report) : formatText(report);
         if (options.output !== null) {

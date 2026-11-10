@@ -6,6 +6,8 @@ import { evalCommand } from './eval.js';
 import { exportCommand } from './export.js';
 import { initCommand } from './init.js';
 import { failuresCommand } from './failures.js';
+import { ingestCiCommand } from './ingest-ci.js';
+import { ingestPrCommand } from './ingest-pr.js';
 import { logCommand } from './log.js';
 import { postcommitCommand } from './postcommit.js';
 import { precommitCommand } from './precommit.js';
@@ -22,6 +24,8 @@ export const commands: readonly Command[] = Object.freeze([
   logCommand,
   reportCommand,
   exportCommand,
+  ingestCiCommand,
+  ingestPrCommand,
   precommitCommand,
   postcommitCommand,
   pruneCommand,

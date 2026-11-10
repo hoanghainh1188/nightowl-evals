@@ -131,12 +131,14 @@ describe('schema', () => {
       'checks_attached',
       'events',
       'events_agent',
+      'events_dedupe',
       'events_file_time',
+      'events_kind_time',
       'events_session',
       'failures',
     ]);
-    expect(rawQuery<{ user_version: number }>(repo.path, 'PRAGMA user_version')[0]?.user_version).toBe(5);
-    expect(CURRENT_SCHEMA_VERSION).toBe(5);
+    expect(rawQuery<{ user_version: number }>(repo.path, 'PRAGMA user_version')[0]?.user_version).toBe(6);
+    expect(CURRENT_SCHEMA_VERSION).toBe(6);
   });
 
   it('leaves data and version untouched when reopened', async () => {
@@ -146,7 +148,7 @@ describe('schema', () => {
     const second = await openStore({ cwd: repo.path });
     expect(second.listEvents()).toHaveLength(1);
     second.close();
-    expect(rawQuery<{ user_version: number }>(repo.path, 'PRAGMA user_version')[0]?.user_version).toBe(5);
+    expect(rawQuery<{ user_version: number }>(repo.path, 'PRAGMA user_version')[0]?.user_version).toBe(6);
   });
 
   it('refuses a database written by a newer NightOwl without changing it', async () => {
@@ -228,6 +230,39 @@ describe('events', () => {
     const saved = store.insertEvent({ source: 'git', kind: 'commit-check', payload: {} });
     expect(saved.sessionId).toBeNull();
     expect(saved.filePath).toBeNull();
+  });
+
+  it('idempotent insert by dedupe_key and counts CI/PR kinds', () => {
+    const first = store.insertEvent({
+      source: 'ci',
+      kind: 'ci-fail',
+      filePath: 'src/a.ts',
+      dedupeKey: 'ci:test-1',
+      payload: { test_name: 'a' },
+      createdAt: '2026-11-10T00:00:00.000Z',
+    });
+    const again = store.insertEvent({
+      source: 'ci',
+      kind: 'ci-fail',
+      filePath: 'src/a.ts',
+      dedupeKey: 'ci:test-1',
+      payload: { test_name: 'a-dup' },
+    });
+    expect(again.id).toBe(first.id);
+    expect(store.listEvents({ kinds: ['ci-fail'] })).toHaveLength(1);
+    store.insertEvent({
+      source: 'pr',
+      kind: 'pr-review',
+      filePath: 'src/a.ts',
+      dedupeKey: 'pr:id:9',
+      payload: { body: 'nit' },
+      createdAt: '2026-11-10T01:00:00.000Z',
+    });
+    expect(store.countEventsByKind(['ci-fail', 'pr-review'], '2026-11-10T00:30:00.000Z')).toEqual({
+      'ci-fail': 0,
+      'pr-review': 1,
+    });
+    expect(store.countEventsByKind(['ci-fail', 'pr-review'], null)).toEqual({ 'ci-fail': 1, 'pr-review': 1 });
   });
 
   it('filters by file, kind and time, oldest first', () => {

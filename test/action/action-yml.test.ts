@@ -24,6 +24,7 @@ describe('github action action.yml', () => {
       'nightowl-version',
       'comment-on-pr',
       'github-token',
+      'junit-path',
     ]) {
       expect(text).toContain(`\n  ${input}:\n`);
     }
@@ -37,6 +38,7 @@ describe('github action action.yml', () => {
     expect(text).toMatch(/uses: actions\/setup-node@[0-9a-f]{40}/);
     expect(text).toContain('npm install -g "@hoanghainh/nightowl-evals@${NIGHTOWL_VERSION}"');
     expect(text).toContain('nightowl report');
+    expect(text).toContain('nightowl ingest-ci');
     expect(text).toContain('--fail-on-rate');
     expect(text).toContain('--json');
     expect(text).toContain('--output');
@@ -57,5 +59,7 @@ describe('github action action.yml', () => {
     expect(readme).toContain('pull-requests: write');
     expect(readme).toContain('gitignored');
     expect(readme).toContain('comment-on-pr');
+    expect(readme).toContain('junit-path');
+    expect(readme).toContain('ingest-ci');
   });
 });
