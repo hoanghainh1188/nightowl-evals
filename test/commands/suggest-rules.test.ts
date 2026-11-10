@@ -2,7 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createSuggestRulesCommand, type SuggestRulesDeps } from '../../src/commands/suggest-rules.js';
-import { RULES_MARKER } from '../../src/rules/types.js';
+import { RULES_MARKER_END, RULES_MARKER_START } from '../../src/rules/types.js';
 import { createFakeIo } from '../helpers/fake-io.js';
 import { createFakeRepo, createTempDir, type TempDir } from '../helpers/temp-repo.js';
 import { seed } from '../helpers/seed-failures.js';
@@ -83,7 +83,8 @@ describe('nightowl suggest-rules', () => {
     );
     expect(result.code).toBe(0);
     expect(calls).toEqual({ claude: 0, api: 0 });
-    expect(result.out).toContain(RULES_MARKER);
+    expect(result.out).toContain(RULES_MARKER_START);
+    expect(result.out).toContain(RULES_MARKER_END);
     expect(result.out).toContain('## 1.');
     expect(result.out).toContain('via=heuristic');
   });
@@ -110,7 +111,7 @@ describe('nightowl suggest-rules', () => {
     expect(first.code).toBe(0);
     expect(first.out).toBe('');
     expect(first.err).toContain('wrote');
-    expect(await readFile(target, 'utf8')).toContain(RULES_MARKER);
+    expect(await readFile(target, 'utf8')).toContain(RULES_MARKER_START);
 
     await writeFile(target, 'my notes\n');
     const refused = await run(['--output', 'rules.md']);
@@ -119,7 +120,30 @@ describe('nightowl suggest-rules', () => {
     expect(await readFile(target, 'utf8')).toBe('my notes\n');
 
     expect((await run(['--output', 'rules.md', '--force'])).code).toBe(0);
-    expect(await readFile(target, 'utf8')).toContain(RULES_MARKER);
+    expect(await readFile(target, 'utf8')).toContain(RULES_MARKER_START);
+  });
+
+  it('injects --write into CLAUDE.md without touching outer content', async () => {
+    await seedConfirmedConvention(2);
+    const target = join(repo.path, 'CLAUDE.md');
+    await writeFile(target, '# Project\n\nKeep me.\n');
+    const first = await run(['--write', 'CLAUDE.md']);
+    expect(first.code).toBe(0);
+    expect(first.err).toContain('updated NightOwl block');
+    const once = await readFile(target, 'utf8');
+    expect(once.startsWith('# Project')).toBe(true);
+    expect(once).toContain('Keep me.');
+    expect(once).toContain(RULES_MARKER_START);
+    expect(once).toContain(RULES_MARKER_END);
+
+    const second = await run(['--write', 'CLAUDE.md']);
+    expect(second.code).toBe(0);
+    const twice = await readFile(target, 'utf8');
+    expect(twice).toContain('Keep me.');
+    expect(twice.split(RULES_MARKER_START)).toHaveLength(2);
+    expect(twice.split(RULES_MARKER_END)).toHaveLength(2);
+
+    expect((await run(['--write', 'CLAUDE.md', '--output', 'x.md'])).code).toBe(1);
   });
 
   it('with --yes rewrites via LLM and falls back on failure', async () => {
@@ -161,11 +185,12 @@ describe('nightowl suggest-rules', () => {
   });
 
   it('documents defaults in --help', async () => {
-    const fake = createFakeIo();
     const cmd = createSuggestRulesCommand(deps());
-    fake.io.stdout(cmd.help);
     expect(cmd.help).toContain('Does not call an LLM');
     expect(cmd.help).toContain('CLAUDE.md');
+    expect(cmd.help).toContain('--write');
+    expect(cmd.help).toContain('--output');
+    expect(cmd.help).toContain('no longer an alias');
     expect(cmd.help).toContain('--yes');
   });
 });

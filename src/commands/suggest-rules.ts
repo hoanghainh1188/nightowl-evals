@@ -15,7 +15,7 @@ import {
 } from '../classify/run-api.js';
 import { type RunClaude, runClaude } from '../classify/run-claude.js';
 import { UNCLASSIFIED } from '../report/build.js';
-import { formatSuggestedRules, hasRulesMarker } from '../rules/format.js';
+import { formatSuggestedRules, hasRulesMarker, upsertRulesBlock } from '../rules/format.js';
 import { buildHeuristicRules } from '../rules/heuristic.js';
 import { enrichRulesWithLlm, type RulesLlmDeps, type RulesTransport } from '../rules/llm.js';
 import {
@@ -24,6 +24,8 @@ import {
   DEFAULT_STATUSES,
   type FailureStatus,
   RULES_MARKER,
+  RULES_MARKER_END,
+  RULES_MARKER_START,
 } from '../rules/types.js';
 import { isSymlink, writeFileAtomic } from '../setup/fs-utils.js';
 import { parseDateOption } from '../shared/date-option.js';
@@ -59,6 +61,7 @@ interface Options {
   readonly agents: readonly string[] | null;
   readonly statuses: readonly FailureStatus[];
   readonly output: string | null;
+  readonly write: string | null;
   readonly force: boolean;
   readonly minCount: number;
   readonly limit: number;
@@ -94,8 +97,8 @@ function parseOptions(args: readonly string[]): Options | string {
   }
 
   if (values.output !== undefined && values.write !== undefined) return 'use either --output or --write, not both';
-  const outputRaw = values.output ?? values.write;
-  if (outputRaw === '') return '--output needs a file path';
+  if (values.output === '') return '--output needs a file path';
+  if (values.write === '') return '--write needs a file path';
 
   const since = values.since === undefined ? null : parseDateOption(values.since);
   if (since === null && values.since !== undefined) return `invalid --since date (use YYYY-MM-DD): ${values.since}`;
@@ -140,7 +143,8 @@ function parseOptions(args: readonly string[]): Options | string {
     categories,
     agents: agentFlags.length === 0 ? null : agentFlags,
     statuses: statusFlags as FailureStatus[],
-    output: outputRaw ?? null,
+    output: values.output ?? null,
+    write: values.write ?? null,
     force: values.force === true,
     minCount,
     limit,
@@ -165,7 +169,7 @@ async function isReplaceable(path: string): Promise<boolean> {
   }
 }
 
-async function writeOutput(path: string, content: string, force: boolean, cwd: string, io: Io): Promise<void> {
+async function writeStandaloneOutput(path: string, content: string, force: boolean, cwd: string, io: Io): Promise<void> {
   const target = resolve(cwd, path);
   const shown = printable(target);
   if (await isSymlink(target)) throw new Error(`${shown} is a symlink; choose another --output`);
@@ -174,6 +178,24 @@ async function writeOutput(path: string, content: string, force: boolean, cwd: s
   }
   await writeFileAtomic(target, content, 0o600);
   io.stderr(`nightowl suggest-rules: wrote ${shown}\n`);
+}
+
+async function writeProjectRulesBlock(path: string, block: string, force: boolean, cwd: string, io: Io): Promise<void> {
+  const target = resolve(cwd, path);
+  const shown = printable(target);
+  if (await isSymlink(target)) throw new Error(`${shown} is a symlink; choose another --write`);
+  const existing = await readFile(target, 'utf8').catch((error: NodeJS.ErrnoException) => {
+    if (error.code === 'ENOENT') return '';
+    throw error;
+  });
+  const upserted = upsertRulesBlock(existing, block, force);
+  if (!upserted.ok) throw new Error(`${shown}: ${upserted.error}`);
+  if (upserted.warning !== undefined) {
+    io.stderr(`nightowl suggest-rules: warning: ${upserted.warning}\n`);
+  }
+  const mode = existing.length === 0 ? 0o600 : undefined;
+  await writeFileAtomic(target, upserted.content, mode);
+  io.stderr(`nightowl suggest-rules: updated NightOwl block in ${shown}\n`);
 }
 
 export function createSuggestRulesCommand(deps: SuggestRulesDeps = defaultDeps): Command {
@@ -185,8 +207,11 @@ export function createSuggestRulesCommand(deps: SuggestRulesDeps = defaultDeps):
       usage: '[options]',
       description: [
         'Groups classified failures into Markdown rule drafts (heuristic by default).',
-        'Does not call an LLM unless you pass --yes. Does not edit CLAUDE.md or .cursorrules;',
-        'use --output to write a separate suggestion file (look for the NightOwl marker).',
+        'Does not call an LLM unless you pass --yes.',
+        'Default: print to stdout only (does not edit project rule files).',
+        `--output writes a standalone NightOwl suggestion file (${RULES_MARKER_START} … ${RULES_MARKER_END}).`,
+        `--write inserts or updates that same marker block inside a project rules file (e.g. CLAUDE.md) without changing text outside the block.`,
+        'Note: --write is no longer an alias for --output.',
       ],
       options: [
         ['--since <YYYY-MM-DD>', 'Only failures from this date on'],
@@ -195,9 +220,9 @@ export function createSuggestRulesCommand(deps: SuggestRulesDeps = defaultDeps):
         ['--status <name>', `Status filter; repeatable (default: ${DEFAULT_STATUSES.join(', ')})`],
         ['--min-count <n>', `Minimum failures per cluster (default: ${DEFAULT_MIN_COUNT})`],
         ['--limit <n>', `Max clusters/rules to emit (default: 20, max ${MAX_LIMIT})`],
-        ['--output <file>', 'Write Markdown to this path instead of stdout'],
-        ['--write <file>', 'Alias for --output'],
-        ['--force', 'Overwrite a file that is not a NightOwl suggested-rules file'],
+        ['--output <file>', 'Write a standalone NightOwl suggestion file'],
+        ['--write <file>', 'Insert/update the NightOwl marker block in a project rules file'],
+        ['--force', 'For --output: overwrite a non-NightOwl file; for --write: recover skewed markers when possible'],
         ['--yes', 'Opt in to LLM rewrite of the heuristic drafts'],
         ['--transport cli|api', 'How to call the model with --yes (default: cli)'],
         ['--model <name>', `Model for --yes (default: ${DEFAULT_MODEL})`],
@@ -245,10 +270,13 @@ export function createSuggestRulesCommand(deps: SuggestRulesDeps = defaultDeps):
         }
 
         const markdown = formatSuggestedRules(rules, deps.now().toISOString());
-        if (options.output === null) {
-          io.stdout(markdown.endsWith('\n') ? markdown : `${markdown}\n`);
+        const body = markdown.endsWith('\n') ? markdown : `${markdown}\n`;
+        if (options.output !== null) {
+          await writeStandaloneOutput(options.output, body, options.force, cwd, io);
+        } else if (options.write !== null) {
+          await writeProjectRulesBlock(options.write, body, options.force, cwd, io);
         } else {
-          await writeOutput(options.output, markdown.endsWith('\n') ? markdown : `${markdown}\n`, options.force, cwd, io);
+          io.stdout(body);
         }
         return 0;
       } catch (error) {
@@ -263,4 +291,4 @@ export function createSuggestRulesCommand(deps: SuggestRulesDeps = defaultDeps):
 
 export const suggestRulesCommand = createSuggestRulesCommand();
 
-export { RULES_MARKER };
+export { RULES_MARKER, RULES_MARKER_END, RULES_MARKER_START };

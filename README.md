@@ -357,17 +357,20 @@ Quick terminal summary of total failures grouped by status (`flagged`, `confirme
 
 #### `nightowl suggest-rules`
 
-Turns repeated classified failures into Markdown rule drafts you can paste into `CLAUDE.md` or `.cursorrules` after review. Heuristic by default (offline); LLM rewrite only with `--yes`.
+Turns repeated classified failures into Markdown rule drafts. Heuristic by default (offline); LLM rewrite only with `--yes`.
 
 ```bash
 nightowl suggest-rules [--since <YYYY-MM-DD>] [--category <name>] [--agent <id>] \
   [--status <name>] [--min-count <n>] [--limit <n>] \
-  [--output <file>] [--force] [--yes] [--transport cli|api] [--model <name>]
+  [--output <file> | --write <file>] [--force] [--yes] [--transport cli|api] [--model <name>]
 ```
 
 - Defaults: status `confirmed`, categories `convention` + `missing-context`, clusters with at least 2 failures.
-- Prints to stdout unless `--output` / `--write` is set. Never auto-edits `CLAUDE.md` or `.cursorrules`.
-- Overwriting an existing non-NightOwl file requires `--force` (files containing `<!-- nightowl-suggested-rules -->` are safe to replace).
+- Default prints to stdout only (does not edit project rule files).
+- `--output <file>` writes a **standalone** NightOwl suggestion file wrapped in `<!-- nightowl-suggested-rules:start -->` … `<!-- nightowl-suggested-rules:end -->`.
+- `--write <file>` **inserts or updates** that same marker block inside a project rules file (e.g. `CLAUDE.md`, `.cursorrules`) without changing text outside the block. Re-running is idempotent.
+- **BREAKING:** `--write` is no longer an alias for `--output`. Use `--output` for a separate suggestion file.
+- `--force` with `--output` overwrites a non-NightOwl file; with `--write` it only recovers skewed NightOwl markers when a safe boundary still exists (never blanking the whole rules file).
 
 #### `nightowl suggest-regressions`
 

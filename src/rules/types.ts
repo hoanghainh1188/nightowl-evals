@@ -37,7 +37,10 @@ export interface SuggestedRule {
   readonly source: 'heuristic' | 'llm';
 }
 
+/** @deprecated Legacy single-line marker; prefer RULES_MARKER_START / RULES_MARKER_END. */
 export const RULES_MARKER = '<!-- nightowl-suggested-rules -->';
+export const RULES_MARKER_START = '<!-- nightowl-suggested-rules:start -->';
+export const RULES_MARKER_END = '<!-- nightowl-suggested-rules:end -->';
 export const DEFAULT_MIN_COUNT = 2;
 export const DEFAULT_DEPTH = 2;
 export const DEFAULT_CATEGORIES = Object.freeze(['convention', 'missing-context'] as const);
