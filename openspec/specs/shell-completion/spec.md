@@ -44,3 +44,10 @@ Script `nightowl completion` SHALL gợi ý tên lệnh ingest CI và ingest PR 
 #### Scenario: Tên lệnh trong script
 - **WHEN** lấy stdout `nightowl completion bash`
 - **THEN** nội dung có tên lệnh ingest CI và ingest PR
+
+### Requirement: Completion gợi ý lệnh rule-impact
+Script `nightowl completion` SHALL gợi ý tên lệnh rule-impact đã đăng ký, kèm flag chính (`--label`, `--category`, `--json`, và subcommand mark/show nếu có) trong catalog completion.
+
+#### Scenario: Tên lệnh trong script
+- **WHEN** lấy stdout `nightowl completion bash`
+- **THEN** nội dung có tên lệnh rule-impact

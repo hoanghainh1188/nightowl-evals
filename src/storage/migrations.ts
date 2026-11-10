@@ -122,6 +122,21 @@ export const migrations: readonly string[] = Object.freeze([
   CREATE INDEX events_kind_time ON events (kind, created_at);
   CREATE UNIQUE INDEX events_dedupe ON events (dedupe_key) WHERE dedupe_key IS NOT NULL;
   `,
+  `
+  -- Rule application baselines for before/after impact metrics (local only).
+  CREATE TABLE rule_applications (
+    id          INTEGER PRIMARY KEY,
+    created_at  TEXT    NOT NULL,
+    applied_at  TEXT    NOT NULL,
+    label       TEXT    NOT NULL UNIQUE,
+    categories  TEXT    CHECK (categories IS NULL OR json_valid(categories)),
+    agents      TEXT    CHECK (agents IS NULL OR json_valid(agents)),
+    modules     TEXT    CHECK (modules IS NULL OR json_valid(modules)),
+    depth       INTEGER NOT NULL DEFAULT 2,
+    baseline    TEXT    NOT NULL CHECK (json_valid(baseline))
+  );
+  CREATE INDEX rule_applications_applied_at ON rule_applications (applied_at);
+  `,
 ]);
 
 export const CURRENT_SCHEMA_VERSION = migrations.length;

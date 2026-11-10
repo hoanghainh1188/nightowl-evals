@@ -33,6 +33,7 @@
     - [`nightowl failures`](#nightowl-failures)
     - [`nightowl suggest-rules`](#nightowl-suggest-rules)
     - [`nightowl suggest-regressions`](#nightowl-suggest-regressions)
+    - [`nightowl rule-impact`](#nightowl-rule-impact)
   - [Evaluation & Benchmarking Engine](#3-evaluation--benchmarking-engine)
     - [`nightowl classify`](#nightowl-classify-opt-in)
     - [`nightowl export`](#nightowl-export)
@@ -381,6 +382,23 @@ nightowl suggest-regressions [--since <YYYY-MM-DD>] [--category <name>] [--agent
 - Defaults: status `confirmed`; preview on stdout until `--output <dir>` is set.
 - `--framework auto` detects vitest/jest from `package.json`, otherwise writes JSON fixtures only.
 - Overwriting unknown files requires `--force` (NightOwl eval JSON / `// nightowl-suggested-regression` stubs are safe to replace).
+
+#### `nightowl rule-impact`
+
+Marks a project rule as applied (local baseline snapshot) and compares non-dismissed failure counts in equal-length windows before/after. Offline; no LLM; does **not** change `nightowl report` / `--fail-on-rate`.
+
+```bash
+# After you paste a suggested rule into CLAUDE.md / .cursorrules yourself:
+nightowl rule-impact mark --label convention-naming --category convention
+
+# Compare default 14-day windows (or override)
+nightowl rule-impact
+nightowl rule-impact --json --before-days 14 --after-days 14
+nightowl rule-impact --label convention-naming
+```
+
+- Mark upserts by `--label` (same label updates baseline / `applied_at`).
+- Show uses filters stored on the mark. Negative delta means fewer failures after apply (observational only — not causal proof).
 
 ---
 

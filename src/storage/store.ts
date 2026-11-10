@@ -51,6 +51,17 @@ import { listFailuresForRules } from './rules-queries.js';
 import type { FailureForRules, RulesFilter } from '../rules/types.js';
 import { listFailuresForRegressions } from './regression-queries.js';
 import type { FailureForRegression, RegressionFilter } from '../regressions/types.js';
+import { countFailuresInWindow, type FailureWindowFilter } from './impact-queries.js';
+import {
+  getLatestRuleApplication,
+  getRuleApplicationById,
+  getRuleApplicationByLabel,
+  listRuleApplications,
+  type RuleApplication,
+  type RuleBaseline,
+  type UpsertRuleApplicationInput,
+  upsertRuleApplication,
+} from './rule-applications.js';
 import { findProjectRoot } from './project-root.js';
 import { loadSqlite } from './sqlite.js';
 
@@ -97,6 +108,12 @@ export interface Store {
   readonly setFailureStatus: (ids: readonly number[], status: FailureStatus) => StatusChange;
   readonly prune: (options: PruneOptions) => PruneResult;
   readonly vacuum: () => void;
+  readonly upsertRuleApplication: (input: UpsertRuleApplicationInput) => RuleApplication;
+  readonly getRuleApplicationById: (id: number) => RuleApplication | null;
+  readonly getRuleApplicationByLabel: (label: string) => RuleApplication | null;
+  readonly getLatestRuleApplication: () => RuleApplication | null;
+  readonly listRuleApplications: () => readonly RuleApplication[];
+  readonly countFailuresInWindow: (filter: FailureWindowFilter) => RuleBaseline;
   // Hooks shorten the lock wait to what is left of their budget before writing.
   readonly setBusyTimeout: (ms: number) => void;
   readonly pragma: (name: string) => unknown;
@@ -188,6 +205,12 @@ function storeApi(db: import('node:sqlite').DatabaseSync, root: string): Store {
     setFailureStatus: (ids: readonly number[], status: FailureStatus) => setFailureStatus(db, ids, status),
     prune: (options: PruneOptions) => pruneStorage(db, options),
     vacuum: () => vacuumDatabase(db),
+    upsertRuleApplication: (input: UpsertRuleApplicationInput) => upsertRuleApplication(db, input),
+    getRuleApplicationById: (id: number) => getRuleApplicationById(db, id),
+    getRuleApplicationByLabel: (label: string) => getRuleApplicationByLabel(db, label),
+    getLatestRuleApplication: () => getLatestRuleApplication(db),
+    listRuleApplications: () => listRuleApplications(db),
+    countFailuresInWindow: (filter: FailureWindowFilter) => countFailuresInWindow(db, filter),
     setBusyTimeout: (ms: number) => db.exec(`PRAGMA busy_timeout = ${Math.max(1, Math.floor(ms))}`),
     pragma: (name: string) => {
       if (!READABLE_PRAGMAS.has(name)) throw new Error(`Unsupported pragma: ${name}`);
