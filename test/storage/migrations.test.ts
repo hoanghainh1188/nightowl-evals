@@ -36,7 +36,7 @@ describe('schema v1 → current', () => {
       expect(db.prepare('SELECT file_path, ai_content, prompt_event_id FROM failures').all()).toEqual([
         { file_path: 'a.ts', ai_content: 'x', prompt_event_id: null },
       ]);
-      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(6);
+      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(7);
     } finally {
       db.close();
     }
@@ -128,7 +128,7 @@ describe('migration v3 to v4', () => {
     (await openStore({ cwd: repo.path })).close();
     const db = new DatabaseSync(dbFile);
     try {
-      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(6);
+      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(7);
       expect(db.prepare('SELECT source, feedback_event_id FROM failures').all()).toEqual([
         { source: 'manual-fix', feedback_event_id: null },
         { source: 'manual-fix', feedback_event_id: null },
@@ -172,7 +172,7 @@ describe('migration v4 to v5', () => {
     (await openStore({ cwd: repo.path })).close();
     const db = new DatabaseSync(dbFile);
     try {
-      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(6);
+      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(7);
       expect(columns(db, 'events')).toContain('agent');
       expect(columns(db, 'failures')).toContain('agent');
       expect(db.prepare('SELECT source, agent FROM events ORDER BY id').all()).toEqual([
@@ -208,7 +208,7 @@ describe('migration v5 to v6', () => {
     (await openStore({ cwd: repo.path })).close();
     const db = new DatabaseSync(dbFile);
     try {
-      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(6);
+      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(7);
       expect(columns(db, 'events')).toContain('dedupe_key');
       expect(db.prepare('SELECT source, dedupe_key FROM events').all()).toEqual([{ source: 'agent-hook', dedupe_key: null }]);
       db.exec(
@@ -224,6 +224,39 @@ describe('migration v5 to v6', () => {
       expect(() =>
         db.exec(`INSERT INTO events (created_at, source, kind, payload, dedupe_key) VALUES ('t', 'ci', 'ci-fail', '{}', 'ci:abc')`),
       ).toThrow();
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe('migration v6 to v7', () => {
+  let repo: Awaited<ReturnType<typeof createFakeRepo>>;
+  let dbFile: string;
+
+  beforeEach(async () => {
+    repo = await createFakeRepo();
+    await mkdir(join(repo.path, '.nightowl'), { mode: 0o700 });
+    dbFile = join(repo.path, '.nightowl', 'nightowl.db');
+    const db = new DatabaseSync(dbFile);
+    for (const sql of migrations.slice(0, 6)) db.exec(sql);
+    db.exec('PRAGMA user_version = 6');
+    db.close();
+  });
+  afterEach(() => repo.cleanup());
+
+  it('adds rule_applications', async () => {
+    (await openStore({ cwd: repo.path })).close();
+    const db = new DatabaseSync(dbFile);
+    try {
+      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(7);
+      expect(columns(db, 'rule_applications')).toEqual(
+        expect.arrayContaining(['id', 'created_at', 'applied_at', 'label', 'categories', 'agents', 'modules', 'depth', 'baseline']),
+      );
+      db.exec(
+        `INSERT INTO rule_applications (created_at, applied_at, label, baseline) VALUES ('t', 't', 'r1', '{"total":0,"by_category":{}}')`,
+      );
+      expect(db.prepare('SELECT label FROM rule_applications').all()).toEqual([{ label: 'r1' }]);
     } finally {
       db.close();
     }

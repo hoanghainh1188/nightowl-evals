@@ -34,6 +34,7 @@ describe('run', () => {
       'ingest-pr',
       'suggest-rules',
       'suggest-regressions',
+      'rule-impact',
       'completion',
     ]) {
       expect(fake.out()).toMatch(new RegExp(`^\\s+${name}\\s+\\S`, 'm'));

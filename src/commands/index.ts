@@ -14,6 +14,7 @@ import { precommitCommand } from './precommit.js';
 import { pruneCommand } from './prune.js';
 import { reportCommand } from './report.js';
 import { reviewCommand } from './review.js';
+import { ruleImpactCommand } from './rule-impact.js';
 import { suggestRegressionsCommand } from './suggest-regressions.js';
 import { suggestRulesCommand } from './suggest-rules.js';
 import { uninstallCommand } from './uninstall.js';
@@ -35,6 +36,7 @@ export const commands: readonly Command[] = Object.freeze([
   reviewCommand,
   suggestRulesCommand,
   suggestRegressionsCommand,
+  ruleImpactCommand,
   uninstallCommand,
   completionCommand,
 ]);

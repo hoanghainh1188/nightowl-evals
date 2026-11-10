@@ -41,7 +41,7 @@ export async function seed(root: string, failures: readonly SeedFailure[], check
     for (const f of failures) {
       const createdAt = f.createdAt ?? '2026-11-04T10:00:00.000Z';
       const filePath = f.filePath ?? 'src/a.ts';
-      const agent = f.agent ?? 'claude-code';
+      const agent = f.agent === undefined ? 'claude-code' : f.agent;
       const prompt =
         f.prompt === undefined || f.prompt === null
           ? null
