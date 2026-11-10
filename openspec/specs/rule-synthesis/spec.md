@@ -18,11 +18,11 @@ Tổng hợp lỗi AI đã ghi trong NightOwl thành đề xuất quy ước Mar
 - **THEN** stderr hướng dẫn init hoặc báo không có dữ liệu; thoát mã khác 0; không tạo DB
 
 ### Requirement: Mặc định không LLM và không ghi file dự án
-Không có cờ opt-in LLM, lệnh SHALL chỉ dùng heuristic/template local. Không có cờ ghi file tường minh, lệnh SHALL NOT sửa `CLAUDE.md`, `.cursorrules`, hay file rule khác trong repo.
+Không có cờ opt-in LLM, lệnh SHALL chỉ dùng heuristic/template local. Không có `--output` và không có `--write`, lệnh SHALL NOT tạo/sửa file trên đĩa (chỉ stdout) và SHALL NOT sửa `CLAUDE.md`, `.cursorrules`, hay file rule khác trong repo.
 
 #### Scenario: Dry output mặc định
-- **WHEN** chạy `nightowl suggest-rules` không `--yes` và không `--write`
-- **THEN** chỉ in đề xuất; không gọi mạng; không đổi file ngoài (có thể) đường dẫn output tạm nếu có `--output`
+- **WHEN** chạy `nightowl suggest-rules` không `--yes`, không `--output`, và không `--write`
+- **THEN** chỉ in đề xuất ra stdout; không gọi mạng; không đổi file nào trên đĩa
 
 ### Requirement: Bộ lọc và ưu tiên category lặp
 Lệnh SHALL hỗ trợ lọc `--since`, `--category` (lặp), `--agent` (lặp), và trạng thái (mặc định ưu tiên `confirmed`). Khi không chỉ định category, SHALL ưu tiên hoặc mặc định gồm `convention` và `missing-context` (có thể mở rộng các category khác bằng flag).
@@ -39,11 +39,42 @@ The command SHALL NOT call an LLM unless the user opts in (for example `--yes` w
 - **THEN** không spawn `claude` và không gọi Anthropic API
 
 ### Requirement: Ghi file chỉ khi chỉ định rõ
-Chỉ khi có tuỳ chọn ghi tường minh (ví dụ `--write <path>`), lệnh SHALL ghi (hoặc nối) Markdown đề xuất vào đường dẫn đó theo chế độ đã document (create/append/replace). SHALL từ chối ghi đè file không phải rule NightOwl đã biết trừ khi `--force`.
+Lệnh SHALL hỗ trợ đúng một trong hai chế độ ghi tường minh: `--output <path>` (file đề xuất NightOwl độc lập) hoặc `--write <path>` (khối marker trong file rule dự án). Không có cả hai cờ thì SHALL NOT ghi file. Symlink đích SHALL bị từ chối.
 
 #### Scenario: Write path
 - **WHEN** `nightowl suggest-rules --write .nightowl/suggested-rules.md`
-- **THEN** file được tạo/ cập nhật với nội dung đề xuất; stdout có thể xác nhận đường dẫn
+- **THEN** file được tạo/ cập nhật với nội dung đề xuất trong khối marker NightOwl; stdout hoặc stderr có thể xác nhận đường dẫn
+
+#### Scenario: --output file đề xuất độc lập
+- **WHEN** `nightowl suggest-rules --output .nightowl/suggested-rules.md`
+- **THEN** file được tạo/cập nhật với toàn bộ Markdown đề xuất + marker NightOwl; không sửa `CLAUDE.md`
+
+#### Scenario: --write inject vào file rule dự án
+- **WHEN** `CLAUDE.md` đã có nội dung người dùng và chạy `nightowl suggest-rules --write CLAUDE.md`
+- **THEN** file vẫn giữ nguyên phần ngoài khối NightOwl; khối marker chứa đề xuất mới; thoát 0
+
+#### Scenario: --write cập nhật idempotent
+- **WHEN** chạy `--write CLAUDE.md` lần hai sau khi đã có khối marker
+- **THEN** chỉ một khối NightOwl còn lại; nội dung ngoài khối không đổi
+
+#### Scenario: --write thêm khối khi chưa có marker
+- **WHEN** file rule chưa có marker NightOwl và chạy `--write` tới path đó
+- **THEN** khối marker được thêm (thường cuối file); phần nội dung sẵn có giữ nguyên
+
+#### Scenario: --write marker lệch
+- **WHEN** file có marker NightOwl không khớp và chạy `--write` không `--force`
+- **THEN** không ghi; stderr nêu rõ; thoát ≠ 0
+
+#### Scenario: Từ chối --output đè file lạ
+- **WHEN** `--output` trỏ tới file đã tồn tại không phải đề xuất NightOwl và không có `--force`
+- **THEN** không ghi; stderr nêu rõ; thoát ≠ 0
+
+### Requirement: Marker bắt đầu và kết thúc cho khối --write
+Khối do `--write` quản lý SHALL dùng cặp marker HTML comment (hoặc tương đương đã document) đánh dấu bắt đầu và kết thúc, đủ để thay thế vùng mà không phụ thuộc phần còn lại của file. Định dạng marker SHALL ổn định và được document trong help/README.
+
+#### Scenario: Khối có start và end
+- **WHEN** sau `--write` thành công mở file đích
+- **THEN** nội dung chứa đúng một cặp marker bắt đầu/kết thúc NightOwl bao quanh đề xuất
 
 ### Requirement: Không lộ secret trong đề xuất
 Nội dung rule xuất ra SHALL NOT chứa secret inline đã lọc (cùng chính sách snapshot/export). Diff/code mẫu trong đề xuất SHALL bị cắt hoặc bỏ qua nếu chứa secret.

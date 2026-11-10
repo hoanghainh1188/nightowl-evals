@@ -26,6 +26,12 @@ describe('completion catalog', () => {
     );
   });
 
+  it('lists distinct --write and --output for suggest-rules', () => {
+    expect(COMMAND_FLAGS['suggest-rules']).toEqual(
+      expect.arrayContaining(['--write', '--output', '--force']),
+    );
+  });
+
   it('README documents eval/source install for three shells', async () => {
     const readme = await readFile(join(import.meta.dirname, '../../README.md'), 'utf8');
     expect(readme).toContain('nightowl completion');

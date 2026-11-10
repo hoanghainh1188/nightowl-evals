@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { formatSuggestedRules, hasRulesMarker } from '../../src/rules/format.js';
 import { buildHeuristicRules } from '../../src/rules/heuristic.js';
 import type { FailureForRules } from '../../src/rules/types.js';
-import { RULES_MARKER } from '../../src/rules/types.js';
+import { RULES_MARKER_START } from '../../src/rules/types.js';
 
 function failure(partial: Partial<FailureForRules> & Pick<FailureForRules, 'id' | 'filePath'>): FailureForRules {
   return Object.freeze({
@@ -32,14 +32,14 @@ describe('heuristic + format', () => {
 
     const md = formatSuggestedRules(rules, '2026-11-09T00:00:00.000Z');
     expect(hasRulesMarker(md)).toBe(true);
-    expect(md.startsWith(RULES_MARKER)).toBe(true);
+    expect(md.startsWith(RULES_MARKER_START)).toBe(true);
     expect(md).toContain('## 1. Follow project conventions');
     expect(md).not.toContain('ghp_');
   });
 
   it('formats empty output when nothing meets the threshold', () => {
     const md = formatSuggestedRules([], '2026-11-09T00:00:00.000Z');
-    expect(md).toContain(RULES_MARKER);
+    expect(md).toContain(RULES_MARKER_START);
     expect(md).toContain('No clusters met the threshold');
   });
 });
