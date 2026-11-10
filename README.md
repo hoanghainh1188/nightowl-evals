@@ -390,7 +390,7 @@ nightowl eval [--yes] [--input <file>] [--model <name>] [--limit <1-100>] \
 
 ## CI/CD Quality Gate Integration
 
-Enforce AI code quality standards in your GitHub Actions workflow:
+Use the composite Action shipped in this repo for a one-step quality gate and optional sticky PR comment:
 
 ```yaml
 name: AI Quality Gate
@@ -399,33 +399,40 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  pull-requests: write # required when comment-on-pr is true (default)
+
 jobs:
   nightowl-gate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # .nightowl/ is gitignored — restore the DB onto the runner before the gate
+      # (cache, encrypted artifact, or self-hosted volume). Example placeholder:
+      # - name: Restore NightOwl DB
+      #   run: mkdir -p .nightowl && cp "$NIGHTOWL_DB_BACKUP" .nightowl/nightowl.db
+
+      - uses: hoanghainh1188/nightowl-evals/action@main
         with:
-          fetch-depth: 0
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Install NightOwl
-        run: npm install -g @hoanghainh/nightowl-evals
-
-      - name: Check AI Failure Rate
-        run: |
-          # Fail the build if more than 20% of AI edits required developer intervention
-          nightowl report --since 2026-01-01 --fail-on-rate 20 --output report.json
+          fail-on-rate: '20'
+          since: '2026-01-01'
+          nightowl-version: '0.3.0' # pin a published semver in production
+          comment-on-pr: 'true'
+          output-path: nightowl-report.json
 
       - name: Archive NightOwl Report
-        if: always()
+        if: always() && hashFiles('nightowl-report.json') != ''
         uses: actions/upload-artifact@v4
         with:
           name: ai-quality-report
-          path: report.json
+          path: nightowl-report.json
 ```
+
+**Inputs:** `fail-on-rate` (default `25`), `since`, `output-path`, `working-directory`, `nightowl-version` (default `latest`), `comment-on-pr` (default `true`), `github-token`.
+
+**Notes:** The Action does not create or sync `.nightowl/`. Without `nightowl.db` on the runner the step fails with a clear error. Sticky comments use the GitHub API with your workflow token only — the `nightowl` binary itself still makes no network calls. Comments run only for same-repo PRs (fork PRs skip commenting because `GITHUB_TOKEN` cannot write). If you set `working-directory`, point `upload-artifact` / `hashFiles` at `{working-directory}/{output-path}`.
 
 ---
 
