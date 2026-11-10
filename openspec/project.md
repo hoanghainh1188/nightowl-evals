@@ -99,6 +99,6 @@ Chi tiết xem [`docs/v0.3-roadmap-ideas.md`](../docs/v0.3-roadmap-ideas.md):
 | 20 | `add-regression-synthesizer` | Tự động tạo test case hồi quy cho dự án mỗi khi dev sửa lỗi AI | Dự kiến |
 | 21 | `add-tui-review` | Giao diện TUI tương tác bàn phím (↑/↓, Space, c, d) cho `nightowl review -i` | Dự kiến |
 | 22 | `add-github-action` | Composite GitHub Action chạy CI quality gate & comment báo cáo trên PR | Done |
-| 23 | `add-swebench-export` | Xuất dataset theo format SWE-bench và Promptfoo cho enterprise eval | Dự kiến |
+| 23 | `add-swebench-export` | Xuất dataset theo format SWE-bench và Promptfoo cho enterprise eval | Done |
 | 24 | `add-shell-completion` | Hỗ trợ tab completion cho Bash, Zsh, Fish | Dự kiến |
 

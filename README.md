@@ -359,14 +359,17 @@ nightowl classify [--yes] [--transport cli|api] [--model <name>] [--limit <1-100
 
 #### `nightowl export`
 
-Compiles confirmed failures into standardized evaluation datasets (`nightowl.eval/v1` format).
+Compiles recorded failures into evaluation datasets.
 
 ```bash
-nightowl export [--out <file>] [--since <YYYY-MM-DD>] [--category <name>] [--force]
+nightowl export [--out <file>] [--format jsonl|swe-bench|promptfoo] \
+  [--since <YYYY-MM-DD>] [--category <name>] [--force]
 ```
 
-- Target file defaults to `.nightowl/export/evals.jsonl` (mode `0600`, readable only by current user).
-- Each line contains `{ id, filePath, prompt, rejected, expected, source, feedback }`.
+- `--format jsonl` (default): `nightowl.eval/v1` JSONL → `.nightowl/export/evals.jsonl`.
+- `--format swe-bench`: best-effort SWE-bench-**compatible** JSONL (`instance_id`, `repo`, `base_commit`, `problem_statement`, `patch`, …). Harness fields like `FAIL_TO_PASS` are empty — this is **not** the official SWE-bench dataset.
+- `--format promptfoo`: Promptfoo YAML config → `.nightowl/export/promptfooconfig.yaml` (replace the `echo` provider before running Promptfoo).
+- Files use mode `0600`. Export never calls the network.
 
 #### `nightowl eval` (opt-in)
 
