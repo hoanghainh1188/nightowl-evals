@@ -5,7 +5,7 @@
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D22.13-brightgreen.svg?style=flat-square)](https://nodejs.org/)
 [![Runtime Dependencies](https://img.shields.io/badge/dependencies-0-success.svg?style=flat-square)](package.json)
 [![Coverage](https://img.shields.io/badge/coverage-%3E95%25-brightgreen.svg?style=flat-square)](package.json)
-[![OpenSpec Verified](https://img.shields.io/badge/spec-OpenSpec-purple.svg?style=flat-square)](openspec/project.md)
+[![OpenSpec Verified](https://img.shields.io/badge/spec-OpenSpec-purple.svg?style=flat-square)](openspec/config.yaml)
 
 **Turn AI coding mistakes into a tailored, project-specific evaluation test suite. 100% local-first, zero telemetry, zero runtime dependencies.**
 

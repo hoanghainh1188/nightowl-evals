@@ -137,9 +137,9 @@ Lý do chọn Apache-2.0:
 
 Việc cần làm khi tạo repo:
 
-- [ ] Chọn **Apache License 2.0** khi tạo repo trên GitHub.
-- [ ] `package.json`: `"license": "Apache-2.0"`.
-- [ ] Thêm file `NOTICE`: `NightOwl Evals — Copyright 2026 Hoang Hai`.
+- [x] Chọn **Apache License 2.0** khi tạo repo trên GitHub.
+- [x] `package.json`: `"license": "Apache-2.0"`.
+- [x] Thêm file `NOTICE`: `NightOwl Evals — Copyright 2026 Hoang Hai`.
 - [ ] Cân nhắc đăng ký thương hiệu "NightOwl Evals" trước khi bán SaaS.
 
 Đây là thông tin chung, không phải tư vấn pháp lý. Hỏi lại luật sư trước khi bán SaaS.
@@ -154,9 +154,9 @@ Việc cần làm khi tạo repo:
 ### Các bước setup
 
 1. Tạo repo mới `nightowl-evals`.
-2. `npm i -g @fission-ai/openspec` rồi `openspec init`, chọn Claude Code.
+2. `npm i -g @fission-ai/openspec` rồi `openspec init`, chọn Claude Code (và các tool khác nếu cần).
 3. Copy doc này vào `docs/nightowl-evals.md`.
-4. Nhờ Claude Code điền `openspec/project.md` từ doc.
+4. Nhờ agent điền `openspec/config.yaml` `context` / `rules` từ doc (không dùng `project.md`).
 5. Làm lần lượt các change bên dưới.
 
 ### Danh sách change OpenSpec
@@ -179,11 +179,11 @@ Việc cần làm khi tạo repo:
 Bạn là dev chính của dự án NightOwl Evals.
 Đọc docs/nightowl-evals.md trước. Đây là nguồn sự thật.
 
-Việc 1: điền openspec/project.md từ doc (mục tiêu, tech stack, nguyên tắc bắt buộc).
+Việc 1: điền openspec/config.yaml (context, rules, operations) từ doc — mục tiêu, tech stack, nguyên tắc bắt buộc.
 Việc 2: tạo change "add-cli-skeleton" theo bảng Danh sách change.
 Dừng lại để tôi duyệt proposal trước khi code.
 
-Luôn tuân thủ: không gửi dữ liệu ra ngoài máy, hook không được chặn Claude Code hay git commit.
+Luôn tuân thủ: không gửi dữ liệu ra ngoài máy, hook không được chặn agent hay git commit.
 Repo dùng license Apache-2.0: tạo LICENSE, NOTICE và ghi license trong package.json.
 ```
 
