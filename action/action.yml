@@ -69,9 +69,33 @@ runs:
         db="${WORKING_DIRECTORY%/}/.nightowl/nightowl.db"
         if [[ ! -f "${db}" ]]; then
           echo "::error::Missing ${db}. NightOwl does not create the database in CI."
-          echo "::error::Restore .nightowl/nightowl.db onto the runner (cache, artifact, or self-hosted volume), or run nightowl init locally first."
-          echo "::error::.nightowl/ is gitignored by design — checkout alone will not include the DB."
+          echo "::error::Restore .nightowl/nightowl.db onto the runner before this step:"
+          echo "::error::  - actions/download-artifact (upload the DB from a prior job/workflow)"
+          echo "::error::  - actions/cache (restore a previously cached .nightowl/nightowl.db)"
+          echo "::error::  - self-hosted volume or copy from a secret/backup path into .nightowl/"
+          echo "::error::.nightowl/ is gitignored — git checkout alone will not include the DB. Run nightowl init locally if you have no DB yet."
           exit 1
+        fi
+
+    - name: Warn when database has no failures
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        SINCE: ${{ inputs.since }}
+      run: |
+        set -euo pipefail
+        tmp="$(mktemp)"
+        # Signal-only preflight; empty data must not fail the gate by itself.
+        # Use the same --since as the gate report so the warning matches the window.
+        args=(--json --fail-on-rate 100 --output "${tmp}")
+        if [[ -n "${SINCE}" ]]; then
+          args+=(--since "${SINCE}")
+        fi
+        nightowl report "${args[@]}"
+        total="$(node --input-type=module -e 'import fs from "node:fs"; const j=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(String(j.total ?? ""));' "${tmp}")"
+        rm -f "${tmp}"
+        if [[ "${total}" == "0" ]]; then
+          echo "::warning::NightOwl database has 0 failures recorded — report/CI gate will have little signal. Record failures locally, then restore .nightowl/nightowl.db."
         fi
 
     - name: Validate fail-on-rate

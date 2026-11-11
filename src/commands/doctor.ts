@@ -519,8 +519,10 @@ export async function checkStorage(deps: DoctorDeps, root: string | null): Promi
       });
     }
 
-    // Report stats
+    // Report stats (align readiness with report JSON `total`, which excludes dismissed)
     const failures = store.countFailures();
+    const dismissed = failures.byStatus['dismissed'] ?? 0;
+    const reportable = failures.total - dismissed;
     const eventCount = store.listEvents().length;
     checks.push({
       category: 'NightOwl Database',
@@ -528,6 +530,16 @@ export async function checkStorage(deps: DoctorDeps, root: string | null): Promi
       status: 'ok',
       message: `${eventCount} events recorded, ${failures.total} failures recorded`,
     });
+    if (reportable === 0) {
+      checks.push({
+        category: 'NightOwl Database',
+        name: 'Report readiness',
+        status: 'warn',
+        message: 'No failures recorded yet — report/CI gate will have little signal',
+        remedy:
+          "Record AI failures via agent/git hooks (run 'nightowl init' if needed), then re-run doctor before relying on report.",
+      });
+    }
   } catch (error) {
     checks.push({
       category: 'NightOwl Database',

@@ -47,6 +47,12 @@ describe('github action action.yml', () => {
   it('preflights the database and skips API when comment is off', () => {
     expect(text).toContain('.nightowl/nightowl.db');
     expect(text).toContain('Missing');
+    expect(text).toContain('download-artifact');
+    expect(text).toContain('actions/cache');
+    expect(text).toContain('Warn when database has no failures');
+    expect(text).toContain('::warning::');
+    expect(text).toContain('j.total');
+    expect(text).toContain('SINCE: ${{ inputs.since }}');
     expect(text).toMatch(
       /if: \$\{\{ always\(\) && inputs\.comment-on-pr == 'true' && github\.event_name == 'pull_request' && github\.event\.pull_request\.head\.repo\.full_name == github\.repository \}\}/,
     );
@@ -61,5 +67,8 @@ describe('github action action.yml', () => {
     expect(readme).toContain('comment-on-pr');
     expect(readme).toContain('junit-path');
     expect(readme).toContain('ingest-ci');
+    expect(readme).toContain('actions/download-artifact@v4');
+    expect(readme).toContain('actions/cache@v4');
+    expect(readme).toContain('nightowl-db');
   });
 });
