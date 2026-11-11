@@ -52,6 +52,8 @@ import type { FailureForRules, RulesFilter } from '../rules/types.js';
 import { listFailuresForRegressions } from './regression-queries.js';
 import type { FailureForRegression, RegressionFilter } from '../regressions/types.js';
 import { countFailuresInWindow, type FailureWindowFilter } from './impact-queries.js';
+import { countAutoNoiseFailures, listNoiseStats } from './noise-stats.js';
+import type { NoiseStatRow } from '../noise/types.js';
 import {
   getLatestRuleApplication,
   getRuleApplicationById,
@@ -101,6 +103,8 @@ export interface Store {
   readonly listFailuresToExport: (filter: ExportFilter) => readonly FailureToExport[];
   readonly countFailuresForReport: (since: string | null, agents?: readonly string[] | null) => readonly FailureCountRow[];
   readonly countChecksForReport: (since: string | null, agents?: readonly string[] | null) => readonly CheckCountRow[];
+  readonly countAutoNoiseFailures: (since: string | null) => number;
+  readonly listNoiseStats: () => readonly NoiseStatRow[];
   readonly listFailuresForReview: (filter: ReviewFilter) => readonly FailureForReview[];
   readonly listFailuresForRules: (filter: RulesFilter) => readonly FailureForRules[];
   readonly listFailuresForRegressions: (filter: RegressionFilter) => readonly FailureForRegression[];
@@ -198,6 +202,8 @@ function storeApi(db: import('node:sqlite').DatabaseSync, root: string): Store {
       countFailuresForReport(db, { since, agents }),
     countChecksForReport: (since: string | null, agents: readonly string[] | null = null) =>
       countChecksForReport(db, { since, agents }),
+    countAutoNoiseFailures: (since: string | null) => countAutoNoiseFailures(db, since),
+    listNoiseStats: () => listNoiseStats(db),
     listFailuresForReview: (filter: ReviewFilter) => listFailuresForReview(db, filter),
     listFailuresForRules: (filter: RulesFilter) => listFailuresForRules(db, filter),
     listFailuresForRegressions: (filter: RegressionFilter) => listFailuresForRegressions(db, filter),

@@ -37,8 +37,11 @@ export function formatText(report: Report): string {
   const plural = report.total === 1 ? 'failure' : 'failures';
   const header = `NightOwl report${since}: ${report.total} ${plural} (${report.unclassified} unclassified, ${report.dismissed} dismissed not counted)`;
   const signalsLine = `Signals (events, not failures): ci-fail ${report.signals.ciFail}, pr-review ${report.signals.prReview}`;
+  const noiseRate =
+    report.noise.reviewRate === null ? 'n/a' : `${Math.round(report.noise.reviewRate * 100)}%`;
+  const noiseLine = `Noise estimate: review-dismissed ${noiseRate} (${report.noise.sample.dismissed}/${report.noise.sample.confirmed + report.noise.sample.dismissed} reviewed), auto-noise ${report.noise.autoNoise}`;
   if (report.total === 0 && report.changedRate.checked === 0) {
-    return `${header}\n${signalsLine}\nNo failures recorded yet. Commit some code Claude Code wrote, then run this again.\n`;
+    return `${header}\n${signalsLine}\n${noiseLine}\nNo failures recorded yet. Commit some code Claude Code wrote, then run this again.\n`;
   }
 
   const modules = report.byModule.slice(0, TOP_MODULES);
@@ -48,6 +51,7 @@ export function formatText(report: Report): string {
     changedLine(report.changedRate),
     reviewedLine(report.byStatus),
     signalsLine,
+    noiseLine,
     '',
     'By category',
     ...rows(Object.entries(report.byCategory)),
@@ -89,6 +93,11 @@ export function formatJson(report: Report): string {
       by_module: report.byModule,
       by_week: report.byWeek.map((w) => ({ week: w.week, failures: w.recorded, checked: w.checked, changed: w.failures, rate: w.rate })),
       signals: { ci_fail: report.signals.ciFail, pr_review: report.signals.prReview },
+      noise: {
+        review_rate: report.noise.reviewRate,
+        auto_noise: report.noise.autoNoise,
+        sample: report.noise.sample,
+      },
     },
     null,
     2,

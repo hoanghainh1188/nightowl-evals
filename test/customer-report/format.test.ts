@@ -30,6 +30,7 @@ function sampleReport(overrides: Partial<Report> = {}): Report {
     byModule: [{ module: 'src/hooks', failures: 3 }],
     byWeek: [{ week: '2026-W45', failures: 1, checked: 4, rate: 0.25, recorded: 3 }],
     signals: { ciFail: 0, prReview: 0 },
+    noise: { reviewRate: null, autoNoise: 0, sample: { confirmed: 1, dismissed: 0 } },
     ...overrides,
   };
 }

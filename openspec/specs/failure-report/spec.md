@@ -112,3 +112,10 @@ Với `--fail-on-rate <0-100>`, nếu tỷ lệ code AI bị sửa (`changedRate
 #### Scenario: Không có tín hiệu
 - **WHEN** không có sự kiện CI/PR trong cửa sổ
 - **THEN** các trường đếm tương ứng bằng 0; lệnh vẫn thoát 0
+
+### Requirement: Báo cáo ước lượng nhiễu
+`nightowl report` (text và `--json`) SHALL gồm ước lượng nhiễu trong cửa sổ lọc hiện tại: tỷ lệ review-noise `dismissed/(dismissed+confirmed)` khi mẫu đủ, cộng số lượng failure auto-noise (dismissed bởi safe auto-noise / reason auto) nếu có. JSON SHALL có khoá ổn định (ví dụ `noise`) với các field đã document. Khi thiếu mẫu review, tỷ lệ SHALL là `null` / n/a chứ không 0 giả.
+
+#### Scenario: JSON có noise
+- **WHEN** chạy `nightowl report --json` với vài failure confirmed và dismissed
+- **THEN** JSON có object `noise` gồm tỷ lệ hoặc null và count auto-noise ≥ 0

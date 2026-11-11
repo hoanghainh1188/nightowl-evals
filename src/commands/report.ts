@@ -120,6 +120,7 @@ export function createReportCommand(deps: ReportDeps = { cwd: () => process.cwd(
             ciFail: signalCounts['ci-fail'] ?? 0,
             prReview: signalCounts['pr-review'] ?? 0,
           },
+          autoNoise: store.countAutoNoiseFailures(options.since),
         });
         const outputContent = options.json ? formatJson(report) : formatText(report);
         if (options.output !== null) {

@@ -136,11 +136,12 @@ describe('schema', () => {
       'events_kind_time',
       'events_session',
       'failures',
+      'noise_stats',
       'rule_applications',
       'rule_applications_applied_at',
     ]);
-    expect(rawQuery<{ user_version: number }>(repo.path, 'PRAGMA user_version')[0]?.user_version).toBe(7);
-    expect(CURRENT_SCHEMA_VERSION).toBe(7);
+    expect(rawQuery<{ user_version: number }>(repo.path, 'PRAGMA user_version')[0]?.user_version).toBe(8);
+    expect(CURRENT_SCHEMA_VERSION).toBe(8);
   });
 
   it('leaves data and version untouched when reopened', async () => {
@@ -150,7 +151,7 @@ describe('schema', () => {
     const second = await openStore({ cwd: repo.path });
     expect(second.listEvents()).toHaveLength(1);
     second.close();
-    expect(rawQuery<{ user_version: number }>(repo.path, 'PRAGMA user_version')[0]?.user_version).toBe(7);
+    expect(rawQuery<{ user_version: number }>(repo.path, 'PRAGMA user_version')[0]?.user_version).toBe(8);
   });
 
   it('refuses a database written by a newer NightOwl without changing it', async () => {

@@ -137,6 +137,17 @@ export const migrations: readonly string[] = Object.freeze([
   );
   CREATE INDEX rule_applications_applied_at ON rule_applications (applied_at);
   `,
+  `
+  -- Local noise scoring metadata + review-learning counters (no telemetry).
+  ALTER TABLE failures ADD COLUMN noise_score REAL CHECK (noise_score IS NULL OR (noise_score >= 0 AND noise_score <= 1));
+  ALTER TABLE failures ADD COLUMN noise_reasons TEXT NOT NULL DEFAULT '';
+  CREATE TABLE noise_stats (
+    reason_key     TEXT PRIMARY KEY,
+    dismiss_count  INTEGER NOT NULL DEFAULT 0,
+    confirm_count  INTEGER NOT NULL DEFAULT 0,
+    updated_at     TEXT    NOT NULL
+  );
+  `,
 ]);
 
 export const CURRENT_SCHEMA_VERSION = migrations.length;

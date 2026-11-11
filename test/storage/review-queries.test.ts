@@ -76,5 +76,35 @@ describe('review queries', () => {
       expect(store.setFailureStatus([a, 9999, 9998], 'confirmed')).toEqual({ ok: false, missing: [9998, 9999] });
       expect(status(a)).toBe('flagged');
     });
+
+    it('updates noise_stats on dismiss/confirm/reset for reason keys', async () => {
+      store.close();
+      const learnedIds = await seed(repo.path, [
+        {
+          filePath: 'noise.ts',
+          status: 'flagged',
+          noiseScore: 0.55,
+          noiseReasons: 'format-only',
+          createdAt: '2026-11-04T00:00:00.000Z',
+        },
+      ]);
+      store = await openStore({ cwd: repo.path });
+      const [id] = learnedIds as [number];
+
+      expect(store.setFailureStatus([id], 'dismissed')).toEqual({ ok: true, changed: [id], unchanged: [] });
+      expect(store.listNoiseStats()).toEqual([
+        expect.objectContaining({ reasonKey: 'format-only', dismissCount: 1, confirmCount: 0 }),
+      ]);
+
+      expect(store.setFailureStatus([id], 'confirmed')).toEqual({ ok: true, changed: [id], unchanged: [] });
+      expect(store.listNoiseStats()).toEqual([
+        expect.objectContaining({ reasonKey: 'format-only', dismissCount: 0, confirmCount: 1 }),
+      ]);
+
+      expect(store.setFailureStatus([id], 'flagged')).toEqual({ ok: true, changed: [id], unchanged: [] });
+      expect(store.listNoiseStats()).toEqual([
+        expect.objectContaining({ reasonKey: 'format-only', dismissCount: 0, confirmCount: 0 }),
+      ]);
+    });
   });
 });

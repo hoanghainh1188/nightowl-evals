@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { enrichFailureNoise } from '../../noise/enrich.js';
 import type { Attachment, NewFailure, UnattachedCheck } from '../../storage/failures.js';
 import { DATA_DIR, openStore, type Store } from '../../storage/store.js';
 import { listCommitFiles, readBlobIds, resolveHead } from './head-blobs.js';
@@ -62,9 +63,11 @@ function judge(store: Store, check: UnattachedCheck): Attachment {
   const payload = (store.getEventPayload(check.id) ?? {}) as CheckPayload;
   if (typeof payload.staged_content !== 'string') return { checkId: check.id, outcome: 'not-a-failure' };
   const ids = editIds(payload);
+  const stats = store.listNoiseStats();
   const failures = [manualFix, aiSelfFix]
     .map((find) => find(store, check, payload, ids, payload.staged_content as string))
-    .filter((failure): failure is NewFailure => failure !== null);
+    .filter((failure): failure is NewFailure => failure !== null)
+    .map((failure) => enrichFailureNoise(failure, stats));
   return failures.length === 0 ? { checkId: check.id, outcome: 'not-a-failure' } : { checkId: check.id, outcome: 'failure', failures };
 }
 

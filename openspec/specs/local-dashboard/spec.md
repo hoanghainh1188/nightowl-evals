@@ -69,3 +69,10 @@ Dashboard SHALL NOT chứa tên người, email, username git author/committer, 
 #### Scenario: từ chối fail-on-rate
 - **WHEN** chạy `nightowl dashboard --fail-on-rate 30`
 - **THEN** stderr báo tuỳ chọn không hợp lệ / không hỗ trợ, mã thoát 1
+
+### Requirement: Dashboard hiển thị ước lượng nhiễu
+HTML từ `nightowl dashboard` SHALL có section ước lượng nhiễu dùng cùng định nghĩa với `report` (tỷ lệ review-noise khi đủ mẫu, count auto-noise). SHALL NOT lộ tên/email developer. Khi n/a, UI SHALL nói rõ chưa đủ dữ liệu review.
+
+#### Scenario: Section noise trên HTML
+- **WHEN** database có confirmed và dismissed rồi chạy `nightowl dashboard`
+- **THEN** file HTML gồm nhãn nhiễu / noise và một tỷ lệ phần trăm hoặc n/a
