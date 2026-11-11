@@ -43,15 +43,49 @@ Với `--format swe-bench`, mỗi bản ghi đủ điều kiện xuất SHALL th
 - **THEN** vẫn xuất được dòng với `base_commit` null (hoặc tương đương đã document) và `problem_statement` / `patch` từ dữ liệu local
 
 ### Requirement: Patch và trường harness SWE-bench
-`patch` SHALL là unified diff từ nội dung trước sửa (`file_before` nếu có, không thì `rejected`) tới `expected`. `base_commit` SHALL lấy từ git khi có, hoặc `null` nếu không xác định. Trường harness không suy ra được (`FAIL_TO_PASS`, `PASS_TO_PASS`, …) SHALL là list rỗng theo convention đã document.
+`patch` SHALL là unified diff từ nội dung trước sửa (`file_before` nếu có, không thì `rejected`) tới `expected`. `base_commit` SHALL lấy từ git khi có, hoặc `null` nếu không xác định. Khi không có nguồn harness local đã document, `FAIL_TO_PASS` / `PASS_TO_PASS` SHALL là list rỗng và `test_patch` SHALL là chuỗi rỗng. Khi có stub NightOwl khớp (xem requirement nguồn harness), `FAIL_TO_PASS` và `test_patch` SHALL được điền theo convention đã document; `PASS_TO_PASS` vẫn SHALL là list rỗng. Lệnh SHALL NOT bịa test id khi thiếu stub.
 
 #### Scenario: Diff từ file_before sang expected
 - **WHEN** `file_before` là `a` và `expected` là `b` cho cùng `file_path`
 - **THEN** `patch` là unified diff thể hiện thay đổi đó
 
 #### Scenario: Harness rỗng
-- **WHEN** xuất swe-bench bất kỳ failure nào
-- **THEN** `FAIL_TO_PASS` và `PASS_TO_PASS` là list rỗng (không bịa test id)
+- **WHEN** xuất swe-bench mà không có thư mục regression, hoặc không có stub NightOwl khớp `instance_id`
+- **THEN** `FAIL_TO_PASS` và `PASS_TO_PASS` là list rỗng và `test_patch` là chuỗi rỗng (không bịa test id)
+
+#### Scenario: Harness điền từ stub khớp
+- **WHEN** xuất swe-bench với thư mục regression chứa stub NightOwl khớp `instance_id` của failure
+- **THEN** `FAIL_TO_PASS` không rỗng theo convention đã document, `test_patch` là unified diff thêm stub đó, và `PASS_TO_PASS` vẫn là list rỗng
+
+### Requirement: Tuỳ chọn thư mục regression cho swe-bench
+`nightowl export --format swe-bench` SHALL chấp nhận tuỳ chọn tường minh chỉ đường dẫn thư mục chứa artifact `suggest-regressions` (ví dụ `--regressions-dir <dir>`). Chỉ định dạng swe-bench SHALL dùng tuỳ chọn này để điền harness. Thiếu tuỳ chọn SHALL giữ harness rỗng. Đường dẫn không tồn tại hoặc không phải thư mục SHALL làm lệnh báo lỗi trên stderr và thoát mã khác 0 mà không ghi file. Lệnh SHALL NOT gọi mạng hay chạy test runner.
+
+#### Scenario: Có --regressions-dir hợp lệ
+- **WHEN** chạy `nightowl export --format swe-bench --regressions-dir <dir>` với `<dir>` là thư mục tồn tại
+- **THEN** lệnh dùng artifact NightOwl trong đó để điền harness khi khớp; mã thoát 0 nếu xuất thành công như các quy tắc export hiện có
+
+#### Scenario: Thiếu --regressions-dir
+- **WHEN** chạy `nightowl export --format swe-bench` không chỉ thư mục regression
+- **THEN** mọi dòng vẫn xuất được với harness rỗng (tương thích hành vi trước)
+
+#### Scenario: Đường dẫn regression không hợp lệ
+- **WHEN** `--regressions-dir` trỏ tới path không tồn tại hoặc không phải thư mục
+- **THEN** stderr báo lỗi; thoát mã khác 0; không ghi file xuất
+
+### Requirement: Khớp stub theo eval id ổn định
+Khi điền harness, export SHALL chỉ nhận file stub NightOwl đã biết (cùng marker / quy ước `suggest-regressions`) có tên gắn đúng `instance_id` (= eval id ổn định của failure). File không phải artifact NightOwl hoặc không khớp id SHALL bị bỏ qua (không lỗi cả lệnh). Chỉ fixture JSON mà không có stub khớp SHALL NOT điền `FAIL_TO_PASS` / `test_patch`.
+
+#### Scenario: Stub khớp id
+- **WHEN** thư mục có stub NightOwl tên gắn `instance_id` của failure đang xuất
+- **THEN** dòng swe-bench tương ứng dùng stub đó cho harness
+
+#### Scenario: Chỉ có fixture JSON
+- **WHEN** thư mục chỉ có file fixture JSON NightOwl khớp id, không có stub test khớp
+- **THEN** `FAIL_TO_PASS` vẫn rỗng và `test_patch` vẫn rỗng cho instance đó
+
+#### Scenario: File lạ cùng thư mục
+- **WHEN** thư mục chứa file không phải artifact NightOwl hoặc tên không khớp id
+- **THEN** export bỏ qua file đó; không lấy nội dung làm `FAIL_TO_PASS` / `test_patch`
 
 ### Requirement: Xuất cấu hình Promptfoo
 Với `--format promptfoo`, lệnh SHALL ghi một file cấu hình Promptfoo (YAML) dùng được với CLI Promptfoo: có `prompts`, `providers` (placeholder hoặc comment hướng dẫn điền), và `tests` — mỗi failure một test với vars (file/path/prompt) và assert hướng tới `expected` (ví dụ `equals` hoặc tương đương an toàn). Lệnh SHALL NOT chạy Promptfoo hay gọi API model.

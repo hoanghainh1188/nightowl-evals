@@ -41,6 +41,16 @@ describe('toSweBenchInstance', () => {
     expect(row.base_commit).toBeNull();
     expect(row.instance_id).toBe('failure-7');
   });
+
+  it('fills FAIL_TO_PASS and test_patch when harness is provided', () => {
+    const row = toSweBenchInstance(failure(), 'before\n', 'owner/repo', 'parentsha', {
+      FAIL_TO_PASS: ['test/regressions/abcdef123456-7.test.ts'],
+      test_patch: '--- a/test/regressions/abcdef123456-7.test.ts\n+++ b/test/regressions/abcdef123456-7.test.ts\n',
+    });
+    expect(row.FAIL_TO_PASS).toEqual(['test/regressions/abcdef123456-7.test.ts']);
+    expect(row.test_patch).toContain('abcdef123456-7.test.ts');
+    expect(row.PASS_TO_PASS).toEqual([]);
+  });
 });
 
 describe('buildProblemStatement', () => {

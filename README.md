@@ -425,11 +425,12 @@ Compiles recorded failures into evaluation datasets.
 
 ```bash
 nightowl export [--out <file>] [--format jsonl|swe-bench|promptfoo] \
-  [--since <YYYY-MM-DD>] [--category <name>] [--force]
+  [--regressions-dir <dir>] [--since <YYYY-MM-DD>] [--category <name>] [--force]
 ```
 
 - `--format jsonl` (default): `nightowl.eval/v1` JSONL → `.nightowl/export/evals.jsonl`.
-- `--format swe-bench`: best-effort SWE-bench-**compatible** JSONL (`instance_id`, `repo`, `base_commit`, `problem_statement`, `patch`, …). Harness fields like `FAIL_TO_PASS` are empty — this is **not** the official SWE-bench dataset.
+- `--format swe-bench`: best-effort SWE-bench-**compatible** JSONL (`instance_id`, `repo`, `base_commit`, `problem_statement`, `patch`, …). Without `--regressions-dir`, harness fields like `FAIL_TO_PASS` / `test_patch` stay empty. With `--regressions-dir` pointing at stubs from `suggest-regressions` (`{id}.test.ts` with the NightOwl marker), matching instances get `FAIL_TO_PASS` (relative stub path) and a `test_patch` that adds that stub. Still **not** the official SWE-bench dataset.
+- `--regressions-dir <dir>`: used for `--format swe-bench` only; directory must exist.
 - `--format promptfoo`: Promptfoo YAML config → `.nightowl/export/promptfooconfig.yaml` (replace the `echo` provider before running Promptfoo).
 - Files use mode `0600`. Export never calls the network.
 

@@ -1,4 +1,4 @@
-import { open } from 'node:fs/promises';
+import { open, stat } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { errorMessage } from '../cli/errors.js';
@@ -16,6 +16,7 @@ import {
   isExportFormat,
 } from '../export/formats.js';
 import { toPromptfooYaml } from '../export/promptfoo.js';
+import { loadStubHarness } from '../export/swe-bench-harness.js';
 import { resolveBaseCommit, resolveRepoName, toSweBenchInstance } from '../export/swe-bench.js';
 import { containsInlineSecret, isSensitivePath } from '../hooks/claude-code/sensitive.js';
 import { GitError, runGit } from '../hooks/git/run-git.js';
@@ -44,6 +45,8 @@ interface Options {
   readonly since: string | null;
   readonly categories: readonly string[] | null;
   readonly format: ExportFormat;
+  // Absolute or cwd-relative path; used only for swe-bench harness fill.
+  readonly regressionsDir: string | null;
 }
 
 function parseOptions(args: readonly string[]): Options | string {
@@ -57,6 +60,7 @@ function parseOptions(args: readonly string[]): Options | string {
         since: { type: 'string' },
         category: { type: 'string', multiple: true },
         format: { type: 'string' },
+        'regressions-dir': { type: 'string' },
       },
       strict: true,
       allowPositionals: false,
@@ -65,6 +69,7 @@ function parseOptions(args: readonly string[]): Options | string {
     return errorMessage(error);
   }
   if (values.out === '') return '--out needs a file path, or - for stdout';
+  if (values['regressions-dir'] === '') return '--regressions-dir needs a directory path';
   const since = values.since === undefined ? null : parseDateOption(values.since);
   if (since === null && values.since !== undefined) return `invalid --since date (use YYYY-MM-DD): ${values.since}`;
   const unknown = (values.category ?? []).find((name) => !CATEGORY_NAMES.has(name));
@@ -79,7 +84,28 @@ function parseOptions(args: readonly string[]): Options | string {
     since,
     categories: values.category ?? null,
     format: formatRaw,
+    regressionsDir: values['regressions-dir'] ?? null,
   };
+}
+
+/** Resolves `--regressions-dir` to an absolute directory, or an error message. */
+async function resolveRegressionsDir(
+  cwd: string,
+  raw: string | null,
+): Promise<{ dir: string | null } | { error: string }> {
+  if (raw === null) return { dir: null };
+  const resolved = resolve(cwd, raw);
+  const shown = printable(relative(cwd, resolved) || resolved);
+  try {
+    const info = await stat(resolved);
+    if (!info.isDirectory()) return { error: `--regressions-dir is not a directory: ${shown}` };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return { error: `--regressions-dir does not exist: ${shown}` };
+    }
+    throw error;
+  }
+  return { dir: resolved };
 }
 
 interface Prepared {
@@ -122,7 +148,14 @@ async function buildContent(store: Store, options: Options): Promise<{ content: 
     const lines: string[] = [];
     for (const failure of failures) {
       const baseCommit = await resolveBaseCommit(store.root, failure.commitSha);
-      lines.push(JSON.stringify(toSweBenchInstance(failure, fileBeforeFor(failure, before), repo, baseCommit)));
+      const id = evalId(failure);
+      const harness =
+        options.regressionsDir === null
+          ? null
+          : await loadStubHarness(options.regressionsDir, id, store.root);
+      lines.push(
+        JSON.stringify(toSweBenchInstance(failure, fileBeforeFor(failure, before), repo, baseCommit, harness)),
+      );
     }
     return { content: lines.map((line) => `${line}\n`).join(''), count: lines.length, sensitive };
   }
@@ -214,18 +247,34 @@ export function createExportCommand(deps: ExportDeps = { cwd: () => process.cwd(
       options: [
         ['--out <file>', `Where to write; - for stdout (default: ${DATA_DIR}/${EXPORT_DIR}/<format-file>)`],
         ['--format <name>', `Output format: ${EXPORT_FORMATS.join('|')} (default: jsonl)`],
+        [
+          '--regressions-dir <dir>',
+          'For swe-bench: fill FAIL_TO_PASS/test_patch from NightOwl stubs in this directory',
+        ],
         ['--force', 'Overwrite a file that is not a NightOwl export'],
         ['--since <YYYY-MM-DD>', 'Only failures from this date on'],
         ['--category <name>', `Only this category; repeatable (${[...CATEGORY_NAMES].join(', ')})`],
       ],
     }),
     run: async (args, io) => {
-      const options = parseOptions(args);
-      if (typeof options === 'string') {
-        io.stderr(`nightowl export: ${options}\n`);
+      const parsed = parseOptions(args);
+      if (typeof parsed === 'string') {
+        io.stderr(`nightowl export: ${parsed}\n`);
         return 1;
       }
       const cwd = deps.cwd();
+      let options: Options;
+      try {
+        const dirResult = await resolveRegressionsDir(cwd, parsed.regressionsDir);
+        if ('error' in dirResult) {
+          io.stderr(`nightowl export: ${dirResult.error}\n`);
+          return 1;
+        }
+        options = { ...parsed, regressionsDir: dirResult.dir };
+      } catch (error) {
+        io.stderr(`nightowl export: ${printable(errorMessage(error))}\n`);
+        return 1;
+      }
       const store = await openExistingStore(cwd);
       if (typeof store === 'string') {
         io.stderr(`nightowl export: ${store}\n`);
