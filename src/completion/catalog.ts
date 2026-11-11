@@ -13,7 +13,7 @@ export const COMMAND_FLAGS: Readonly<Record<string, readonly string[]>> = Object
   doctor: ['--strict'],
   log: ['--agent'],
   report: ['--since', '--depth', '--agent', '--json', '--output', '-o', '--fail-on-rate'],
-  export: ['--out', '--format', '--force', '--since', '--category'],
+  export: ['--out', '--format', '--regressions-dir', '--force', '--since', '--category'],
   'ingest-ci': ['--file', '--format', '--commit'],
   'ingest-pr': ['--file', '--github', '--pr'],
   precommit: [],

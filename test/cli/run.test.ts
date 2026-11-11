@@ -162,7 +162,7 @@ describe('run', () => {
     // Every option each command parses must be documented in its help.
     it.each([
       ['report', ['--since', '--depth', '--json'], ['(default: 2)']],
-      ['export', ['--out', '--force', '--since', '--category', '--format'], ['(default: jsonl)']],
+      ['export', ['--out', '--force', '--since', '--category', '--format', '--regressions-dir'], ['(default: jsonl)']],
       ['classify', ['--yes', '--limit', '--model', '--redo'], ['(default: 20)', '(default: haiku)']],
       ['eval', ['--yes', '--input', '--model', '--limit'], ['(default: 20)', '(default: haiku, sonnet)', '(default: .nightowl/export/evals.jsonl)']],
     ])('documents every option of %s with its defaults', async (name, flags, defaults) => {

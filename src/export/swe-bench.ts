@@ -4,6 +4,7 @@ import type { FailureToExport } from '../storage/failures.js';
 import { evalId } from './eval-case.js';
 import { filePatch } from './file-patch.js';
 import { SWE_BENCH_SCHEMA } from './formats.js';
+import { EMPTY_HARNESS, type SweBenchHarnessFields } from './swe-bench-harness.js';
 
 export interface SweBenchInstance {
   readonly schema: typeof SWE_BENCH_SCHEMA;
@@ -63,7 +64,9 @@ export function toSweBenchInstance(
   fileBefore: string | null,
   repo: string,
   baseCommit: string | null,
+  harness: SweBenchHarnessFields | null = null,
 ): SweBenchInstance {
+  const fields = harness ?? EMPTY_HARNESS;
   return {
     schema: SWE_BENCH_SCHEMA,
     instance_id: evalId(failure),
@@ -71,10 +74,10 @@ export function toSweBenchInstance(
     base_commit: baseCommit,
     problem_statement: buildProblemStatement(failure),
     patch: filePatch(failure.filePath, fileBefore, failure.aiContent, failure.finalContent),
-    test_patch: '',
+    test_patch: fields.test_patch,
     created_at: failure.createdAt,
     hints_text: failure.feedback ?? '',
-    FAIL_TO_PASS: [],
+    FAIL_TO_PASS: fields.FAIL_TO_PASS,
     PASS_TO_PASS: [],
     version: '',
     environment_setup_commit: null,

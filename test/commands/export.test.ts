@@ -1,4 +1,4 @@
-import { lstat, readdir, readFile, stat, symlink, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readdir, readFile, stat, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createExportCommand } from '../../src/commands/export.js';
@@ -206,6 +206,41 @@ describe('nightowl export', () => {
     expect(row.instance_id).toBeTruthy();
     expect(row.patch).toContain('+++ b/a.ts');
     expect(row.FAIL_TO_PASS).toEqual([]);
+    expect(row.PASS_TO_PASS).toEqual([]);
+  });
+
+  it('rejects missing --regressions-dir without writing', async () => {
+    await seed(repo.path, [{ filePath: 'a.ts' }]);
+    const result = await run(['--format', 'swe-bench', '--regressions-dir', 'no-such-dir']);
+    expect(result.code).toBe(1);
+    expect(result.err).toContain('--regressions-dir does not exist');
+    expect(await readdir(join(repo.path, '.nightowl'))).not.toContain('export');
+  });
+
+  it('rejects --regressions-dir when path is a file', async () => {
+    await seed(repo.path, [{ filePath: 'a.ts' }]);
+    await writeFile(join(repo.path, 'not-a-dir.txt'), 'x\n');
+    const result = await run(['--format', 'swe-bench', '--regressions-dir', 'not-a-dir.txt']);
+    expect(result.code).toBe(1);
+    expect(result.err).toContain('--regressions-dir is not a directory');
+    expect(await readdir(join(repo.path, '.nightowl'))).not.toContain('export');
+  });
+
+  it('fills swe-bench harness from NightOwl stubs in --regressions-dir', async () => {
+    const ids = await seed(repo.path, [
+      { filePath: 'a.ts', aiContent: 'bad\n', finalContent: 'good\n', commitSha: 'abcdef0123456789' },
+    ]);
+    const instanceId = `abcdef012345-${ids[0]}`;
+    const dir = join(repo.path, 'test/regressions');
+    await mkdir(dir, { recursive: true });
+    const stub = `// nightowl-suggested-regression\nimport { describe, it } from 'vitest';\n\ndescribe('t', () => {\n  it.todo('assert');\n});\n`;
+    await writeFile(join(dir, `${instanceId}.test.ts`), stub);
+    const result = await run(['--format', 'swe-bench', '--regressions-dir', 'test/regressions']);
+    expect(result.code).toBe(0);
+    const row = (await lines(join(repo.path, '.nightowl/export/swe-bench.jsonl')))[0]!;
+    expect(row.instance_id).toBe(instanceId);
+    expect(row.FAIL_TO_PASS).toEqual([`test/regressions/${instanceId}.test.ts`]);
+    expect(row.test_patch).toContain(`+++ b/test/regressions/${instanceId}.test.ts`);
     expect(row.PASS_TO_PASS).toEqual([]);
   });
 
