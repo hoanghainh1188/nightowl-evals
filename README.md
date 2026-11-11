@@ -542,7 +542,7 @@ jobs:
         with:
           fail-on-rate: '20'
           since: '2026-01-01'
-          nightowl-version: '0.3.0' # pin a published semver in production
+          nightowl-version: '0.4.0' # pin a published semver in production
           comment-on-pr: 'true'
           output-path: nightowl-report.json
           # optional: ingest JUnit before report (file-first; no invented ai_content)
