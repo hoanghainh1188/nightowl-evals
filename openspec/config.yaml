@@ -1,42 +1,38 @@
 schema: spec-driven
 
 context: |
-  Full project context: openspec/project.md (source of truth: docs/nightowl-evals.md).
+  Source of truth: docs/nightowl-evals.md. When docs conflict with this file, fix this file.
+  Package `@hoanghainh/nightowl-evals`, CLI `nightowl`. Stack: TypeScript, Node 22+, node:sqlite at `.nightowl/nightowl.db`, tsup, vitest, OpenSpec `spec-driven`, Apache-2.0, `npm publish --access public`.
   Write artifacts in Vietnamese; keep SHALL/MUST keywords and identifiers in English.
   Hard rules for every change:
   - No code or data leaves the machine; no telemetry or hidden network calls.
   - LLM features are off by default; the user opts in explicitly.
-  - Hooks never block or slow Claude Code or git commit: always exit 0, log errors only.
+  - Hooks never block or slow the agent or git commit: always exit 0, log errors only.
   - `nightowl init` adds `.nightowl/` to the target project's .gitignore.
-  - MVP scope is Claude Code + Git only. Stack: TypeScript, Node 22+, node:sqlite, tsup, vitest.
+  - Grade AI, not people: never store or show developer names in reports.
+  - Open-core only in this repo (CLI, hooks, SQLite, report/export). Team dashboard, advanced analytics, on-prem, and SaaS stay in private commercial repos.
+  - Designs and tasks must cover macOS, Linux, and Windows unless a change explicitly scopes otherwise.
+  Roadmap status lives in docs/v0.3-roadmap-ideas.md and docs/v0.4-roadmap-ideas.md (ideation 1–31 Done; release v0.4.0).
 
-# Project context (optional)
-# Add only constraints that should guide OpenSpec artifacts and workflows.
-# Include constraints an agent cannot infer by reading the code.
-# Keep general project documentation and discoverable codebase facts out.
-# Example:
-#   context: |
-#     Designs and tasks must cover Windows, macOS, and Linux
-#     Write all artifacts in Spanish
+rules:
+  proposal:
+    - "State what is out of scope, especially anything that would leave the machine or add commercial/SaaS surfaces to this repo."
+    - "Call out any hard-rule exception and require explicit approval."
+  design:
+    - "Prefer Node built-ins (node:sqlite, node:util parseArgs, node:fs) over new runtime dependencies."
+    - "Keep hooks fail-open and non-blocking across supported agents and git managers."
+  tasks:
+    - "Prefer TDD: tests before implementation; target coverage >= 80% for changed code."
+    - "Break work into small, verifiable steps (prefer chunks under ~2 hours)."
+  specs:
+    - "Keep requirement keywords as SHALL/MUST and identifiers in English; prose may be Vietnamese."
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always state what is out of scope
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
-
-# Per-operation guidance (optional)
-# Add advisory guidance for how apply and archive work should be conducted.
-# This is separate from artifact rules above.
-# Example:
-#   operations:
-#     apply:
-#       guidance:
-#         - Keep test summaries concise
-#     archive:
-#       guidance:
-#         - Summarize the archive outcome before finishing
+operations:
+  apply:
+    guidance:
+      - "Follow conventional commits (feat:, fix:, refactor:, docs:, test:, chore:, perf:, ci:)."
+      - "Keep files small and feature-oriented; prefer immutable data and functions under ~50 lines."
+  archive:
+    guidance:
+      - "Update the matching roadmap doc status when archiving a numbered ideation item."
+      - "Summarize the archive outcome before finishing."
