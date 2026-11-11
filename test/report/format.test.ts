@@ -82,8 +82,10 @@ describe('formatJson', () => {
       'by_module',
       'by_week',
       'signals',
+      'noise',
     ]);
     expect(json.signals).toEqual({ ci_fail: 0, pr_review: 0 });
+    expect(json.noise).toEqual({ review_rate: null, auto_noise: 0, sample: { confirmed: 0, dismissed: 0 } });
     expect(json.by_module).toHaveLength(12);
     expect(json.by_week).toHaveLength(9);
     expect(json.by_week[0]).toEqual({ week: '2026-W03', failures: 2, checked: 0, changed: 0, rate: null });
@@ -108,6 +110,32 @@ describe('formatJson', () => {
     });
     expect(formatText(report)).toContain('Reviewed: 1 confirmed, 0 dismissed, 2 still flagged (nightowl review)');
     expect(JSON.parse(formatJson(report)).by_status).toEqual({ confirmed: 1, dismissed: 0, flagged: 2 });
+  });
+
+  it('shows noise estimate with n/a review rate and auto-noise count', () => {
+    const empty = buildReport({ ...base, failures: [], checks: [], autoNoise: 0 });
+    expect(formatText(empty)).toContain('Noise estimate: review-dismissed n/a (0/0 reviewed), auto-noise 0');
+    expect(JSON.parse(formatJson(empty)).noise).toEqual({
+      review_rate: null,
+      auto_noise: 0,
+      sample: { confirmed: 0, dismissed: 0 },
+    });
+
+    const withNoise = buildReport({
+      ...base,
+      failures: [
+        { ...row('a.ts', null, '2026-11-02'), status: 'confirmed' },
+        { ...row('b.ts', null, '2026-11-02'), status: 'dismissed' },
+      ],
+      checks: [],
+      autoNoise: 2,
+    });
+    expect(formatText(withNoise)).toContain('Noise estimate: review-dismissed 50% (1/2 reviewed), auto-noise 2');
+    expect(JSON.parse(formatJson(withNoise)).noise).toEqual({
+      review_rate: 0.5,
+      auto_noise: 2,
+      sample: { confirmed: 1, dismissed: 1 },
+    });
   });
 });
 

@@ -1,4 +1,5 @@
 import { CATEGORIES } from '../classify/prompt.js';
+import type { ReportNoise } from '../noise/types.js';
 import type { CheckCountRow, FailureCountRow } from '../storage/report-queries.js';
 import { moduleOf } from './module.js';
 import { isoWeek } from './week.js';
@@ -45,6 +46,7 @@ export interface Report {
   readonly byWeek: ReadonlyArray<{ readonly week: string } & Rate & { readonly recorded: number }>;
   /** CI/PR event counts in the same --since window; not mixed into `total`. */
   readonly signals: ReportSignals;
+  readonly noise: ReportNoise;
 }
 
 export interface ReportInput {
@@ -55,6 +57,7 @@ export interface ReportInput {
   readonly generatedAt: string;
   readonly agents?: readonly string[] | null;
   readonly signals?: ReportSignals;
+  readonly autoNoise?: number;
 }
 
 function add(map: Map<string, number>, key: string, n: number): void {
@@ -102,6 +105,8 @@ export function buildReport(input: ReportInput): Report {
 
   const weeks = [...new Set([...recordedByWeek.keys(), ...checkedByWeek.keys()])].sort();
   const headAgents = [...new Set([...byAgent.keys(), ...checkedByAgent.keys()])].sort();
+  const confirmed = byStatus.get('confirmed') ?? 0;
+  const reviewed = confirmed + dismissed;
   return Object.freeze({
     generatedAt: input.generatedAt,
     since: input.since,
@@ -136,6 +141,11 @@ export function buildReport(input: ReportInput): Report {
     signals: Object.freeze({
       ciFail: input.signals?.ciFail ?? 0,
       prReview: input.signals?.prReview ?? 0,
+    }),
+    noise: Object.freeze({
+      reviewRate: reviewed === 0 ? null : dismissed / reviewed,
+      autoNoise: input.autoNoise ?? 0,
+      sample: Object.freeze({ confirmed, dismissed }),
     }),
   });
 }

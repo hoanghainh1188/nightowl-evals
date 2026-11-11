@@ -88,8 +88,33 @@ describe('attachCommit', () => {
         commit_sha: sha,
         status: 'flagged',
         category: null,
+        noise_score: 0,
+        noise_reasons: '',
       }),
     ]);
+  });
+
+  it('auto-dismisses comment-only changes as noise without counting toward report total', async () => {
+    const edit = await aiWrote('src/a.ts', 'export const a = 1;\n');
+    const sha = await commit({ 'src/a.ts': 'export const a = 1; // tweak\n' });
+    expect(failures()).toEqual([
+      expect.objectContaining({
+        file_path: 'src/a.ts',
+        ai_event_id: edit,
+        commit_sha: sha,
+        status: 'dismissed',
+        noise_score: 0.9,
+        noise_reasons: 'comment-only,auto-noise',
+      }),
+    ]);
+    const store = await openStore({ cwd: repo.path });
+    try {
+      expect(store.countFailures().byStatus).toEqual({ dismissed: 1 });
+      expect(store.countFailuresForReport(null).reduce((n, row) => n + (row.status === 'dismissed' ? 0 : row.count), 0)).toBe(0);
+      expect(store.countAutoNoiseFailures(null)).toBe(1);
+    } finally {
+      store.close();
+    }
   });
 
   it('records nothing when the AI code is committed as is', async () => {

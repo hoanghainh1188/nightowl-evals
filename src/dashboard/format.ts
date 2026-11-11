@@ -57,6 +57,11 @@ export function formatDashboardHtml(report: Report): string {
     parts.push(
       `<li><strong>Signals</strong>: ci-fail ${report.signals.ciFail}, pr-review ${report.signals.prReview}</li>`,
     );
+    const noiseRate =
+      report.noise.reviewRate === null ? 'n/a' : `${Math.round(report.noise.reviewRate * 100)}%`;
+    parts.push(
+      `<li><strong>Noise estimate</strong>: review-dismissed ${escapeHtml(noiseRate)} (${report.noise.sample.dismissed}/${report.noise.sample.confirmed + report.noise.sample.dismissed} reviewed), auto-noise ${report.noise.autoNoise}</li>`,
+    );
     if (report.since !== null) {
       parts.push(`<li><strong>Since</strong>: ${escapeHtml(report.since.slice(0, 10))}</li>`);
     }
@@ -93,6 +98,15 @@ export function formatDashboardHtml(report: Report): string {
       'By week (recent)',
       weeks.map((w) => [w.week, `${w.recorded} recorded · ${percent(w.rate)}`] as const),
     );
+
+    const tableNoiseRate =
+      report.noise.reviewRate === null ? 'n/a (not enough review data)' : `${Math.round(report.noise.reviewRate * 100)}%`;
+    addTable(parts, 'Noise estimate', [
+      ['Review dismissed rate', tableNoiseRate],
+      ['Auto-noise failures', String(report.noise.autoNoise)],
+      ['Confirmed sample', String(report.noise.sample.confirmed)],
+      ['Dismissed sample', String(report.noise.sample.dismissed)],
+    ]);
   }
 
   parts.push(`<p><small>Generated at: ${escapeHtml(report.generatedAt)}</small></p>`);

@@ -377,7 +377,17 @@ nightowl review reset <id...>
 - `-i` / `--interactive`: Keyboard triage in the terminal (`↑`/`↓`, Space/Enter for diff, `c`/`d`/`r`, `q` to quit). Requires a TTY; cannot combine with `--json`.
 - `--json`: Prints the list or detailed failure object (including unified diff) as JSON.
 - `confirm`: Marks failure as an authentic AI mistake.
-- `dismiss`: Marks failure as false positive/noise (excluded from reports and evaluation datasets).
+- `dismiss`: Marks failure as false positive/noise (excluded from reports and evaluation datasets). Review confirm/dismiss also updates local `noise_stats` so later scoring can learn patterns on this machine only (no telemetry).
+
+#### Noise filtering
+
+At post-commit attach, NightOwl scores AI vs committed content for likely noise:
+
+- **comment-only** (safe): auto-dismissed as `dismissed` with reasons `comment-only,auto-noise`. Still stored for audit; excluded from `report.total` like other dismissals.
+- **format-only**: scored and kept `flagged` for human review (not auto-dismissed by default).
+- **learned-dismiss**: optional score boost when local `noise_stats` show repeated dismissals for the same reason key.
+
+`nightowl report` (text + `--json`) and `nightowl dashboard` surface a **Noise estimate**: review-dismissed rate (`null` / `n/a` until there is at least one confirmed or dismissed sample) and `auto_noise` count. Whitespace-only edits are still skipped before a failure row is created (unchanged).
 
 #### `nightowl prune`
 

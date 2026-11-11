@@ -105,18 +105,47 @@ export function setFailureStatus(db: DatabaseSync, ids: readonly number[], statu
   db.exec('BEGIN IMMEDIATE');
   try {
     const found = db
-      .prepare('SELECT id, status FROM failures WHERE id IN (SELECT value FROM json_each(?))')
-      .all(JSON.stringify(unique)) as unknown as Array<{ id: number; status: string }>;
-    const known = new Map(found.map((row) => [row.id, row.status]));
+      .prepare('SELECT id, status, noise_reasons FROM failures WHERE id IN (SELECT value FROM json_each(?))')
+      .all(JSON.stringify(unique)) as unknown as Array<{ id: number; status: string; noise_reasons: string }>;
+    const known = new Map(found.map((row) => [row.id, row]));
     const missing = unique.filter((id) => !known.has(id));
     if (missing.length > 0) {
       db.exec('ROLLBACK');
       return { ok: false, missing };
     }
-    const changed = unique.filter((id) => known.get(id) !== status);
+    const changed = unique.filter((id) => known.get(id)?.status !== status);
     db.prepare('UPDATE failures SET status = ? WHERE id IN (SELECT value FROM json_each(?))').run(status, JSON.stringify(changed));
+    // Local learning counters (same transaction): skip auto-noise / learned-dismiss keys inside bump.
+    for (const id of changed) {
+      const row = known.get(id);
+      if (row === undefined) continue;
+      const from = row.status as FailureStatus;
+      if (from === status) continue;
+      const reasons = row.noise_reasons
+        .split(',')
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0 && part !== 'auto-noise' && part !== 'learned-dismiss');
+      const now = new Date().toISOString();
+      for (const reason of reasons) {
+        let dismissDelta = 0;
+        let confirmDelta = 0;
+        if (from === 'dismissed') dismissDelta -= 1;
+        if (from === 'confirmed') confirmDelta -= 1;
+        if (status === 'dismissed') dismissDelta += 1;
+        if (status === 'confirmed') confirmDelta += 1;
+        if (dismissDelta === 0 && confirmDelta === 0) continue;
+        db.prepare(
+          `INSERT INTO noise_stats (reason_key, dismiss_count, confirm_count, updated_at)
+           VALUES (?, MAX(0, ?), MAX(0, ?), ?)
+           ON CONFLICT(reason_key) DO UPDATE SET
+             dismiss_count = MAX(0, dismiss_count + ?),
+             confirm_count = MAX(0, confirm_count + ?),
+             updated_at = excluded.updated_at`,
+        ).run(reason, dismissDelta, confirmDelta, now, dismissDelta, confirmDelta);
+      }
+    }
     db.exec('COMMIT');
-    return { ok: true, changed, unchanged: unique.filter((id) => known.get(id) === status) };
+    return { ok: true, changed, unchanged: unique.filter((id) => known.get(id)?.status === status) };
   } catch (error) {
     rollbackQuietly(db);
     throw error;

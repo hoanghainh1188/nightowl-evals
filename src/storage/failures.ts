@@ -22,6 +22,10 @@ export interface NewFailure {
   // The prompt that made the AI redo its edit, for 'ai-self-fix'.
   readonly feedbackEventId?: number | null;
   readonly agent?: AnyAgentId | null;
+  /** Defaults to flagged. Safe auto-noise may set dismissed. */
+  readonly status?: 'flagged' | 'dismissed';
+  readonly noiseScore?: number | null;
+  readonly noiseReasons?: string;
 }
 
 export type Attachment =
@@ -115,8 +119,8 @@ export function attachChecks(db: DatabaseSync, commitSha: string, attachments: r
   try {
     const attached = db.prepare('SELECT 1 FROM checks_attached WHERE check_id = ?');
     const insertFailure = db.prepare(
-      `INSERT INTO failures (created_at, file_path, ai_event_id, prompt_event_id, ai_content, final_content, commit_sha, source, feedback_event_id, agent)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+      `INSERT INTO failures (created_at, file_path, ai_event_id, prompt_event_id, ai_content, final_content, commit_sha, source, feedback_event_id, agent, status, noise_score, noise_reasons)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
     );
     const agentOf = db.prepare('SELECT agent FROM events WHERE id = ?');
     const attach = db.prepare('INSERT INTO checks_attached (check_id, outcome, commit_sha, failure_id) VALUES (?, ?, ?, ?)');
@@ -138,6 +142,9 @@ export function attachChecks(db: DatabaseSync, commitSha: string, attachments: r
             f.source ?? 'manual-fix',
             f.feedbackEventId ?? null,
             f.agent ?? fromEdit?.agent ?? null,
+            f.status ?? 'flagged',
+            f.noiseScore ?? null,
+            f.noiseReasons ?? '',
           ) as { id: number };
           failureId ??= row.id;
           created += 1;

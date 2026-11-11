@@ -130,6 +130,7 @@ export function createCustomerReportCommand(
             ciFail: signalCounts['ci-fail'] ?? 0,
             prReview: signalCounts['pr-review'] ?? 0,
           },
+          autoNoise: store.countAutoNoiseFailures(options.since),
         });
         const outputContent = formatCustomerReport(report, {
           lang: options.lang,

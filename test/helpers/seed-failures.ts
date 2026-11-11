@@ -16,6 +16,8 @@ export interface SeedFailure {
   readonly source?: 'manual-fix' | 'ai-self-fix';
   readonly feedback?: string | null;
   readonly agent?: string | null;
+  readonly noiseScore?: number | null;
+  readonly noiseReasons?: string;
 }
 
 export interface SeedCheck {
@@ -34,8 +36,8 @@ export async function seed(root: string, failures: readonly SeedFailure[], check
     );
     const failure = db.prepare(
       `INSERT INTO failures (created_at, file_path, ai_event_id, prompt_event_id, ai_content, final_content, commit_sha,
-         category, category_reason, category_confidence, status, source, feedback_event_id, agent)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+         category, category_reason, category_confidence, status, source, feedback_event_id, agent, noise_score, noise_reasons)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
     );
     const ids: number[] = [];
     for (const f of failures) {
@@ -66,6 +68,8 @@ export async function seed(root: string, failures: readonly SeedFailure[], check
         f.source ?? 'manual-fix',
         feedback,
         agent,
+        f.noiseScore ?? null,
+        f.noiseReasons ?? '',
       ) as { id: number };
       ids.push(row.id);
     }

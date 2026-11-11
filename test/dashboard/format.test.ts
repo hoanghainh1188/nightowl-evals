@@ -26,6 +26,7 @@ function sampleReport(overrides: Partial<Report> = {}): Report {
     ],
     byWeek: [{ week: '2026-W45', failures: 1, checked: 4, rate: 0.25, recorded: 3 }],
     signals: { ciFail: 2, prReview: 1 },
+    noise: { reviewRate: 0.5, autoNoise: 1, sample: { confirmed: 1, dismissed: 1 } },
     ...overrides,
   };
 }
@@ -42,8 +43,12 @@ describe('formatDashboardHtml', () => {
     expect(html).toContain('claude-code');
     expect(html).toContain('2026-W45');
     expect(html).toContain('25%');
+    expect(html).toContain('Noise estimate');
+    expect(html).toContain('Auto-noise failures');
+    expect(html).toContain('>1<');
     expect(html).not.toMatch(/https?:\/\//);
   });
+
 
   it('renders empty state', () => {
     const html = formatDashboardHtml(
