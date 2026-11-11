@@ -13,6 +13,7 @@ import { postcommitCommand } from './postcommit.js';
 import { precommitCommand } from './precommit.js';
 import { pruneCommand } from './prune.js';
 import { customerReportCommand } from './customer-report.js';
+import { dashboardCommand } from './dashboard.js';
 import { reportCommand } from './report.js';
 import { reviewCommand } from './review.js';
 import { ruleImpactCommand } from './rule-impact.js';
@@ -26,6 +27,7 @@ export const commands: readonly Command[] = Object.freeze([
   logCommand,
   reportCommand,
   customerReportCommand,
+  dashboardCommand,
   exportCommand,
   ingestCiCommand,
   ingestPrCommand,

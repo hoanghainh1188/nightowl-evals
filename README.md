@@ -27,6 +27,7 @@
   - [Analytics, Review & Data Ops](#2-analytics-review--data-ops)
     - [`nightowl report`](#nightowl-report)
     - [`nightowl customer-report`](#nightowl-customer-report)
+    - [`nightowl dashboard`](#nightowl-dashboard)
     - [`nightowl ingest-ci`](#nightowl-ingest-ci)
     - [`nightowl ingest-pr`](#nightowl-ingest-pr)
     - [`nightowl review`](#nightowl-review)
@@ -299,6 +300,24 @@ nightowl customer-report --since 2026-11-01 --agent claude-code -o report.md
 | `--depth <1-5>` | Module folder depth (default: `2`) |
 | `--agent <id>` | Only include this agent (repeatable) |
 | `-o, --output <file>` | Write report to a file (creates parent directories; does not dump the full body to stdout) |
+
+#### `nightowl dashboard`
+
+Writes a **local-only HTML dashboard** from the same metrics as `report` (category, module, agent, week, signals). Self-contained file — **no network, no CDN, no SaaS team dashboard**. Default path: `.nightowl/dashboard.html`. Not a CI gate.
+
+```bash
+nightowl dashboard
+nightowl dashboard --open
+nightowl dashboard -o dist/ai-dashboard.html --agent claude-code --since 2026-11-01
+```
+
+| Option | Description |
+| :--- | :--- |
+| `--since <YYYY-MM-DD>` | Filter records created from this date forward |
+| `--depth <1-5>` | Module folder depth (default: `2`) |
+| `--agent <id>` | Only include this agent (repeatable) |
+| `-o, --output <file>` | Write HTML to this path (default: `.nightowl/dashboard.html`) |
+| `--open` | Open the file with the OS default browser (`file://`; does not start an HTTP server) |
 
 #### `nightowl ingest-ci`
 
