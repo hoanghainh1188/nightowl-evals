@@ -43,7 +43,7 @@ Với `--format swe-bench`, mỗi bản ghi đủ điều kiện xuất SHALL th
 - **THEN** vẫn xuất được dòng với `base_commit` null (hoặc tương đương đã document) và `problem_statement` / `patch` từ dữ liệu local
 
 ### Requirement: Patch và trường harness SWE-bench
-`patch` SHALL là unified diff từ nội dung trước sửa (`file_before` nếu có, không thì `rejected`) tới `expected`. `base_commit` SHALL lấy từ git khi có, hoặc `null` nếu không xác định. Khi không có nguồn harness local đã document, `FAIL_TO_PASS` / `PASS_TO_PASS` SHALL là list rỗng và `test_patch` SHALL là chuỗi rỗng. Khi có stub NightOwl khớp (xem requirement nguồn harness), `FAIL_TO_PASS` và `test_patch` SHALL được điền theo convention đã document; `PASS_TO_PASS` vẫn SHALL là list rỗng. Lệnh SHALL NOT bịa test id khi thiếu stub.
+`patch` SHALL là unified diff từ `file_before` (hoặc `rejected`) tới `expected`. `base_commit` SHALL từ git khi có, hoặc `null`. Không có stub harness đã document thì `FAIL_TO_PASS`/`PASS_TO_PASS` rỗng và `test_patch` rỗng; có stub khớp thì điền theo convention, `PASS_TO_PASS` vẫn rỗng. SHALL NOT bịa test id khi thiếu stub.
 
 #### Scenario: Diff từ file_before sang expected
 - **WHEN** `file_before` là `a` và `expected` là `b` cho cùng `file_path`
