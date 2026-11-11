@@ -247,6 +247,7 @@ nightowl doctor [--strict] [--json]
 
 - `--strict`: Exits with code `1` if any warnings or missing hooks are detected.
 - `--json`: Outputs diagnostic status as a machine-readable JSON structure.
+- Warns (**Report readiness**) when the DB is healthy but has no non-dismissed failures yet — `report`/CI gate will have little signal; with `--strict` that warning also exits `1`.
 
 #### `nightowl uninstall`
 
@@ -500,10 +501,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # .nightowl/ is gitignored — restore the DB onto the runner before the gate
-      # (cache, encrypted artifact, or self-hosted volume). Example placeholder:
-      # - name: Restore NightOwl DB
-      #   run: mkdir -p .nightowl && cp "$NIGHTOWL_DB_BACKUP" .nightowl/nightowl.db
+      # .nightowl/ is gitignored — checkout will not include nightowl.db.
+      # Pick one restore path (examples; team must upload/cache the DB themselves):
+
+      # Option A — download an artifact produced by a prior job/workflow that uploaded `.nightowl/nightowl.db`
+      - uses: actions/download-artifact@v4
+        with:
+          name: nightowl-db
+          path: .nightowl
+
+      # Option B — restore from actions/cache (populate the cache in another trusted job first)
+      # - uses: actions/cache@v4
+      #   with:
+      #     path: .nightowl/nightowl.db
+      #     key: nightowl-db-${{ github.repository }}-${{ github.ref_name }}
+      #     restore-keys: |
+      #       nightowl-db-${{ github.repository }}-
 
       - uses: hoanghainh1188/nightowl-evals/action@main
         with:
@@ -525,7 +538,7 @@ jobs:
 
 **Inputs:** `fail-on-rate` (default `25`), `since`, `output-path`, `working-directory`, `nightowl-version` (default `latest`), `comment-on-pr` (default `true`), `github-token`, `junit-path` (optional; when set and the file exists, runs `nightowl ingest-ci` before `report`).
 
-**Notes:** The Action does not create or sync `.nightowl/`. Without `nightowl.db` on the runner the step fails with a clear error. Sticky comments use the GitHub API with your workflow token only — the `nightowl` binary itself still makes no network calls by default (`ingest-pr --github` is opt-in CLI only; the Action does not call GitHub for PR comment ingest). Comments run only for same-repo PRs (fork PRs skip commenting because `GITHUB_TOKEN` cannot write). If you set `working-directory`, point `upload-artifact` / `hashFiles` at `{working-directory}/{output-path}`.
+**Notes:** The Action does not create or sync `.nightowl/`. Without `nightowl.db` on the runner the step fails with a clear restore hint (download-artifact / cache / self-hosted). If the DB exists but has **0 failures**, the Action emits a warning and still runs `report` (gate pass when nothing was checked). Sticky comments use the GitHub API with your workflow token only — the `nightowl` binary itself still makes no network calls by default (`ingest-pr --github` is opt-in CLI only; the Action does not call GitHub for PR comment ingest). Comments run only for same-repo PRs (fork PRs skip commenting because `GITHUB_TOKEN` cannot write). If you set `working-directory`, point `upload-artifact` / `hashFiles` / restore steps at `{working-directory}/.nightowl/nightowl.db` and `{working-directory}/{output-path}`.
 
 ---
 

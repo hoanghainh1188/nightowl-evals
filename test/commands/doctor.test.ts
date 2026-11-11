@@ -84,7 +84,7 @@ describe('nightowl doctor', () => {
       openStore: async () => {
         return {
           pragma: (name: string) => (name === 'integrity_check' ? 'ok' : CURRENT_SCHEMA_VERSION),
-          countFailures: () => ({ total: 0, byCategory: {}, byModule: {} } as any),
+          countFailures: () => ({ total: 0, byStatus: {} }),
           listEvents: () => [],
           close: () => {},
         } as unknown as Store;
@@ -144,8 +144,35 @@ describe('nightowl doctor', () => {
     expect(out).toContain('NightOwl Database');
     expect(out).toContain('✓ Database integrity check passed (ok)');
     expect(out).toContain(`✓ Schema version is ${CURRENT_SCHEMA_VERSION} (up to date)`);
+    expect(out).toContain('! No failures recorded yet — report/CI gate will have little signal');
     expect(out).toContain('Result:');
     expect(out).toContain('0 failures');
+    expect(out).toContain('NightOwl hooks present in .cursor/hooks.json (verified)');
+    expect(out).toContain('NightOwl entry present in .windsurf/hooks.json (best-effort)');
+  });
+
+  it('does not warn report readiness when failures exist', async () => {
+    await writeFiles(repo.path, { [`${DATA_DIR}/${DB_FILE}`]: 'sqlite database' });
+    const deps = createTestDeps({
+      openStore: async () =>
+        ({
+          pragma: (name: string) => (name === 'integrity_check' ? 'ok' : CURRENT_SCHEMA_VERSION),
+          countFailures: () => ({ total: 2, byStatus: { flagged: 2 } }),
+          listEvents: () => [{}, {}],
+          close: () => {},
+        }) as unknown as Store,
+    });
+    const { code, out } = await runDoctor([], deps);
+    expect(code).toBe(0);
+    expect(out).toContain('2 failures recorded');
+    expect(out).not.toContain('No failures recorded yet — report/CI gate will have little signal');
+  });
+
+  it('fails --strict when report readiness warns on empty failures', async () => {
+    await writeFiles(repo.path, { [`${DATA_DIR}/${DB_FILE}`]: 'sqlite database' });
+    const { code, out } = await runDoctor(['--strict']);
+    expect(code).toBe(1);
+    expect(out).toContain('No failures recorded yet — report/CI gate will have little signal');
   });
 
   it('warns when uninitialized but exits 0 without --strict', async () => {
@@ -161,6 +188,7 @@ describe('nightowl doctor', () => {
     expect(out).toContain('! claude command is not on PATH');
     expect(out).toContain('! No NightOwl hooks found in Claude Code settings');
     expect(out).toContain('! No .cursor/hooks.json with NightOwl hooks');
+    expect(out).toMatch(/Missing \.windsurf\/hooks\.json \(maturity: best-effort\)/);
     expect(out).toContain("! pre-commit does not call 'nightowl precommit'");
     expect(out).toContain('! Database file .nightowl/nightowl.db does not exist yet');
     expect(out).toContain('Suggestions & Remedies:');
@@ -305,7 +333,7 @@ describe('nightowl doctor', () => {
       openStore: async () =>
         ({
           pragma: (name: string) => (name === 'integrity_check' ? 'row 1: page 3 is corrupted' : CURRENT_SCHEMA_VERSION),
-          countFailures: () => ({ total: 0 }),
+          countFailures: () => ({ total: 0, byStatus: {} }),
           listEvents: () => [],
           close: () => {},
         }) as unknown as Store,
@@ -325,7 +353,7 @@ describe('nightowl doctor', () => {
       openStore: async () =>
         ({
           pragma: (name: string) => (name === 'integrity_check' ? 'ok' : 1),
-          countFailures: () => ({ total: 0 }),
+          countFailures: () => ({ total: 0, byStatus: {} }),
           listEvents: () => [],
           close: () => {},
         }) as unknown as Store,
@@ -345,7 +373,7 @@ describe('nightowl doctor', () => {
       openStore: async () =>
         ({
           pragma: (name: string) => (name === 'integrity_check' ? 'ok' : 999),
-          countFailures: () => ({ total: 0 }),
+          countFailures: () => ({ total: 0, byStatus: {} }),
           listEvents: () => [],
           close: () => {},
         }) as unknown as Store,
