@@ -26,6 +26,7 @@
     - [`nightowl uninstall`](#nightowl-uninstall)
   - [Analytics, Review & Data Ops](#2-analytics-review--data-ops)
     - [`nightowl report`](#nightowl-report)
+    - [`nightowl customer-report`](#nightowl-customer-report)
     - [`nightowl ingest-ci`](#nightowl-ingest-ci)
     - [`nightowl ingest-pr`](#nightowl-ingest-pr)
     - [`nightowl review`](#nightowl-review)
@@ -279,6 +280,25 @@ nightowl report [options]
 | `--json` | Output full breakdown as structured JSON |
 | `-o, --output <file>` | Write report directly to a file (creates parent directories) |
 | `--fail-on-rate <0-100>` | **CI Quality Gate**: Exit with code `1` if failure rate exceeds threshold |
+
+#### `nightowl customer-report`
+
+Exports a **customer-facing** AI quality report (bilingual Vietnamese–Japanese by default) as Markdown or simple HTML. Uses the same local metrics as `report`, but with offline VI–JA templates and **no developer names/emails**. Not a CI gate — keep using `nightowl report --fail-on-rate` for that.
+
+```bash
+nightowl customer-report
+nightowl customer-report --lang ja --format html -o dist/ai-quality.html
+nightowl customer-report --since 2026-11-01 --agent claude-code -o report.md
+```
+
+| Option | Description |
+| :--- | :--- |
+| `--lang <vi\|ja\|both>` | Report language (default: `both`) |
+| `--format <md\|html>` | Output format (default: `md`) |
+| `--since <YYYY-MM-DD>` | Filter records created from this date forward |
+| `--depth <1-5>` | Module folder depth (default: `2`) |
+| `--agent <id>` | Only include this agent (repeatable) |
+| `-o, --output <file>` | Write report to a file (creates parent directories; does not dump the full body to stdout) |
 
 #### `nightowl ingest-ci`
 
