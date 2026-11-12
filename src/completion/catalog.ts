@@ -15,6 +15,7 @@ export const COMMAND_FLAGS: Readonly<Record<string, readonly string[]>> = Object
   report: ['--since', '--depth', '--agent', '--json', '--output', '-o', '--fail-on-rate'],
   'customer-report': ['--lang', '--format', '--since', '--depth', '--agent', '--output', '-o'],
   dashboard: ['--since', '--depth', '--agent', '--output', '-o', '--open'],
+  digest: ['--since', '--depth', '--agent', '--format', '--output', '-o'],
   export: ['--out', '--format', '--regressions-dir', '--force', '--since', '--category'],
   'ingest-ci': ['--file', '--format', '--commit'],
   'ingest-pr': ['--file', '--github', '--pr'],

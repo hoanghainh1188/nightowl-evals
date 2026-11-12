@@ -319,6 +319,24 @@ nightowl dashboard -o dist/ai-dashboard.html --agent claude-code --since 2026-11
 | `-o, --output <file>` | Write HTML to this path (default: `.nightowl/dashboard.html`) |
 | `--open` | Open the file with the OS default browser (`file://`; does not start an HTTP server) |
 
+#### `nightowl digest`
+
+Writes a **local standup/weekly digest** from the same store as `report`: new failures, top categories/agents, open (`flagged`) reviews, Signals, and a short rule-impact line when a rule was marked. Markdown goes to stdout by default; HTML writes a self-contained file. **Does not** email, Slack, or call the network.
+
+```bash
+nightowl digest
+nightowl digest --since 7d
+nightowl digest --since 2026-11-01 --format html -o .nightowl/digest.html
+```
+
+| Option | Description |
+| :--- | :--- |
+| `--since <YYYY-MM-DD\|Nd>` | Window start (default: last **7** days UTC; e.g. `7d`) |
+| `--depth <1-5>` | Module folder depth (default: `2`) |
+| `--agent <id>` | Only include this agent (repeatable) |
+| `--format <md\|html>` | Output format (default: `md`) |
+| `-o, --output <file>` | Write to a file (`html` default: `.nightowl/digest.html`) |
+
 #### `nightowl ingest-ci`
 
 Reads a **local** JUnit XML or JSON summary and stores `ci-fail` events. Does **not** invent `failures.ai_content` and does not call the network. Requires an existing DB (`nightowl init`).
