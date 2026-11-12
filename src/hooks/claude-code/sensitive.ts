@@ -30,3 +30,16 @@ export function containsInlineSecret(content: string | null | undefined): boolea
   if (!content) return false;
   return INLINE_SECRET_PATTERNS.some((pattern) => pattern.test(content));
 }
+
+const INLINE_SECRET_GLOBAL: readonly RegExp[] = INLINE_SECRET_PATTERNS.map(
+  (pattern) => new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`),
+);
+
+/** Replace inline secret matches with a stable token for hashing/display (never leave plaintext). */
+export function redactInlineSecrets(content: string): string {
+  let out = content;
+  for (const pattern of INLINE_SECRET_GLOBAL) {
+    out = out.replace(pattern, '<redacted>');
+  }
+  return out;
+}

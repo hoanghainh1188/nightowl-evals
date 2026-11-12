@@ -360,7 +360,7 @@ Interactive triage tool to review recorded failures and distinguish genuine AI b
 
 ```bash
 # List unreviewed failures (flagged)
-nightowl review [--status flagged|confirmed|dismissed|all] [--source manual-fix|ai-self-fix] [--agent <id>] [--limit N] [--json]
+nightowl review [--status flagged|confirmed|dismissed|all] [--source manual-fix|ai-self-fix] [--agent <id>] [--cluster <key>] [--limit N] [--json]
 
 # Interactive TUI (TTY only)
 nightowl review -i [--status ...] [--source ...] [--agent <id>] [--limit N]
@@ -378,6 +378,10 @@ nightowl review reset <id...>
 - `--json`: Prints the list or detailed failure object (including unified diff) as JSON.
 - `confirm`: Marks failure as an authentic AI mistake.
 - `dismiss`: Marks failure as false positive/noise (excluded from reports and evaluation datasets). Review confirm/dismiss also updates local `noise_stats` so later scoring can learn patterns on this machine only (no telemetry).
+
+#### Failure clustering
+
+Failures are grouped on-read by **category + module + agent + fingerprint** (SHA-256 of redacted, whitespace-stripped AI→final content). `nightowl report` / `dashboard` show top clusters (min count 2). `nightowl review --json` includes `clusterKey`; `--cluster <key>` filters the list. `suggest-rules` uses the same fingerprint grouping. Fingerprints are opaque hex — secrets matching NightOwl’s inline patterns are redacted before hashing.
 
 #### Noise filtering
 

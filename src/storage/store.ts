@@ -37,7 +37,14 @@ import {
 } from './failures.js';
 import { CURRENT_SCHEMA_VERSION, migrate, SchemaTooNewError } from './migrations.js';
 import { type PruneOptions, type PruneResult, pruneStorage, vacuumDatabase } from './prune.js';
-import { type CheckCountRow, countChecksForReport, countFailuresForReport, type FailureCountRow } from './report-queries.js';
+import {
+  type CheckCountRow,
+  countChecksForReport,
+  countFailuresForReport,
+  type FailureCountRow,
+  type FailureForClusterRow,
+  listFailuresForClustering,
+} from './report-queries.js';
 import {
   type FailureForReview,
   type FailureStatus,
@@ -103,6 +110,7 @@ export interface Store {
   readonly listFailuresToExport: (filter: ExportFilter) => readonly FailureToExport[];
   readonly countFailuresForReport: (since: string | null, agents?: readonly string[] | null) => readonly FailureCountRow[];
   readonly countChecksForReport: (since: string | null, agents?: readonly string[] | null) => readonly CheckCountRow[];
+  readonly listFailuresForClustering: (since: string | null, agents?: readonly string[] | null) => readonly FailureForClusterRow[];
   readonly countAutoNoiseFailures: (since: string | null) => number;
   readonly listNoiseStats: () => readonly NoiseStatRow[];
   readonly listFailuresForReview: (filter: ReviewFilter) => readonly FailureForReview[];
@@ -202,6 +210,8 @@ function storeApi(db: import('node:sqlite').DatabaseSync, root: string): Store {
       countFailuresForReport(db, { since, agents }),
     countChecksForReport: (since: string | null, agents: readonly string[] | null = null) =>
       countChecksForReport(db, { since, agents }),
+    listFailuresForClustering: (since: string | null, agents: readonly string[] | null = null) =>
+      listFailuresForClustering(db, { since, agents }),
     countAutoNoiseFailures: (since: string | null) => countAutoNoiseFailures(db, since),
     listNoiseStats: () => listNoiseStats(db),
     listFailuresForReview: (filter: ReviewFilter) => listFailuresForReview(db, filter),

@@ -1,4 +1,5 @@
 import { CATEGORIES } from '../classify/prompt.js';
+import type { FailureCluster } from '../cluster/types.js';
 import type { ReportNoise } from '../noise/types.js';
 import type { CheckCountRow, FailureCountRow } from '../storage/report-queries.js';
 import { moduleOf } from './module.js';
@@ -47,6 +48,7 @@ export interface Report {
   /** CI/PR event counts in the same --since window; not mixed into `total`. */
   readonly signals: ReportSignals;
   readonly noise: ReportNoise;
+  readonly clusters: readonly FailureCluster[];
 }
 
 export interface ReportInput {
@@ -58,6 +60,7 @@ export interface ReportInput {
   readonly agents?: readonly string[] | null;
   readonly signals?: ReportSignals;
   readonly autoNoise?: number;
+  readonly clusters?: readonly FailureCluster[];
 }
 
 function add(map: Map<string, number>, key: string, n: number): void {
@@ -147,5 +150,6 @@ export function buildReport(input: ReportInput): Report {
       autoNoise: input.autoNoise ?? 0,
       sample: Object.freeze({ confirmed, dismissed }),
     }),
+    clusters: Object.freeze([...(input.clusters ?? [])]),
   });
 }

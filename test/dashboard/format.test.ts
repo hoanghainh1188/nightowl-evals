@@ -27,6 +27,18 @@ function sampleReport(overrides: Partial<Report> = {}): Report {
     byWeek: [{ week: '2026-W45', failures: 1, checked: 4, rate: 0.25, recorded: 3 }],
     signals: { ciFail: 2, prReview: 1 },
     noise: { reviewRate: 0.5, autoNoise: 1, sample: { confirmed: 1, dismissed: 1 } },
+    clusters: [
+      {
+        key: 'logic|src/hooks|claude-code|abcd1234abcd1234',
+        category: 'logic',
+        module: 'src/hooks',
+        agent: 'claude-code',
+        fingerprint: 'abcd1234abcd1234',
+        count: 2,
+        sampleIds: [1, 2],
+        samplePaths: ['src/hooks/a.ts'],
+      },
+    ],
     ...overrides,
   };
 }
@@ -46,6 +58,7 @@ describe('formatDashboardHtml', () => {
     expect(html).toContain('Noise estimate');
     expect(html).toContain('Auto-noise failures');
     expect(html).toContain('>1<');
+    expect(html).toContain('Top clusters');
     expect(html).not.toMatch(/https?:\/\//);
   });
 

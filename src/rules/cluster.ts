@@ -1,11 +1,10 @@
+import { fingerprintFailure } from '../cluster/fingerprint.js';
+import { clusterKey } from '../cluster/group.js';
 import { moduleOf } from '../report/module.js';
 import type { FailureForRules, RuleCluster } from './types.js';
 import { DEFAULT_DEPTH } from './types.js';
 
-function clusterKey(category: string, module: string, agent: string | null): string {
-  return `${category}\0${module}\0${agent ?? ''}`;
-}
-
+/** Group rule failures using shared fingerprint clustering. */
 export function clusterFailures(
   failures: readonly FailureForRules[],
   options: { readonly minCount?: number; readonly depth?: number; readonly limit?: number } = {},
@@ -18,24 +17,27 @@ export function clusterFailures(
   for (const failure of failures) {
     const category = failure.category ?? 'unclassified';
     const module = moduleOf(failure.filePath, depth);
-    const key = clusterKey(category, module, failure.agent);
+    const fingerprint = fingerprintFailure(failure.aiContent, failure.finalContent, failure.filePath);
+    const key = clusterKey(category, module, failure.agent, fingerprint);
     const list = groups.get(key) ?? [];
     list.push(failure);
     groups.set(key, list);
   }
 
   const clusters: RuleCluster[] = [];
-  for (const [, items] of groups) {
+  for (const [key, items] of groups) {
     if (items.length < minCount) continue;
     const first = items[0]!;
     const category = first.category ?? 'unclassified';
     const module = moduleOf(first.filePath, depth);
     const reasons = [
-      ...new Set(items.map((f) => f.categoryReason).filter((r): r is string => typeof r === 'string' && r.trim() !== '')),
+      ...new Set(
+        items.map((f) => f.categoryReason).filter((r): r is string => typeof r === 'string' && r.trim() !== ''),
+      ),
     ].slice(0, 3);
     clusters.push(
       Object.freeze({
-        key: clusterKey(category, module, first.agent),
+        key,
         category,
         module,
         agent: first.agent,

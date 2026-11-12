@@ -84,3 +84,49 @@ export function countChecksForReport(db: DatabaseSync, filter: ReportQueryFilter
     rows.map((row) => Object.freeze({ day: row.day, outcome: row.outcome, agent: row.agent, count: row.n })),
   );
 }
+
+export interface FailureForClusterRow {
+  readonly id: number;
+  readonly filePath: string;
+  readonly category: string | null;
+  readonly status: string;
+  readonly agent: string | null;
+  readonly aiContent: string;
+  readonly finalContent: string;
+}
+
+/** Individual failures (with content) for on-read clustering in a report window. */
+export function listFailuresForClustering(db: DatabaseSync, filter: ReportQueryFilter): readonly FailureForClusterRow[] {
+  const agents = agentsJson(filter.agents);
+  const rows = db
+    .prepare(
+      `SELECT id, file_path, category, status, agent, ai_content, final_content
+       FROM failures
+       WHERE status != 'dismissed'
+         AND (? IS NULL OR created_at >= ?)
+         AND (? IS NULL OR agent IN (SELECT value FROM json_each(?)))
+       ORDER BY id`,
+    )
+    .all(filter.since, filter.since, agents, agents) as unknown as Array<{
+    id: number;
+    file_path: string;
+    category: string | null;
+    status: string;
+    agent: string | null;
+    ai_content: string;
+    final_content: string;
+  }>;
+  return Object.freeze(
+    rows.map((row) =>
+      Object.freeze({
+        id: row.id,
+        filePath: row.file_path,
+        category: row.category,
+        status: row.status,
+        agent: row.agent,
+        aiContent: row.ai_content,
+        finalContent: row.final_content,
+      }),
+    ),
+  );
+}

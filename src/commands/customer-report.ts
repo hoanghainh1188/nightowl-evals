@@ -4,12 +4,14 @@ import { parseArgs } from 'node:util';
 import { AGENT_IDS, isAnyAgentId } from '../agents/ids.js';
 import { errorMessage } from '../cli/errors.js';
 import { renderCommandHelp } from '../cli/help.js';
+import { groupFailures } from '../cluster/group.js';
 import {
   formatCustomerReport,
   type CustomerFormat,
   type CustomerLangOption,
 } from '../customer-report/format.js';
 import { buildReport } from '../report/build.js';
+import { TOP_CLUSTERS } from '../report/format.js';
 import { parseDateOption } from '../shared/date-option.js';
 import { SIGNAL_KINDS } from '../storage/events.js';
 import type { Command } from './command.js';
@@ -119,6 +121,12 @@ export function createCustomerReportCommand(
       }
       try {
         const signalCounts = store.countEventsByKind(SIGNAL_KINDS, options.since);
+        const clusters = groupFailures(store.listFailuresForClustering(options.since, options.agents), {
+          depth: options.depth,
+          minCount: 2,
+          limit: TOP_CLUSTERS,
+          excludeDismissed: true,
+        });
         const report = buildReport({
           failures: store.countFailuresForReport(options.since, options.agents),
           checks: store.countChecksForReport(options.since, options.agents),
@@ -131,6 +139,7 @@ export function createCustomerReportCommand(
             prReview: signalCounts['pr-review'] ?? 0,
           },
           autoNoise: store.countAutoNoiseFailures(options.since),
+          clusters,
         });
         const outputContent = formatCustomerReport(report, {
           lang: options.lang,
