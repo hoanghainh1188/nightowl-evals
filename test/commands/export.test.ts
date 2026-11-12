@@ -255,6 +255,31 @@ describe('nightowl export', () => {
     expect(yaml).toContain('providers:');
   });
 
+  it('coarsens paths with --redact-paths and redacts emails in text', async () => {
+    await seed(repo.path, [
+      {
+        filePath: 'src/hooks/git/run.ts',
+        aiContent: 'contact user@example.com\n',
+        finalContent: 'ok\n',
+      },
+    ]);
+    expect((await run(['--redact-paths'])).code).toBe(0);
+    const [row] = await lines();
+    expect(row?.file_path).toBe('src/**/run.ts');
+    expect(JSON.stringify(row)).not.toContain('user@example.com');
+    expect(JSON.stringify(row)).toContain('<redacted>');
+  });
+
+  it('--privacy-dry-run reports counts without writing export', async () => {
+    await seed(repo.path, [{ filePath: 'src/a/b/c.ts', aiContent: 'x\n', finalContent: 'y\n' }]);
+    const result = await run(['--privacy-dry-run', '--redact-paths']);
+    expect(result.code).toBe(0);
+    expect(result.err).toMatch(/Privacy dry-run/);
+    expect(result.err).toMatch(/paths=1/);
+    expect(result.err).not.toMatch(/sk-ant-/);
+    await expect(readFile(defaultFile(), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('asks for nightowl init and creates nothing when the project is not set up', async () => {
     const result = await run();
     expect(result.code).toBe(1);

@@ -27,6 +27,7 @@ interface Options {
   readonly format: 'md' | 'html';
   readonly output: string | null;
   readonly agents: readonly string[] | null;
+  readonly redactPaths: boolean;
 }
 
 function parseOptions(args: readonly string[], now: Date): Options | string {
@@ -40,6 +41,7 @@ function parseOptions(args: readonly string[], now: Date): Options | string {
         format: { type: 'string' },
         output: { type: 'string', short: 'o' },
         agent: { type: 'string', multiple: true },
+        'redact-paths': { type: 'boolean' },
       },
       strict: true,
       allowPositionals: false,
@@ -68,7 +70,14 @@ function parseOptions(args: readonly string[], now: Date): Options | string {
   }
   const agents = agentFlags.length === 0 ? null : agentFlags;
 
-  return { since: sinceParsed.since, depth, format: formatRaw, output, agents };
+  return {
+    since: sinceParsed.since,
+    depth,
+    format: formatRaw,
+    output,
+    agents,
+    redactPaths: values['redact-paths'] === true,
+  };
 }
 
 export function createDigestCommand(deps: DigestDeps = { cwd: () => process.cwd(), now: () => new Date() }): Command {
@@ -90,6 +99,7 @@ export function createDigestCommand(deps: DigestDeps = { cwd: () => process.cwd(
         ['--agent <id>', 'Only include this agent (repeatable)'],
         ['--format md|html', 'Output format (default: md)'],
         ['-o, --output <file>', `Write output to a file (html default: ${DEFAULT_DIGEST_RELATIVE})`],
+        ['--redact-paths', 'Accepted for share-out consistency (no-op when digest has no paths)'],
       ],
     }),
     run: async (args, io) => {

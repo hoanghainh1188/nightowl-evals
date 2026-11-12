@@ -10,6 +10,7 @@ import {
   type CustomerFormat,
   type CustomerLangOption,
 } from '../customer-report/format.js';
+import { redactPathsInReport } from '../privacy/index.js';
 import { buildReport } from '../report/build.js';
 import { TOP_CLUSTERS } from '../report/format.js';
 import { parseDateOption } from '../shared/date-option.js';
@@ -35,6 +36,7 @@ interface Options {
   readonly depth: number;
   readonly output: string | null;
   readonly agents: readonly string[] | null;
+  readonly redactPaths: boolean;
 }
 
 function parseOptions(args: readonly string[]): Options | string {
@@ -49,6 +51,7 @@ function parseOptions(args: readonly string[]): Options | string {
         depth: { type: 'string' },
         output: { type: 'string', short: 'o' },
         agent: { type: 'string', multiple: true },
+        'redact-paths': { type: 'boolean' },
       },
       strict: true,
       allowPositionals: false,
@@ -82,7 +85,7 @@ function parseOptions(args: readonly string[]): Options | string {
   }
   const agents = agentFlags.length === 0 ? null : agentFlags;
 
-  return { lang, format, since, depth, output, agents };
+  return { lang, format, since, depth, output, agents, redactPaths: values['redact-paths'] === true };
 }
 
 export function createCustomerReportCommand(
@@ -106,6 +109,7 @@ export function createCustomerReportCommand(
         [`--depth <1-${MAX_DEPTH}>`, `Folder levels that make up a module (default: ${DEFAULT_DEPTH})`],
         ['--agent <id>', 'Only include this agent (repeatable)'],
         ['-o, --output <file>', 'Write report to a file (creates parent directories)'],
+        ['--redact-paths', 'Coarsen module/path labels in the report (share-out)'],
       ],
     }),
     run: async (args, io) => {
@@ -127,7 +131,7 @@ export function createCustomerReportCommand(
           limit: TOP_CLUSTERS,
           excludeDismissed: true,
         });
-        const report = buildReport({
+        const built = buildReport({
           failures: store.countFailuresForReport(options.since, options.agents),
           checks: store.countChecksForReport(options.since, options.agents),
           depth: options.depth,
@@ -142,6 +146,7 @@ export function createCustomerReportCommand(
           autoNoise: store.countAutoNoiseFailures(options.since),
           clusters,
         });
+        const report = options.redactPaths ? redactPathsInReport(built) : built;
         const outputContent = formatCustomerReport(report, {
           lang: options.lang,
           format: options.format,

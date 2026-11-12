@@ -90,3 +90,10 @@ HTML từ `nightowl dashboard` SHALL hiển thị đếm tín hiệu revert cùn
 #### Scenario: Section signals có revert
 - **WHEN** database có ≥1 sự kiện revert rồi chạy `nightowl dashboard`
 - **THEN** file HTML gồm nhãn revert (hoặc tương đương) và count > 0
+
+### Requirement: Dashboard tôn trọng coarsen path
+Khi bật cờ làm thô path đã document, HTML `nightowl dashboard` SHALL coarsen nhãn module/path trong bảng/tóm tắt theo cùng profile privacy. Secret/email trong text tĩnh SHALL NOT xuất hiện dạng plaintext nếu khớp profile. Cờ tắt → hành vi hiện tại.
+
+#### Scenario: Coarsen trên HTML
+- **WHEN** chạy dashboard với coarsen path bật
+- **THEN** file HTML không chứa ít nhất một path sâu đầy đủ đã có trong dữ liệu nếu coarsen áp dụng; thoát 0
