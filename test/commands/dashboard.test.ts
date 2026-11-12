@@ -99,6 +99,7 @@ describe('nightowl dashboard', () => {
     [['--fail-on-rate', '30']],
     [['--weird']],
     [['--output', '']],
+    [['--workspace', 'missing-pkg']],
   ])('rejects %j', async (args) => {
     await seed(repo.path, [{ filePath: 'src/a.ts' }]);
     const result = await run(args);

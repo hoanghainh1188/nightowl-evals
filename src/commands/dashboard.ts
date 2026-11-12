@@ -12,6 +12,7 @@ import { buildReport } from '../report/build.js';
 import { TOP_CLUSTERS } from '../report/format.js';
 import { parseDateOption } from '../shared/date-option.js';
 import { SIGNAL_KINDS } from '../storage/events.js';
+import { applyWorkspaceFilter, prepareWorkspaces } from '../workspace/for-report.js';
 import type { Command } from './command.js';
 import { openExistingStore } from './existing-store.js';
 
@@ -33,6 +34,7 @@ interface Options {
   readonly open: boolean;
   readonly agents: readonly string[] | null;
   readonly redactPaths: boolean;
+  readonly workspaces: readonly string[];
 }
 
 function parseOptions(args: readonly string[]): Options | string {
@@ -47,6 +49,7 @@ function parseOptions(args: readonly string[]): Options | string {
         open: { type: 'boolean', default: false },
         agent: { type: 'string', multiple: true },
         'redact-paths': { type: 'boolean' },
+        workspace: { type: 'string', multiple: true },
       },
       strict: true,
       allowPositionals: false,
@@ -74,7 +77,15 @@ function parseOptions(args: readonly string[]): Options | string {
   }
   const agents = agentFlags.length === 0 ? null : agentFlags;
 
-  return { since, depth, output, open: values.open === true, agents, redactPaths: values['redact-paths'] === true };
+  return {
+    since,
+    depth,
+    output,
+    open: values.open === true,
+    agents,
+    redactPaths: values['redact-paths'] === true,
+    workspaces: values.workspace ?? [],
+  };
 }
 
 export function createDashboardCommand(deps: DashboardDeps = { cwd: () => process.cwd(), now: () => new Date() }): Command {
@@ -92,7 +103,8 @@ export function createDashboardCommand(deps: DashboardDeps = { cwd: () => proces
       ],
       options: [
         ['--since <YYYY-MM-DD>', 'Only failures from this date on'],
-        [`--depth <1-${MAX_DEPTH}>`, `Folder levels that make up a module (default: ${DEFAULT_DEPTH})`],
+        [`--depth <1-${MAX_DEPTH}>`, `Folder levels that make up a module when outside a package (default: ${DEFAULT_DEPTH})`],
+        ['--workspace <name|path>', 'Only failures in this package/workspace (repeatable; name or path)'],
         ['--agent <id>', 'Only include this agent (repeatable)'],
         ['-o, --output <file>', `Write HTML to this path (default: ${DEFAULT_DASHBOARD_RELATIVE})`],
         ['--open', 'Open the HTML file with the OS default browser (file://, no HTTP server)'],
@@ -114,15 +126,30 @@ export function createDashboardCommand(deps: DashboardDeps = { cwd: () => proces
       const relativeOut = options.output ?? DEFAULT_DASHBOARD_RELATIVE;
       const absoluteOut = resolve(cwd, relativeOut);
       try {
+        const ws = await prepareWorkspaces(store.root, options.workspaces);
+        if (typeof ws === 'string') {
+          io.stderr(`nightowl dashboard: ${ws}\n`);
+          return 1;
+        }
         const signalCounts = store.countEventsByKind(SIGNAL_KINDS, options.since);
-        const clusters = groupFailures(store.listFailuresForClustering(options.since, options.agents), {
+        const clustered = applyWorkspaceFilter(
+          store.listFailuresForClustering(options.since, options.agents),
+          ws.filter,
+          ws.all,
+        );
+        const clusters = groupFailures(clustered, {
           depth: options.depth,
           minCount: 2,
           limit: TOP_CLUSTERS,
           excludeDismissed: true,
+          workspaces: ws.all,
         });
         const built = buildReport({
-          failures: store.countFailuresForReport(options.since, options.agents),
+          failures: applyWorkspaceFilter(
+            store.countFailuresForReport(options.since, options.agents),
+            ws.filter,
+            ws.all,
+          ),
           checks: store.countChecksForReport(options.since, options.agents),
           depth: options.depth,
           since: options.since,
@@ -135,6 +162,7 @@ export function createDashboardCommand(deps: DashboardDeps = { cwd: () => proces
           },
           autoNoise: store.countAutoNoiseFailures(options.since),
           clusters,
+          workspaces: ws.all,
         });
         const report = options.redactPaths ? redactPathsInReport(built) : built;
         const html = formatDashboardHtml(report);

@@ -2,7 +2,8 @@ import { CATEGORIES } from '../classify/prompt.js';
 import type { FailureCluster } from '../cluster/types.js';
 import type { ReportNoise } from '../noise/types.js';
 import type { CheckCountRow, FailureCountRow } from '../storage/report-queries.js';
-import { moduleOf } from './module.js';
+import { moduleLabel } from '../workspace/label.js';
+import type { Workspace } from '../workspace/types.js';
 import { isoWeek } from './week.js';
 
 export const UNCLASSIFIED = 'unclassified';
@@ -62,6 +63,8 @@ export interface ReportInput {
   readonly signals?: ReportSignals;
   readonly autoNoise?: number;
   readonly clusters?: readonly FailureCluster[];
+  /** When set, module buckets use workspace package labels. */
+  readonly workspaces?: readonly Workspace[];
 }
 
 function add(map: Map<string, number>, key: string, n: number): void {
@@ -87,7 +90,7 @@ export function buildReport(input: ReportInput): Report {
     add(byCategory, row.category ?? UNCLASSIFIED, row.count);
     add(bySource, row.source, row.count);
     add(byAgent, row.agent ?? 'unknown', row.count);
-    add(byModule, moduleOf(row.filePath, input.depth), row.count);
+    add(byModule, moduleLabel(row.filePath, input.depth, input.workspaces ?? []), row.count);
     add(recordedByWeek, isoWeek(row.day), row.count);
   }
 

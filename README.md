@@ -277,11 +277,14 @@ nightowl report [options]
 | Option | Description |
 | :--- | :--- |
 | `--since <YYYY-MM-DD>` | Filter records created from this date forward |
-| `--depth <1-5>` | Number of folder levels that make up a module (default: `2`) |
+| `--depth <1-5>` | Folder levels that make up a module when the path is outside a package (default: `2`) |
+| `--workspace <name\|path>` | Only failures in this npm/pnpm package/workspace (repeatable; package `name` or relative path) |
 | `--agent <id>` | Only include this agent (repeatable) |
 | `--json` | Output full breakdown as structured JSON |
 | `-o, --output <file>` | Write report directly to a file (creates parent directories) |
 | `--fail-on-rate <0-100>` | **CI Quality Gate**: Exit with code `1` if failure rate exceeds threshold |
+
+In monorepos with `package.json` `workspaces` or `pnpm-workspace.yaml`, module buckets prefer the package `name` (e.g. `@acme/ui`) over depth-based path prefixes. Discovery supports simple one-segment globs such as `packages/*` (not `**`). With `--workspace`, failure totals/modules/clusters are filtered; `changedRate`, signals, and noise stay full-window (MVP).
 
 #### `nightowl customer-report`
 
@@ -298,7 +301,8 @@ nightowl customer-report --since 2026-11-01 --agent claude-code -o report.md
 | `--lang <vi\|ja\|both>` | Report language (default: `both`) |
 | `--format <md\|html>` | Output format (default: `md`) |
 | `--since <YYYY-MM-DD>` | Filter records created from this date forward |
-| `--depth <1-5>` | Module folder depth (default: `2`) |
+| `--depth <1-5>` | Module folder depth when outside a package (default: `2`) |
+| `--workspace <name\|path>` | Only failures in this package/workspace (repeatable) |
 | `--agent <id>` | Only include this agent (repeatable) |
 | `-o, --output <file>` | Write report to a file (creates parent directories; does not dump the full body to stdout) |
 | `--redact-paths` | Coarsen module/path labels for share-out (e.g. `src/hooks/git` → `src/**/git`) |
@@ -316,7 +320,8 @@ nightowl dashboard -o dist/ai-dashboard.html --agent claude-code --since 2026-11
 | Option | Description |
 | :--- | :--- |
 | `--since <YYYY-MM-DD>` | Filter records created from this date forward |
-| `--depth <1-5>` | Module folder depth (default: `2`) |
+| `--depth <1-5>` | Module folder depth when outside a package (default: `2`) |
+| `--workspace <name\|path>` | Only failures in this package/workspace (repeatable) |
 | `--agent <id>` | Only include this agent (repeatable) |
 | `-o, --output <file>` | Write HTML to this path (default: `.nightowl/dashboard.html`) |
 | `--open` | Open the file with the OS default browser (`file://`; does not start an HTTP server) |
@@ -335,7 +340,8 @@ nightowl digest --since 2026-11-01 --format html -o .nightowl/digest.html
 | Option | Description |
 | :--- | :--- |
 | `--since <YYYY-MM-DD\|Nd>` | Window start (default: last **7** days UTC; e.g. `7d`) |
-| `--depth <1-5>` | Module folder depth (default: `2`) |
+| `--depth <1-5>` | Module folder depth when outside a package (default: `2`) |
+| `--workspace <name\|path>` | Only failures in this package/workspace (repeatable) |
 | `--agent <id>` | Only include this agent (repeatable) |
 | `--format <md\|html>` | Output format (default: `md`) |
 | `-o, --output <file>` | Write to a file (`html` default: `.nightowl/digest.html`) |

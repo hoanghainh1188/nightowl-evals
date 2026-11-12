@@ -8,6 +8,7 @@ import { buildDigest } from '../digest/build.js';
 import { formatDigestHtml, formatDigestMarkdown } from '../digest/format.js';
 import { DEFAULT_DIGEST_LOOKBACK_DAYS, parseDigestSince } from '../digest/since.js';
 import { printable } from '../shared/printable.js';
+import { prepareWorkspaces } from '../workspace/for-report.js';
 import type { Command } from './command.js';
 import { openExistingStore } from './existing-store.js';
 
@@ -28,6 +29,7 @@ interface Options {
   readonly output: string | null;
   readonly agents: readonly string[] | null;
   readonly redactPaths: boolean;
+  readonly workspaces: readonly string[];
 }
 
 function parseOptions(args: readonly string[], now: Date): Options | string {
@@ -42,6 +44,7 @@ function parseOptions(args: readonly string[], now: Date): Options | string {
         output: { type: 'string', short: 'o' },
         agent: { type: 'string', multiple: true },
         'redact-paths': { type: 'boolean' },
+        workspace: { type: 'string', multiple: true },
       },
       strict: true,
       allowPositionals: false,
@@ -77,6 +80,7 @@ function parseOptions(args: readonly string[], now: Date): Options | string {
     output,
     agents,
     redactPaths: values['redact-paths'] === true,
+    workspaces: values.workspace ?? [],
   };
 }
 
@@ -95,7 +99,8 @@ export function createDigestCommand(deps: DigestDeps = { cwd: () => process.cwd(
       ],
       options: [
         ['--since <YYYY-MM-DD|Nd>', `Window start (default: ${DEFAULT_DIGEST_LOOKBACK_DAYS}d; e.g. 7d)`],
-        [`--depth <1-${MAX_DEPTH}>`, `Module folder depth (default: ${DEFAULT_DEPTH})`],
+        [`--depth <1-${MAX_DEPTH}>`, `Module folder depth when outside a package (default: ${DEFAULT_DEPTH})`],
+        ['--workspace <name|path>', 'Only failures in this package/workspace (repeatable; name or path)'],
         ['--agent <id>', 'Only include this agent (repeatable)'],
         ['--format md|html', 'Output format (default: md)'],
         ['-o, --output <file>', `Write output to a file (html default: ${DEFAULT_DIGEST_RELATIVE})`],
@@ -114,6 +119,11 @@ export function createDigestCommand(deps: DigestDeps = { cwd: () => process.cwd(
         return 1;
       }
       try {
+        const ws = await prepareWorkspaces(store.root, options.workspaces);
+        if (typeof ws === 'string') {
+          io.stderr(`nightowl digest: ${ws}\n`);
+          return 1;
+        }
         const generatedAt = deps.now().toISOString();
         const digest = buildDigest({
           store,
@@ -122,6 +132,8 @@ export function createDigestCommand(deps: DigestDeps = { cwd: () => process.cwd(
           agents: options.agents,
           generatedAt,
           nowIso: generatedAt,
+          workspaces: ws.all,
+          workspaceFilter: ws.filter,
         });
         const content =
           options.format === 'html' ? formatDigestHtml(digest) : formatDigestMarkdown(digest);

@@ -31,4 +31,5 @@ export interface GroupFailuresOptions {
   readonly limit?: number;
   /** When true (default for report), skip status === 'dismissed'. */
   readonly excludeDismissed?: boolean;
+  readonly workspaces?: readonly import('../workspace/types.js').Workspace[];
 }

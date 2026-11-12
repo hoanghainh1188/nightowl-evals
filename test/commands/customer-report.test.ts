@@ -106,6 +106,7 @@ describe('nightowl customer-report', () => {
     [['--format', 'pdf']],
     [['--fail-on-rate', '30']],
     [['--weird']],
+    [['--workspace', 'missing-pkg']],
   ])('rejects %j', async (args) => {
     await seed(repo.path, [{ filePath: 'src/a.ts' }]);
     const result = await run(args);

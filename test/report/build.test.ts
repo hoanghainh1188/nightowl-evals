@@ -73,6 +73,28 @@ describe('buildReport', () => {
     ]);
   });
 
+  it('uses workspace package labels when workspaces are provided', () => {
+    const report = buildReport({
+      ...base,
+      depth: 1,
+      workspaces: [
+        { path: 'packages/ui', name: '@acme/ui' },
+        { path: 'packages/api', name: '@acme/api' },
+      ],
+      failures: [
+        row('packages/ui/src/a.ts', 'logic', '2026-11-02', 2),
+        row('packages/api/src/b.ts', 'convention', '2026-11-02'),
+        row('docs/readme.md', 'logic', '2026-11-02'),
+      ],
+      checks: [],
+    });
+    expect(report.byModule).toEqual([
+      { module: '@acme/ui', failures: 2 },
+      { module: '@acme/api', failures: 1 },
+      { module: 'docs', failures: 1 },
+    ]);
+  });
+
   it('computes the changed rate in total and per week, and reports no data as null', () => {
     const report = buildReport({
       ...base,

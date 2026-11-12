@@ -59,3 +59,10 @@ Khi bật cờ làm thô path đã document và digest có in path/module, outpu
 #### Scenario: Cờ coarsen được chấp nhận
 - **WHEN** chạy `nightowl digest` với cờ coarsen path đã document
 - **THEN** thoát 0 (hoặc lỗi cấu hình rõ nếu cờ không hỗ trợ — ưu tiên chấp nhận no-op); không crash
+
+### Requirement: Digest chấp nhận --workspace
+`nightowl digest` SHALL chấp nhận `--workspace` với semantics lọc path/workspace giống report khi digest đếm failure theo cửa sổ. Nếu một phần digest không gắn module, filter vẫn SHALL loại failure ngoài workspace trước khi aggregate. Cờ không hợp lệ SHALL lỗi rõ.
+
+#### Scenario: Digest lọc workspace
+- **WHEN** chạy `nightowl digest --workspace <name>` với store monorepo có failure đa package
+- **THEN** tổng failure trong digest chỉ gồm workspace khớp; mã thoát 0

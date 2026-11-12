@@ -93,3 +93,10 @@ Catalog completion SHALL gồm subcommand so sánh eval đã document (ví dụ 
 #### Scenario: Catalog có eval-compare
 - **WHEN** dựng catalog completion từ registry lệnh
 - **THEN** có mục lệnh compare với danh sách flag không rỗng gồm ít nhất một flag đường dẫn input/baseline
+
+### Requirement: Completion flag --workspace
+Catalog completion SHALL gồm `--workspace` trên các lệnh báo cáo hỗ trợ filter workspace (`report`, `customer-report`, `dashboard`, `digest`).
+
+#### Scenario: Catalog report có --workspace
+- **WHEN** dựng catalog completion
+- **THEN** entry `report` gồm `--workspace`

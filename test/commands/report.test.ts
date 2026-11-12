@@ -1,4 +1,4 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createReportCommand } from '../../src/commands/report.js';
@@ -222,4 +222,35 @@ describe('nightowl report', () => {
       expect(result.err).toMatch(/^nightowl report: /);
     },
   );
+
+  it('labels modules by package name in a monorepo and filters with --workspace', async () => {
+    await writeFile(join(repo.path, 'package.json'), JSON.stringify({ name: 'root', workspaces: ['packages/*'] }));
+    await mkdir(join(repo.path, 'packages', 'ui', 'src'), { recursive: true });
+    await mkdir(join(repo.path, 'packages', 'api', 'src'), { recursive: true });
+    await writeFile(join(repo.path, 'packages', 'ui', 'package.json'), JSON.stringify({ name: '@acme/ui' }));
+    await writeFile(join(repo.path, 'packages', 'api', 'package.json'), JSON.stringify({ name: '@acme/api' }));
+    await seed(repo.path, [
+      { filePath: 'packages/ui/src/Button.tsx', category: 'logic' },
+      { filePath: 'packages/ui/src/Icon.tsx', category: 'logic' },
+      { filePath: 'packages/api/src/route.ts', category: 'convention' },
+    ]);
+
+    const all = JSON.parse((await run(['--json', '--depth', '1'])).out);
+    expect(all.by_module).toEqual([
+      { module: '@acme/ui', failures: 2 },
+      { module: '@acme/api', failures: 1 },
+    ]);
+
+    const filtered = JSON.parse((await run(['--json', '--workspace', '@acme/ui'])).out);
+    expect(filtered.total).toBe(2);
+    expect(filtered.by_module).toEqual([{ module: '@acme/ui', failures: 2 }]);
+
+    const byPath = JSON.parse((await run(['--json', '--workspace', 'packages/api'])).out);
+    expect(byPath.total).toBe(1);
+    expect(byPath.by_module).toEqual([{ module: '@acme/api', failures: 1 }]);
+
+    const bad = await run(['--workspace', 'missing-pkg']);
+    expect(bad.code).toBe(1);
+    expect(bad.err).toMatch(/unknown --workspace: missing-pkg/);
+  });
 });
