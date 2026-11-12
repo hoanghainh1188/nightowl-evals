@@ -1,10 +1,9 @@
 import { access, readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
+import { normalizeRepoPath } from '../shared/repo-path.js';
 import type { Workspace } from './types.js';
 
-function normalizeRel(path: string): string {
-  return path.replace(/\\/g, '/').replace(/^\.\/+/, '').replace(/\/+$/, '');
-}
+const normalizeRel = normalizeRepoPath;
 
 async function readJson(path: string): Promise<unknown | null> {
   try {

@@ -24,6 +24,7 @@ describe('moduleOf', () => {
     ['src/hooks/git/a.ts', 1, 'src'],
     ['src/a.ts', 3, 'src'],
     ['README.md', 2, '(root)'],
+    ['src\\hooks\\a.ts', 2, 'src/hooks'],
   ])('%s at depth %i is %s', (path, depth, module) => {
     expect(moduleOf(path, depth)).toBe(module);
   });

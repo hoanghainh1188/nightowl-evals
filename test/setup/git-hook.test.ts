@@ -71,6 +71,11 @@ describe.each(GIT_HOOKS)('installGitHook($name)', (hook) => {
     expect(await readFile(hookFile(), 'utf8')).toContain(`nightowl ${hook.command}`);
   });
 
+  it('creates a hook on win32 without requiring POSIX execute chmod', async () => {
+    expect(await installGitHook(repo.path, hook, 'win32')).toEqual({ status: 'created', path: hookFile() });
+    expect(await readFile(hookFile(), 'utf8')).toContain(`nightowl ${hook.command}`);
+  });
+
   it('keeps an existing hook and its permissions', async () => {
     await writeFile(hookFile(), '#!/bin/sh\nnpm run lint\n');
     await chmod(hookFile(), 0o750);

@@ -64,11 +64,15 @@ Mở database SHALL NOT in gì ra stdout hay stderr, kể cả cảnh báo thử
 - **THEN** stderr không có `ExperimentalWarning`
 
 ### Requirement: Thư mục dữ liệu riêng tư
-Thư mục `.nightowl/` SHALL chỉ cho người dùng hiện tại đọc, ghi và truy cập (quyền `0700`), kể cả khi thư mục đã tồn tại với quyền rộng hơn. Khi `.nightowl` là symlink hoặc không phải thư mục, NightOwl SHALL từ chối dùng nó và không ghi gì.
+Thư mục `.nightowl/` SHALL là directory thật (không symlink) dùng riêng cho dữ liệu dự án. Trên POSIX, NightOwl SHALL đặt quyền `0700` (kể cả khi đã tồn tại rộng hơn). Trên Windows (`win32`), mode là best-effort và SHALL NOT fail chỉ vì bit không khớp POSIX khi directory thật. Symlink hoặc không-directory SHALL bị từ chối, không ghi.
 
 #### Scenario: Tạo mới
 - **WHEN** NightOwl tạo `.nightowl/` lần đầu
 - **THEN** thư mục có quyền `0700`
+
+#### Scenario: Windows / NTFS không giữ 0700
+- **WHEN** trên `win32`, tạo hoặc mở `.nightowl/` mà `chmod`/`mode` không cho kết quả `0700` như POSIX
+- **THEN** NightOwl vẫn dùng thư mục directory thật; không thoát lỗi chỉ vì mode bit; không theo symlink
 
 #### Scenario: Repo clone về có .nightowl là symlink
 - **WHEN** `.nightowl` là symlink trỏ ra ngoài dự án
