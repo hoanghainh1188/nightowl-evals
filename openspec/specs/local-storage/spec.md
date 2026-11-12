@@ -64,7 +64,7 @@ Mở database SHALL NOT in gì ra stdout hay stderr, kể cả cảnh báo thử
 - **THEN** stderr không có `ExperimentalWarning`
 
 ### Requirement: Thư mục dữ liệu riêng tư
-Thư mục `.nightowl/` SHALL được tạo như thư mục thật (không symlink) dùng riêng cho dữ liệu dự án. Trên POSIX, NightOwl SHALL đặt quyền chỉ người dùng hiện tại đọc/ghi/truy cập (`0700`), kể cả khi thư mục đã tồn tại với quyền rộng hơn. Trên Windows (`win32`), NightOwl SHALL cố gắng áp dụng mode tương đương best-effort; nếu hệ thống tệp (NTFS) không phản ánh `0700` như POSIX, NightOwl SHALL vẫn dùng thư mục đó khi nó là directory thật và không phải symlink, và SHALL NOT fail chỉ vì bit mode không khớp POSIX. Khi `.nightowl` là symlink hoặc không phải thư mục, NightOwl SHALL từ chối dùng nó và không ghi gì.
+Thư mục `.nightowl/` SHALL là directory thật (không symlink) dùng riêng cho dữ liệu dự án. Trên POSIX, NightOwl SHALL đặt quyền `0700` (kể cả khi đã tồn tại rộng hơn). Trên Windows (`win32`), mode là best-effort và SHALL NOT fail chỉ vì bit không khớp POSIX khi directory thật. Symlink hoặc không-directory SHALL bị từ chối, không ghi.
 
 #### Scenario: Tạo mới
 - **WHEN** NightOwl tạo `.nightowl/` lần đầu
