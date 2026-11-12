@@ -1,6 +1,6 @@
 import { printable } from '../shared/printable.js';
 import type { Rate, Report } from '../report/build.js';
-import { RECENT_WEEKS, TOP_MODULES } from '../report/format.js';
+import { RECENT_WEEKS, TOP_CLUSTERS, TOP_MODULES } from '../report/format.js';
 
 function percent(rate: number | null): string {
   return rate === null ? 'n/a' : `${Math.round(rate * 100)}%`;
@@ -107,6 +107,24 @@ export function formatDashboardHtml(report: Report): string {
       ['Confirmed sample', String(report.noise.sample.confirmed)],
       ['Dismissed sample', String(report.noise.sample.dismissed)],
     ]);
+
+    const clusters = report.clusters.slice(0, TOP_CLUSTERS);
+    if (clusters.length === 0) {
+      parts.push('<h2>Top clusters</h2>');
+      parts.push('<p>No clusters with 2+ failures yet.</p>');
+    } else {
+      addTable(
+        parts,
+        `Top clusters (${clusters.length})`,
+        clusters.map(
+          (c) =>
+            [
+              `${c.category} · ${c.module}${c.agent ? ` · ${c.agent}` : ''} · ${c.fingerprint.slice(0, 8)}`,
+              String(c.count),
+            ] as const,
+        ),
+      );
+    }
   }
 
   parts.push(`<p><small>Generated at: ${escapeHtml(report.generatedAt)}</small></p>`);

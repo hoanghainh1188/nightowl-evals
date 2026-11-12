@@ -83,9 +83,11 @@ describe('formatJson', () => {
       'by_week',
       'signals',
       'noise',
+      'clusters',
     ]);
     expect(json.signals).toEqual({ ci_fail: 0, pr_review: 0 });
     expect(json.noise).toEqual({ review_rate: null, auto_noise: 0, sample: { confirmed: 0, dismissed: 0 } });
+    expect(json.clusters).toEqual([]);
     expect(json.by_module).toHaveLength(12);
     expect(json.by_week).toHaveLength(9);
     expect(json.by_week[0]).toEqual({ week: '2026-W03', failures: 2, checked: 0, changed: 0, rate: null });
@@ -110,6 +112,40 @@ describe('formatJson', () => {
     });
     expect(formatText(report)).toContain('Reviewed: 1 confirmed, 0 dismissed, 2 still flagged (nightowl review)');
     expect(JSON.parse(formatJson(report)).by_status).toEqual({ confirmed: 1, dismissed: 0, flagged: 2 });
+  });
+
+  it('shows top clusters in text and JSON', () => {
+    const clusters = [
+      {
+        key: 'logic|src/a|claude-code|deadbeefdeadbeef',
+        category: 'logic',
+        module: 'src/a',
+        agent: 'claude-code',
+        fingerprint: 'deadbeefdeadbeef',
+        count: 3,
+        sampleIds: [1, 2, 3],
+        samplePaths: ['src/a/x.ts'],
+      },
+    ];
+    const report = buildReport({
+      ...base,
+      failures: [row('src/a/x.ts', 'logic', '2026-11-02', 3)],
+      checks: [],
+      clusters,
+    });
+    expect(formatText(report)).toContain('By cluster');
+    expect(formatText(report)).toContain('logic/src/a@claude-code#deadbeef');
+    expect(JSON.parse(formatJson(report)).clusters).toEqual([
+      {
+        key: clusters[0]!.key,
+        category: 'logic',
+        module: 'src/a',
+        agent: 'claude-code',
+        fingerprint: 'deadbeefdeadbeef',
+        count: 3,
+        sample_paths: ['src/a/x.ts'],
+      },
+    ]);
   });
 
   it('shows noise estimate with n/a review rate and auto-noise count', () => {

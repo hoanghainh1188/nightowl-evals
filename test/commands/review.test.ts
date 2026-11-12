@@ -72,6 +72,20 @@ describe('nightowl review', () => {
         source: 'ai-self-fix',
         status: 'flagged',
       });
+      expect(typeof list[0].clusterKey).toBe('string');
+      expect(list[0].clusterKey).toContain('|');
+    });
+
+    it('filters list by --cluster key', async () => {
+      const listed = JSON.parse((await review(['--json'])).out) as Array<{ id: number; clusterKey: string }>;
+      const key = listed[0]!.clusterKey;
+      const filtered = await review(['--json', '--cluster', key]);
+      expect(filtered.code).toBe(0);
+      const items = JSON.parse(filtered.out) as Array<{ clusterKey: string }>;
+      expect(items.length).toBeGreaterThanOrEqual(1);
+      expect(items.every((item) => item.clusterKey === key)).toBe(true);
+      const miss = await review(['--json', '--cluster', 'no-such-cluster-key']);
+      expect(JSON.parse(miss.out)).toEqual([]);
     });
   });
 

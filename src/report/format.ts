@@ -2,6 +2,7 @@ import { printable } from '../shared/printable.js';
 import type { Rate, Report } from './build.js';
 
 export const TOP_MODULES = 10;
+export const TOP_CLUSTERS = 10;
 export const RECENT_WEEKS = 8;
 const BAR_WIDTH = 30;
 const LABEL_WIDTH = 22;
@@ -45,7 +46,10 @@ export function formatText(report: Report): string {
   }
 
   const modules = report.byModule.slice(0, TOP_MODULES);
+  const clusters = report.clusters.slice(0, TOP_CLUSTERS);
   const weeks = report.byWeek.slice(-RECENT_WEEKS);
+  const clusterLabel = (c: (typeof clusters)[number]) =>
+    `${c.category}/${c.module}${c.agent ? `@${c.agent}` : ''}#${c.fingerprint.slice(0, 8)}`;
   return [
     header,
     changedLine(report.changedRate),
@@ -67,6 +71,11 @@ export function formatText(report: Report): string {
     '',
     `By module (top ${modules.length} of ${report.byModule.length}, depth ${report.depth})`,
     ...rows(modules.map((m) => [m.module, m.failures] as const)),
+    '',
+    `By cluster (top ${clusters.length}${report.clusters.length > clusters.length ? ` of ${report.clusters.length}` : ''}; min 2)`,
+    ...(clusters.length === 0
+      ? ['  (no clusters with 2+ failures)']
+      : rows(clusters.map((c) => [clusterLabel(c), c.count] as const))),
     '',
     `By week (last ${weeks.length}, UTC; % = AI edits changed)`,
     ...rows(weeks.map((w) => [w.week, w.recorded, percent(w.rate)] as const)),
@@ -98,6 +107,15 @@ export function formatJson(report: Report): string {
         auto_noise: report.noise.autoNoise,
         sample: report.noise.sample,
       },
+      clusters: report.clusters.map((c) => ({
+        key: c.key,
+        category: c.category,
+        module: c.module,
+        agent: c.agent,
+        fingerprint: c.fingerprint,
+        count: c.count,
+        sample_paths: c.samplePaths,
+      })),
     },
     null,
     2,

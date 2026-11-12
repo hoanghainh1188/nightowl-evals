@@ -41,8 +41,9 @@ describe('nightowl suggest-rules', () => {
       filePath: `src/mod/f${i}.ts`,
       category: 'convention' as const,
       status: 'confirmed' as const,
-      aiContent: `ai ${i}\n`,
-      finalContent: `dev ${i}\n`,
+      // Same AI→final delta so fingerprint clustering groups them (roadmap #35).
+      aiContent: 'ai naming\n',
+      finalContent: 'dev naming\n',
       reason: 'naming',
     }));
     await seed(repo.path, rows);

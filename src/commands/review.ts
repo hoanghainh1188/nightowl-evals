@@ -4,11 +4,12 @@ import { unifiedDiff } from '../classify/diff.js';
 import { errorMessage } from '../cli/errors.js';
 import { renderCommandHelp } from '../cli/help.js';
 import type { Io } from '../cli/io.js';
+import { DEFAULT_CLUSTER_DEPTH, clusterKeyForFailure } from '../cluster/index.js';
 import { formatDetail, formatList } from '../review/format.js';
 import { processStdinTerminal, runInteractiveReview, type TuiTerminal } from '../review/tui/session.js';
 import { printable } from '../shared/printable.js';
 import type { FailureSource } from '../storage/failures.js';
-import type { FailureStatus } from '../storage/review-queries.js';
+import type { FailureForReview, FailureStatus } from '../storage/review-queries.js';
 import type { Store } from '../storage/store.js';
 import type { Command } from './command.js';
 import { openExistingStore, openExistingStoreForWrite } from './existing-store.js';
@@ -31,7 +32,17 @@ type ListFilter = {
   readonly source: FailureSource | null;
   readonly agents: readonly string[] | null;
   readonly limit: number;
+  readonly cluster: string | null;
 };
+
+type ReviewListItem = FailureForReview & { readonly clusterKey: string };
+
+function withClusterKey(failure: FailureForReview): ReviewListItem {
+  return Object.freeze({
+    ...failure,
+    clusterKey: clusterKeyForFailure(failure, DEFAULT_CLUSTER_DEPTH),
+  });
+}
 
 type Action =
   | (ListFilter & { readonly kind: 'list'; readonly json: boolean })
@@ -57,6 +68,7 @@ function parseList(args: readonly string[]): Action {
       json: { type: 'boolean' },
       interactive: { type: 'boolean', short: 'i' },
       agent: { type: 'string', multiple: true },
+      cluster: { type: 'string' },
     },
     strict: true,
     allowPositionals: false,
@@ -77,11 +89,14 @@ function parseList(args: readonly string[]): Action {
   const interactive = values.interactive === true;
   const json = values.json === true;
   if (interactive && json) throw new UsageError('cannot combine --interactive (-i) with --json');
+  const cluster = values.cluster === undefined ? null : values.cluster.trim();
+  if (cluster !== null && cluster.length === 0) throw new UsageError('--cluster must be a non-empty cluster key');
   const filter = {
     statuses: status === 'all' ? null : ([status as FailureStatus] as const),
     source: (values.source as FailureSource | undefined) ?? null,
     agents: agentFlags.length === 0 ? null : agentFlags,
     limit,
+    cluster,
   };
   if (interactive) return { kind: 'interactive', ...filter };
   return { kind: 'list', ...filter, json };
@@ -152,7 +167,20 @@ function runRead(store: Store, action: Extract<Action, { kind: 'list' | 'show' }
     }
     return 0;
   }
-  const failures = store.listFailuresForReview(action);
+  const listed = store.listFailuresForReview({
+    statuses: action.statuses,
+    source: action.source,
+    agents: action.agents,
+    // When filtering by cluster, scan a wide window then re-apply --limit.
+    limit: action.cluster === null ? action.limit : Math.max(action.limit, 10_000),
+  });
+  const withKeys = listed.map(withClusterKey);
+  const filtered =
+    action.cluster === null ? withKeys : withKeys.filter((f) => f.clusterKey === action.cluster);
+  const failures = filtered.slice(0, action.limit);
+  if (action.cluster !== null && filtered.length === 0 && listed.length >= 10_000) {
+    io.stderr('nightowl review: --cluster found no matches in the first 10000 rows; try narrowing --status/--agent\n');
+  }
   if (action.json) {
     io.stdout(`${JSON.stringify(failures, null, 2)}\n`);
   } else {
@@ -187,8 +215,9 @@ export function createReviewCommand(deps: ReviewDeps = defaultDeps): Command {
         ['--status <name>', `list / -i: ${[...STATUSES, 'all'].join(', ')} (default: flagged)`],
         ['--source <name>', `list / -i: ${SOURCES.join(', ')}`],
         ['--agent <id>', 'list / -i: filter by agent (repeatable)'],
+        ['--cluster <key>', 'list: only failures with this cluster key (see report clusters / --json)'],
         [`--limit <1-${MAX_LIMIT}>`, `list / -i: at most this many (default: ${DEFAULT_REVIEW_LIMIT})`],
-        ['--json', 'Output list or show detail as JSON'],
+        ['--json', 'Output list or show detail as JSON (list includes clusterKey)'],
       ],
     }),
     run: async (args, io) => {
