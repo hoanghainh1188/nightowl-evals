@@ -464,6 +464,7 @@ nightowl suggest-rules [--since <YYYY-MM-DD>] [--category <name>] [--agent <id>]
 - Default prints to stdout only (does not edit project rule files).
 - `--output <file>` writes a **standalone** NightOwl suggestion file wrapped in `<!-- nightowl-suggested-rules:start -->` … `<!-- nightowl-suggested-rules:end -->`.
 - `--write <file>` **inserts or updates** that same marker block inside a project rules file (e.g. `CLAUDE.md`, `.cursorrules`) without changing text outside the block. Re-running is idempotent.
+- After a successful `--write` / `--output`, stderr suggests the local feedback loop: `rule-impact mark --label <id>` → `rule-impact` / `digest` / `dashboard` (does not auto-mark).
 - **BREAKING:** `--write` is no longer an alias for `--output`. Use `--output` for a separate suggestion file.
 - `--force` with `--output` overwrites a non-NightOwl file; with `--write` it only recovers skewed NightOwl markers when a safe boundary still exists (never blanking the whole rules file).
 
@@ -485,6 +486,8 @@ nightowl suggest-regressions [--since <YYYY-MM-DD>] [--category <name>] [--agent
 
 Marks a project rule as applied (local baseline snapshot) and compares non-dismissed failure counts in equal-length windows before/after. Offline; no LLM; does **not** change `nightowl report` / `--fail-on-rate`.
 
+**Feedback loop:** `suggest-rules` → (opt-in `--write` / `--output`) → apply rules in the project → `rule-impact mark --label <id>` → `rule-impact` / `digest` / `dashboard`.
+
 ```bash
 # After you paste a suggested rule into CLAUDE.md / .cursorrules yourself:
 nightowl rule-impact mark --label convention-naming --category convention
@@ -496,7 +499,9 @@ nightowl rule-impact --label convention-naming
 ```
 
 - Mark upserts by `--label` (same label updates baseline / `applied_at`).
+- After a successful mark, stderr suggests reviewing with `rule-impact` / `digest` / `dashboard`.
 - Show uses filters stored on the mark. Negative delta means fewer failures after apply (observational only — not causal proof).
+- `digest` and `dashboard` show the same rule-impact summary line when a mark exists.
 
 ---
 

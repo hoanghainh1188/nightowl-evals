@@ -7,6 +7,7 @@ import { renderCommandHelp } from '../cli/help.js';
 import { groupFailures } from '../cluster/group.js';
 import { formatDashboardHtml } from '../dashboard/format.js';
 import { openLocalPath } from '../dashboard/open-local.js';
+import { resolveRuleImpactSummary } from '../impact/summary.js';
 import { redactPathsInReport } from '../privacy/index.js';
 import { buildReport } from '../report/build.js';
 import { TOP_CLUSTERS } from '../report/format.js';
@@ -99,6 +100,7 @@ export function createDashboardCommand(deps: DashboardDeps = { cwd: () => proces
         'Writes a self-contained HTML dashboard from local NightOwl SQLite data.',
         'Local-only: no network, no SaaS team dashboard, no developer names.',
         'Default output: .nightowl/dashboard.html. Use --open to open via the OS file handler.',
+        'Includes a rule-impact line when a rule was marked (same semantics as digest).',
         'Not a CI gate (use report --fail-on-rate).',
       ],
       options: [
@@ -165,7 +167,9 @@ export function createDashboardCommand(deps: DashboardDeps = { cwd: () => proces
           workspaces: ws.all,
         });
         const report = options.redactPaths ? redactPathsInReport(built) : built;
-        const html = formatDashboardHtml(report);
+        const generatedAt = report.generatedAt;
+        const ruleImpact = resolveRuleImpactSummary(store, generatedAt);
+        const html = formatDashboardHtml(report, ruleImpact);
         const write =
           deps.writeFile ??
           (async (file, content) => {

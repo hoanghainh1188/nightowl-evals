@@ -1,3 +1,4 @@
+import { formatRuleImpactLine, type RuleImpactView } from '../impact/summary.js';
 import { printable } from '../shared/printable.js';
 import type { Rate, Report } from '../report/build.js';
 import { RECENT_WEEKS, TOP_CLUSTERS, TOP_MODULES } from '../report/format.js';
@@ -39,14 +40,16 @@ function addTable(parts: string[], title: string, rows: ReadonlyArray<readonly [
   parts.push('</tbody></table>');
 }
 
-export function formatDashboardHtml(report: Report): string {
+export function formatDashboardHtml(report: Report, ruleImpact: RuleImpactView = null): string {
   const parts: string[] = [
     '<h1>NightOwl local dashboard</h1>',
     '<p><em>Local-only HTML from this machine. Not a SaaS team dashboard. Grades AI, not people.</em></p>',
   ];
+  const ruleImpactItem = `<li>${escapeHtml(formatRuleImpactLine(ruleImpact))}</li>`;
 
   if (isEmpty(report)) {
     parts.push('<p>Not enough data yet to build a dashboard. Keep coding with hooks enabled, then re-run.</p>');
+    parts.push(`<ul>${ruleImpactItem}</ul>`);
   } else {
     parts.push('<h2>Summary</h2>');
     parts.push('<ul>');
@@ -57,6 +60,7 @@ export function formatDashboardHtml(report: Report): string {
     parts.push(
       `<li><strong>Signals</strong>: ci-fail ${report.signals.ciFail}, pr-review ${report.signals.prReview}, revert ${report.signals.revert}</li>`,
     );
+    parts.push(ruleImpactItem);
     const noiseRate =
       report.noise.reviewRate === null ? 'n/a' : `${Math.round(report.noise.reviewRate * 100)}%`;
     parts.push(

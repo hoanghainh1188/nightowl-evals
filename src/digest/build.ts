@@ -1,4 +1,4 @@
-import { compareRuleImpact } from '../impact/compare.js';
+import { resolveRuleImpactSummary, type RuleImpactSummary, type RuleImpactView } from '../impact/summary.js';
 import { buildReport, type ReportSignals } from '../report/build.js';
 import { SIGNAL_KINDS } from '../storage/events.js';
 import type { Store } from '../storage/store.js';
@@ -12,12 +12,7 @@ export interface DigestTopRow {
   readonly count: number;
 }
 
-export interface DigestRuleImpact {
-  readonly label: string;
-  readonly before: number;
-  readonly after: number;
-  readonly delta: number;
-}
+export type DigestRuleImpact = RuleImpactSummary;
 
 export interface Digest {
   readonly generatedAt: string;
@@ -30,7 +25,7 @@ export interface Digest {
   readonly topAgents: readonly DigestTopRow[];
   readonly signals: ReportSignals;
   /** null = none recorded; object = ok; 'unavailable' = compare failed (fail-open). */
-  readonly ruleImpact: DigestRuleImpact | null | 'unavailable';
+  readonly ruleImpact: RuleImpactView;
 }
 
 export interface BuildDigestInput {
@@ -92,21 +87,7 @@ export function buildDigest(input: BuildDigestInput): Digest {
           workspaces: input.workspaces,
         });
 
-  let ruleImpact: Digest['ruleImpact'] = null;
-  const application = input.store.getLatestRuleApplication();
-  if (application !== null) {
-    try {
-      const comparison = compareRuleImpact(input.store, application, { now: input.nowIso ?? input.generatedAt });
-      ruleImpact = Object.freeze({
-        label: comparison.label,
-        before: comparison.before.total,
-        after: comparison.after.total,
-        delta: comparison.delta,
-      });
-    } catch {
-      ruleImpact = 'unavailable';
-    }
-  }
+  const ruleImpact = resolveRuleImpactSummary(input.store, input.nowIso ?? input.generatedAt);
 
   return Object.freeze({
     generatedAt: input.generatedAt,
