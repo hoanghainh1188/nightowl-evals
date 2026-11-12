@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   discoverWorkspaces,
   findNearestWorkspace,
+  hasWorkspaceConfig,
   moduleLabel,
   parsePnpmWorkspaceYaml,
   resolveWorkspaceSelection,
@@ -42,8 +43,22 @@ describe('discoverWorkspaces + moduleLabel', () => {
 
   it('returns empty when no workspace config', async () => {
     const root = await fixture('none');
+    expect(await hasWorkspaceConfig(root)).toBe(false);
     expect(await discoverWorkspaces(root)).toEqual([]);
     expect(moduleLabel('packages/ui/src/a.ts', 2, [])).toBe('packages/ui');
+  });
+
+  it('detects workspace config even when globs match nothing', async () => {
+    dir = await createTempDir();
+    await writeFile(join(dir.path, 'package.json'), JSON.stringify({ name: 'root', workspaces: ['packages/*'] }));
+    expect(await hasWorkspaceConfig(dir.path)).toBe(true);
+    expect(await discoverWorkspaces(dir.path)).toEqual([]);
+  });
+
+  it('ignores empty workspaces arrays as no config', async () => {
+    dir = await createTempDir();
+    await writeFile(join(dir.path, 'package.json'), JSON.stringify({ name: 'root', workspaces: [] }));
+    expect(await hasWorkspaceConfig(dir.path)).toBe(false);
   });
 
   it('discovers npm workspaces and labels by package name', async () => {

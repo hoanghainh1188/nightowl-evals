@@ -1,4 +1,5 @@
-import { existsSync } from 'node:fs';
+import { existsSync, constants as fsConstants } from 'node:fs';
+import { access, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { AGENT_IDS, maturityOf } from '../agents/ids.js';
@@ -20,11 +21,27 @@ import { NIGHTOWL_IGNORE } from '../setup/gitignore.js';
 import { detectHookManager } from '../setup/hook-manager.js';
 import { isOnPath } from '../setup/path.js';
 import { printable } from '../shared/printable.js';
+import { SIGNAL_KINDS } from '../storage/events.js';
 import { CURRENT_SCHEMA_VERSION } from '../storage/migrations.js';
 import { findProjectRoot } from '../storage/project-root.js';
 import { loadSqlite } from '../storage/sqlite.js';
 import { DATA_DIR, DB_FILE, openStore, type Store } from '../storage/store.js';
+import { discoverWorkspaces, hasWorkspaceConfig } from '../workspace/index.js';
 import type { Command } from './command.js';
+
+async function defaultIsExecutable(path: string): Promise<boolean> {
+  try {
+    await access(path, fsConstants.X_OK);
+    return true;
+  } catch {
+    try {
+      const mode = (await stat(path)).mode;
+      return (mode & 0o111) !== 0;
+    } catch {
+      return false;
+    }
+  }
+}
 
 export type CheckStatus = 'ok' | 'warn' | 'fail';
 
@@ -46,6 +63,9 @@ export interface DoctorDeps {
   readonly readSettings: typeof readSettings;
   readonly readTextIfExists: typeof readTextIfExists;
   readonly openStore: (options: { cwd?: string; readOnly?: boolean }) => Promise<Store>;
+  /** Defaults to process.platform; used to skip execute-bit checks on win32. */
+  readonly platform?: () => NodeJS.Platform;
+  readonly isExecutable?: (path: string) => Promise<boolean>;
 }
 
 export const defaultDoctorDeps: DoctorDeps = {
@@ -58,6 +78,8 @@ export const defaultDoctorDeps: DoctorDeps = {
   readSettings,
   readTextIfExists,
   openStore,
+  platform: () => process.platform,
+  isExecutable: defaultIsExecutable,
 };
 
 function parseSemver(version: string): { major: number; minor: number; patch: number } | null {
@@ -342,6 +364,24 @@ export async function checkAgentHooks(deps: DoctorDeps, root: string | null): Pr
   return checks;
 }
 
+async function warnIfNotExecutable(
+  deps: DoctorDeps,
+  hookPath: string,
+  label: string,
+): Promise<DoctorCheck | null> {
+  const platform = deps.platform?.() ?? process.platform;
+  if (platform === 'win32') return null;
+  const isExecutable = deps.isExecutable ?? defaultIsExecutable;
+  if (await isExecutable(hookPath)) return null;
+  return {
+    category: 'Git Hooks',
+    name: `${label} executable`,
+    status: 'warn',
+    message: `${label} is not executable`,
+    remedy: `Run 'chmod +x ${label}' so Git can invoke the NightOwl hook.`,
+  };
+}
+
 export async function checkHooks(deps: DoctorDeps, root: string | null): Promise<readonly DoctorCheck[]> {
   const checks: DoctorCheck[] = [];
   if (!root) return checks;
@@ -360,6 +400,8 @@ export async function checkHooks(deps: DoctorDeps, root: string | null): Promise
           status: 'ok',
           message: `${hook.name} (husky) runs 'nightowl ${hook.command}'`,
         });
+        const execWarn = await warnIfNotExecutable(deps, hookPath, `.husky/${hook.name}`);
+        if (execWarn) checks.push(execWarn);
       } else {
         checks.push({
           category: 'Git Hooks',
@@ -406,6 +448,8 @@ export async function checkHooks(deps: DoctorDeps, root: string | null): Promise
           status: 'ok',
           message: `${hook.name} runs 'nightowl ${hook.command}'`,
         });
+        const execWarn = await warnIfNotExecutable(deps, hookPath, `.git/hooks/${hook.name}`);
+        if (execWarn) checks.push(execWarn);
       } else {
         checks.push({
           category: 'Git Hooks',
@@ -443,6 +487,32 @@ export async function checkHooks(deps: DoctorDeps, root: string | null): Promise
     });
   }
 
+  return checks;
+}
+
+export async function checkWorkspace(root: string | null): Promise<readonly DoctorCheck[]> {
+  const checks: DoctorCheck[] = [];
+  if (!root) return checks;
+  if (!(await hasWorkspaceConfig(root))) return checks;
+
+  const workspaces = await discoverWorkspaces(root);
+  if (workspaces.length === 0) {
+    checks.push({
+      category: 'Workspace',
+      name: 'Workspace discovery',
+      status: 'warn',
+      message: 'Workspace config present but no packages discovered (check globs like packages/*)',
+      remedy:
+        'Ensure package dirs match workspace globs (simple * one-segment globs), or remove stale workspace config.',
+    });
+  } else {
+    checks.push({
+      category: 'Workspace',
+      name: 'Workspace discovery',
+      status: 'ok',
+      message: `Discovered ${workspaces.length} workspace package${workspaces.length === 1 ? '' : 's'}`,
+    });
+  }
   return checks;
 }
 
@@ -524,11 +594,19 @@ export async function checkStorage(deps: DoctorDeps, root: string | null): Promi
     const dismissed = failures.byStatus['dismissed'] ?? 0;
     const reportable = failures.total - dismissed;
     const eventCount = store.listEvents().length;
+    const signalCounts = store.countEventsByKind(SIGNAL_KINDS, null);
+    const signalParts = SIGNAL_KINDS.map((kind) => `${kind} ${signalCounts[kind] ?? 0}`);
     checks.push({
       category: 'NightOwl Database',
       name: 'Database statistics',
       status: 'ok',
-      message: `${eventCount} events recorded, ${failures.total} failures recorded`,
+      message: `${eventCount} events recorded, ${failures.total} failures recorded (${reportable} reportable)`,
+    });
+    checks.push({
+      category: 'NightOwl Database',
+      name: 'Signals readiness',
+      status: 'ok',
+      message: `Signals: ${signalParts.join(', ')}`,
     });
     if (reportable === 0) {
       checks.push({
@@ -599,7 +677,8 @@ export function createDoctorCommand(deps: DoctorDeps = defaultDoctorDeps): Comma
       description: [
         'Diagnoses system requirements, Git repository status, Claude Code hooks,',
         'multi-agent ingest configs by maturity (verified / best-effort / manual),',
-        'Git hooks, and local SQLite database health.',
+        'Git hook authenticity (commands + execute bit on POSIX), monorepo workspace',
+        'discovery when configured, and report readiness (failures + CI/PR/revert signals).',
       ],
       options: [
         ['--strict', 'Exit with code 1 if any warnings or failures are detected.'],
@@ -637,6 +716,9 @@ export function createDoctorCommand(deps: DoctorDeps = defaultDoctorDeps): Comma
 
       const hookChecks = await checkHooks(deps, root);
       allChecks.push(...hookChecks);
+
+      const workspaceChecks = await checkWorkspace(root);
+      allChecks.push(...workspaceChecks);
 
       const storageChecks = await checkStorage(deps, root);
       allChecks.push(...storageChecks);

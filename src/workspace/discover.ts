@@ -1,4 +1,4 @@
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { access, readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Workspace } from './types.js';
 
@@ -106,6 +106,18 @@ async function packageName(root: string, rel: string): Promise<string | null> {
   if (typeof pkg !== 'object' || pkg === null) return null;
   const name = (pkg as { name?: unknown }).name;
   return typeof name === 'string' && name.length > 0 ? name : null;
+}
+
+/** True when package.json has non-empty workspace patterns or `pnpm-workspace.yaml` exists. */
+export async function hasWorkspaceConfig(root: string): Promise<boolean> {
+  const rootPkg = await readJson(join(root, 'package.json'));
+  if (workspacesFromPackageJson(rootPkg).length > 0) return true;
+  try {
+    await access(join(root, 'pnpm-workspace.yaml'));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Discover JS/TS workspace package roots under a git/project root. */
