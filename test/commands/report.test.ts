@@ -52,7 +52,7 @@ describe('nightowl report', () => {
       { module: 'src', failures: 2 },
       { module: '(root)', failures: 1 },
     ]);
-    expect(all.signals).toEqual({ ci_fail: 0, pr_review: 0 });
+    expect(all.signals).toEqual({ ci_fail: 0, pr_review: 0, revert: 0 });
     const recent = JSON.parse((await run(['--json', '--since', '2026-11-01'])).out);
     expect(recent.total).toBe(2);
     expect(recent.since).toBe('2026-11-01T00:00:00.000Z');
@@ -76,11 +76,18 @@ describe('nightowl report', () => {
       payload: { body: 'nit' },
       createdAt: '2026-11-04T00:00:00.000Z',
     });
+    store.insertEvent({
+      source: 'git',
+      kind: 'revert',
+      dedupeKey: 'revert:a:b',
+      payload: { reverted_commit_sha: 'a', revert_commit_sha: 'b', failure_ids: [1] },
+      createdAt: '2026-11-04T00:00:00.000Z',
+    });
     store.close();
     const json = JSON.parse((await run(['--json'])).out);
     expect(json.total).toBe(0);
-    expect(json.signals).toEqual({ ci_fail: 1, pr_review: 1 });
-    expect((await run()).out).toContain('Signals (events, not failures): ci-fail 1, pr-review 1');
+    expect(json.signals).toEqual({ ci_fail: 1, pr_review: 1, revert: 1 });
+    expect((await run()).out).toContain('Signals (events, not failures): ci-fail 1, pr-review 1, revert 1');
   });
 
   it('says when nothing is recorded yet', async () => {

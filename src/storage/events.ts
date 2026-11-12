@@ -4,7 +4,7 @@ import { rollbackQuietly } from './migrations.js';
 
 export type EventSource = 'agent-hook' | 'git' | 'ci' | 'pr';
 
-export const SIGNAL_KINDS = Object.freeze(['ci-fail', 'pr-review'] as const);
+export const SIGNAL_KINDS = Object.freeze(['ci-fail', 'pr-review', 'revert'] as const);
 export type SignalKind = (typeof SIGNAL_KINDS)[number];
 
 export interface NewEvent {

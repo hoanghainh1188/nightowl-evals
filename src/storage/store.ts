@@ -71,6 +71,7 @@ import {
   type UpsertRuleApplicationInput,
   upsertRuleApplication,
 } from './rule-applications.js';
+import { mapFailureIdsByCommitSha } from './failure-commits.js';
 import { findProjectRoot } from './project-root.js';
 import { loadSqlite } from './sqlite.js';
 
@@ -104,6 +105,7 @@ export interface Store {
   readonly isFeedbackFor: (editId: number, feedbackId: number, filePath: string) => boolean;
   readonly attachChecks: (commitSha: string, attachments: readonly Attachment[]) => number;
   readonly countFailures: () => FailureCounts;
+  readonly mapFailureIdsByCommitSha: () => ReadonlyMap<string, readonly number[]>;
   readonly listFailuresToClassify: (limit: number, redo: boolean) => readonly FailureToClassify[];
   readonly saveClassification: (failureId: number, value: SavedClassification) => void;
   readonly recordClassifyError: (failureId: number, error: string) => void;
@@ -202,6 +204,7 @@ function storeApi(db: import('node:sqlite').DatabaseSync, root: string): Store {
     isFeedbackFor: (editId: number, feedbackId: number, filePath: string) => isFeedbackFor(db, editId, feedbackId, filePath),
     attachChecks: (commitSha: string, attachments: readonly Attachment[]) => attachChecks(db, commitSha, attachments),
     countFailures: () => countFailures(db),
+    mapFailureIdsByCommitSha: () => mapFailureIdsByCommitSha(db),
     listFailuresToClassify: (limit: number, redo: boolean) => listFailuresToClassify(db, limit, redo),
     saveClassification: (failureId: number, value: SavedClassification) => saveClassification(db, failureId, value),
     recordClassifyError: (failureId: number, error: string) => recordClassifyError(db, failureId, error),

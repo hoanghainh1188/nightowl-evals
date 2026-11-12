@@ -25,7 +25,7 @@ function sampleReport(overrides: Partial<Report> = {}): Report {
       { module: 'src/cli', failures: 1 },
     ],
     byWeek: [{ week: '2026-W45', failures: 1, checked: 4, rate: 0.25, recorded: 3 }],
-    signals: { ciFail: 2, prReview: 1 },
+    signals: { ciFail: 2, prReview: 1, revert: 4 },
     noise: { reviewRate: 0.5, autoNoise: 1, sample: { confirmed: 1, dismissed: 1 } },
     clusters: [
       {
@@ -59,6 +59,8 @@ describe('formatDashboardHtml', () => {
     expect(html).toContain('Auto-noise failures');
     expect(html).toContain('>1<');
     expect(html).toContain('Top clusters');
+    expect(html).toContain('Signals');
+    expect(html).toContain('revert 4');
     expect(html).not.toMatch(/https?:\/\//);
   });
 

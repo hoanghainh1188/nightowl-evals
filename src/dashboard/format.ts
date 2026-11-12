@@ -55,7 +55,7 @@ export function formatDashboardHtml(report: Report): string {
     parts.push(`<li><strong>Dismissed (not counted)</strong>: ${report.dismissed}</li>`);
     parts.push(`<li><strong>${escapeHtml(rateLine(report.changedRate))}</strong></li>`);
     parts.push(
-      `<li><strong>Signals</strong>: ci-fail ${report.signals.ciFail}, pr-review ${report.signals.prReview}</li>`,
+      `<li><strong>Signals</strong>: ci-fail ${report.signals.ciFail}, pr-review ${report.signals.prReview}, revert ${report.signals.revert}</li>`,
     );
     const noiseRate =
       report.noise.reviewRate === null ? 'n/a' : `${Math.round(report.noise.reviewRate * 100)}%`;

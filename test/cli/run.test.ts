@@ -32,6 +32,7 @@ describe('run', () => {
       'export',
       'ingest-ci',
       'ingest-pr',
+      'ingest-revert',
       'suggest-rules',
       'suggest-regressions',
       'rule-impact',

@@ -37,7 +37,7 @@ export function formatText(report: Report): string {
   const since = report.since === null ? '' : ` since ${report.since.slice(0, 10)}`;
   const plural = report.total === 1 ? 'failure' : 'failures';
   const header = `NightOwl report${since}: ${report.total} ${plural} (${report.unclassified} unclassified, ${report.dismissed} dismissed not counted)`;
-  const signalsLine = `Signals (events, not failures): ci-fail ${report.signals.ciFail}, pr-review ${report.signals.prReview}`;
+  const signalsLine = `Signals (events, not failures): ci-fail ${report.signals.ciFail}, pr-review ${report.signals.prReview}, revert ${report.signals.revert}`;
   const noiseRate =
     report.noise.reviewRate === null ? 'n/a' : `${Math.round(report.noise.reviewRate * 100)}%`;
   const noiseLine = `Noise estimate: review-dismissed ${noiseRate} (${report.noise.sample.dismissed}/${report.noise.sample.confirmed + report.noise.sample.dismissed} reviewed), auto-noise ${report.noise.autoNoise}`;
@@ -101,7 +101,7 @@ export function formatJson(report: Report): string {
       agents: report.agents,
       by_module: report.byModule,
       by_week: report.byWeek.map((w) => ({ week: w.week, failures: w.recorded, checked: w.checked, changed: w.failures, rate: w.rate })),
-      signals: { ci_fail: report.signals.ciFail, pr_review: report.signals.prReview },
+      signals: { ci_fail: report.signals.ciFail, pr_review: report.signals.prReview, revert: report.signals.revert },
       noise: {
         review_rate: report.noise.reviewRate,
         auto_noise: report.noise.autoNoise,
