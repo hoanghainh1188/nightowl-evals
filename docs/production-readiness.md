@@ -1,8 +1,8 @@
 # Kế Hoạch Chuẩn Bị Cho Sản Phẩm Production-Ready (Production Readiness Roadmap)
 
-Tài liệu này ghi mức độ sẵn sàng kỹ thuật của **NightOwl Evals** (`@hoanghainh/nightowl-evals`) sau khi hoàn thành lộ trình Production-Ready gốc (1–17) và các vòng ideation **v0.3–v0.5** (ship `0.5.0` / `0.5.1`). Phạm vi vẫn **open-core / local-first**.
+Tài liệu này ghi mức độ sẵn sàng kỹ thuật của **NightOwl Evals** (`@hoanghainh/nightowl-evals`) sau Production-Ready gốc (1–17) và ideation **v0.3–v0.6 Core** (ship `0.5.0` / `0.5.1` / `0.6.0`). Phạm vi vẫn **open-core / local-first**.
 
-Hướng tiếp theo: [`v0.6-roadmap-ideas.md`](v0.6-roadmap-ideas.md). Lịch sử v0.5: [`v0.5-roadmap-ideas.md`](v0.5-roadmap-ideas.md).
+Hướng tiếp theo: Secondary v0.6 (#44–47) trong [`v0.6-roadmap-ideas.md`](v0.6-roadmap-ideas.md). Lịch sử v0.5: [`v0.5-roadmap-ideas.md`](v0.5-roadmap-ideas.md).
 
 ---
 
@@ -17,7 +17,7 @@ Hướng tiếp theo: [`v0.6-roadmap-ideas.md`](v0.6-roadmap-ideas.md). Lịch s
 | **5. Classification** | **85%** | Production | Claude CLI + tùy chọn API key; LLM opt-in. |
 | **6. Analytics & Review** | **90%** | Production | `report`/`--json`, dashboard, digest, clusters, TUI review, noise estimate. |
 | **7. Export & Eval** | **85%** | Production | JSONL + privacy; eval runner; eval A/B compare local. |
-| **8. Cross-Platform & CI** | **80%** | Near Production | macOS/Linux vững; Windows process kill đã fix — còn edge path/permission (xem v0.6). |
+| **8. Cross-Platform & CI** | **90%** | Production | macOS/Linux/Windows path + NTFS best-effort + hook execute-bit skip trên win32 (`#41`). |
 | **9. Team local surfaces** | **85%** | Production | Customer-report, Action CI gate, workspace-aware modules, rule-impact. |
 
 ---
@@ -26,18 +26,16 @@ Hướng tiếp theo: [`v0.6-roadmap-ideas.md`](v0.6-roadmap-ideas.md). Lịch s
 
 Các mục dưới đây **không** còn là gap Production-Ready gốc; chúng là hướng sâu hơn cho giai đoạn team local — chi tiết trong [`v0.6-roadmap-ideas.md`](v0.6-roadmap-ideas.md).
 
-### 2.1. DX máy team / Windows
-- Doctor sâu hơn: workspace discovery, độ thật của hook file, readiness tín hiệu/`report`.
-- Windows: path normalize, quyền NTFS, edge case còn lại ngoài kill process group.
+### 2.1. Đã ship trong `0.6.0` Core
+- Doctor team readiness / workspace / authenticity (`#40`).
+- Windows local DX: path normalize, NTFS best-effort, hook chmod skip (`#41`).
+- Vòng rule local siết hơn (`#42`); adapter best-effort sâu hơn + shape checks (`#43`).
 
-### 2.2. Tin cậy dữ liệu & vòng rule
-- Siết vòng `suggest-rules` → apply → `rule-impact` → digest/dashboard.
-- Adapter đa agent còn best-effort: fixture/doctor thật hơn.
-
-### 2.3. Quy mô & monorepo
+### 2.2. Quy mô & monorepo (Secondary còn mở)
 - `--workspace` MVP chỉ lọc failure; `changedRate` / checks / signals còn full-window (`#45`).
 - DB lớn: ngân sách query/index cho report/dashboard (`#47`).
 - Prune UX: dry-run dung lượng, retention profiles (`#44`).
+- Share-pack local (`#46`).
 - Gói share-out local đã redact, offline (`#46`).
 
 ---
@@ -55,14 +53,16 @@ Các mục dưới đây **không** còn là gap Production-Ready gốc; chúng 
 ├── add-eval-test-runner
 └── add-direct-api-classify
 
-Đã xong — Ideation v0.3 / v0.4 / v0.5 (xem roadmap docs)
+Đã xong — Ideation v0.3 / v0.4 / v0.5 / v0.6 Core (xem roadmap docs)
 ├── multi-agent, rules, regressions, TUI, Action, completion, …
 ├── CI/PR signals, rule-impact, customer-report, …
-└── dashboard, noise, clusters, revert, digest, privacy, eval A/B, workspace
+├── dashboard, noise, clusters, revert, digest, privacy, eval A/B, workspace
+└── doctor team, Windows DX, rule feedback loop, deeper multi-agent adapters (`0.6.0`)
 
-Tiếp theo — v0.6 (ideation 40+)
+Tiếp theo — v0.6 Secondary (#44–47)
 └── docs/v0.6-roadmap-ideas.md
 ```
+
 
 ### Bảng Change Production-Ready gốc (lịch sử)
 
