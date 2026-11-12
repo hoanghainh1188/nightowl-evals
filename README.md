@@ -40,6 +40,7 @@
     - [`nightowl classify`](#nightowl-classify-opt-in)
     - [`nightowl export`](#nightowl-export)
     - [`nightowl eval`](#nightowl-eval-opt-in)
+    - [`nightowl eval-compare`](#nightowl-eval-compare)
   - [Shell completion](#4-shell-completion)
     - [`nightowl completion`](#nightowl-completion)
 - [CI/CD Quality Gate Integration](#cicd-quality-gate-integration)
@@ -530,17 +531,34 @@ Executes exported test cases against different AI models to measure accuracy and
 
 ```bash
 nightowl eval [--yes] [--input <file>] [--model <name>] [--limit <1-100>] \
-  [--test-command <cmd>] [--test-timeout <1-600>] [--require-tests]
+  [--test-command <cmd>] [--test-timeout <1-600>] [--require-tests] \
+  [--label <id>] [--report md|html] [--baseline <file>] [-o <file>]
 ```
 
 - `--model <name>`: Models to benchmark (repeatable, defaults to `haiku` and `sonnet`).
 - `--test-command <cmd>`: **Execution verifier**: writes the generated output to disk, runs your actual test runner (e.g., `npm test`, `pytest`), and restores the file.
 - `--require-tests`: Declares a test case passing **only** if the test runner exits with code `0`.
+- `--label <id>`: Tag the run in `.nightowl/runs/` metadata (prompt/rules experiment label).
+- `--report md|html`: After `--yes`, also emit a local A/B compare report (Markdown to stdout by default; HTML to a file).
+- `--baseline <file>`: With `--report`, compare against a prior results JSONL.
+- `-o, --output <file>`: With `--report`, write the report to this path.
 
 **Scoring Metrics:**
 - **coverage**: Fraction of developer-corrected lines reproduced.
 - **repeat**: Fraction of defective AI code repeated.
 - **score** = `coverage × (1 - repeat)` (score ≥ 0.5 is passing).
+
+#### `nightowl eval-compare`
+
+Builds a **local A/B report** from existing `.nightowl/runs/*.jsonl` files — **no model calls**.
+
+```bash
+nightowl eval-compare --input <run.jsonl> [--baseline <run.jsonl>] \
+  [--format md|html] [-o <file>]
+```
+
+- Markdown prints to stdout by default; HTML writes a self-contained file (default `.nightowl/eval-compare.html` when format is html and `-o` is omitted).
+- Optional `--baseline` adds per-model deltas. Annotates latest `rule-impact` mark when the store is available.
 
 ### 4. Shell completion
 
