@@ -150,6 +150,7 @@ export function createInitCommand(deps: InitDeps = defaultDeps): Command {
         '  .git/hooks/post-commit       runs nightowl postcommit',
         `  .gitignore                   ${NIGHTOWL_IGNORE} and, if needed, ${PERSONAL_SETTINGS}`,
         'and creates the local database in .nightowl/. Safe to run again.',
+        'On Windows, Git hooks are installed without requiring a POSIX execute bit; .nightowl mode is best-effort on NTFS.',
         "Undo with 'nightowl uninstall'.",
       ],
       options: [

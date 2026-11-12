@@ -669,10 +669,12 @@ NightOwl is built from the ground up for strict enterprise security:
 | :--- | :--- |
 | **Zero Telemetry** | 100% offline-first. No tracking code, no third-party HTTP calls, no analytics. |
 | **Local SQLite** | Stored entirely inside `.nightowl/nightowl.db` using Node.js native `node:sqlite`. |
-| **Strict File Permissions** | Directory initialized with mode `0700` (POSIX); exports and runs stored with `0600`. |
+| **Strict File Permissions** | Directory initialized with mode `0700` (POSIX); exports and runs stored with `0600`. On Windows/NTFS, mode bits are best-effort (symlink `.nightowl/` is still refused). |
 | **Secret Blacklist** | Files matching `.env*`, `*credential*`, `*token*`, `*.pem`, `*.key` are never snapshotted. |
 | **Inline Secret Scanner** | Scans code diffs for AWS keys, GitHub tokens, Anthropic/OpenAI keys, and private keys before recording. |
 | **Fail-Open Hooks** | 2-second timeout; always returns exit code `0`; will never disrupt normal developer workflows. |
+
+**Windows local DX:** Repo-relative paths with `\` are normalized to `/` for module and workspace labels. `nightowl init` installs Git hooks without requiring a POSIX execute bit; `nightowl doctor` skips execute-bit warnings on Windows. WSL is optional, not required.
 
 ---
 

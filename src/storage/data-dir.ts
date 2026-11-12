@@ -20,15 +20,28 @@ function createPrivateDir(dir: string): void {
   }
 }
 
-// Creates <root>/.nightowl readable only by the current user. Refuses a symlink, so a
-// cloned repository cannot redirect NightOwl's data somewhere else.
-export function ensureDataDir(root: string): string {
+function applyPrivateMode(dir: string, platform: NodeJS.Platform): void {
+  try {
+    chmodSync(dir, PRIVATE_MODE);
+  } catch {
+    if (platform === 'win32') return;
+    throw new DataDirError(`could not set private mode on ${dir}`);
+  }
+  if (platform === 'win32') return;
+  const info = lstatSync(dir);
+  if ((info.mode & 0o777) !== PRIVATE_MODE) {
+    chmodSync(dir, PRIVATE_MODE);
+  }
+}
+
+// Creates <root>/.nightowl readable only by the current user (POSIX 0700).
+// On win32, chmod is best-effort: NTFS may not reflect 0700; still refuse symlinks.
+export function ensureDataDir(root: string, platform: NodeJS.Platform = process.platform): string {
   const dir = join(root, DATA_DIR);
   createPrivateDir(dir);
   const info = lstatSync(dir);
   if (info.isSymbolicLink()) throw new DataDirError(`${dir} is a symlink; refusing to use it`);
   if (!info.isDirectory()) throw new DataDirError(`${dir} is not a directory`);
-  // mkdir's mode is reduced by the umask, and older directories may be wider.
-  if ((info.mode & 0o777) !== PRIVATE_MODE) chmodSync(dir, PRIVATE_MODE);
+  applyPrivateMode(dir, platform);
   return dir;
 }

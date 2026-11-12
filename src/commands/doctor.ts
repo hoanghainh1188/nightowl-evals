@@ -677,8 +677,9 @@ export function createDoctorCommand(deps: DoctorDeps = defaultDoctorDeps): Comma
       description: [
         'Diagnoses system requirements, Git repository status, Claude Code hooks,',
         'multi-agent ingest configs by maturity (verified / best-effort / manual),',
-        'Git hook authenticity (commands + execute bit on POSIX), monorepo workspace',
+        'Git hook authenticity (commands + execute bit on POSIX; skipped on Windows), monorepo workspace',
         'discovery when configured, and report readiness (failures + CI/PR/revert signals).',
+        'Paths with \\ are normalized like / for module/workspace checks.',
       ],
       options: [
         ['--strict', 'Exit with code 1 if any warnings or failures are detected.'],

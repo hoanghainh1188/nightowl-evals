@@ -1,18 +1,19 @@
 import { moduleOf } from '../report/module.js';
+import { normalizeRepoPath } from '../shared/repo-path.js';
 import type { Workspace } from './types.js';
-
-function normalizePath(filePath: string): string {
-  return filePath.replace(/\\/g, '/').replace(/^\.\/+/, '');
-}
 
 /** Longest-prefix workspace root that contains the file, or null. */
 export function findNearestWorkspace(filePath: string, workspaces: readonly Workspace[]): Workspace | null {
-  const normalized = normalizePath(filePath);
+  const normalized = normalizeRepoPath(filePath);
   let best: Workspace | null = null;
+  let bestLen = -1;
   for (const ws of workspaces) {
-    const root = ws.path;
+    const root = normalizeRepoPath(ws.path);
     if (normalized === root || normalized.startsWith(`${root}/`)) {
-      if (best === null || ws.path.length > best.path.length) best = ws;
+      if (root.length > bestLen) {
+        best = ws;
+        bestLen = root.length;
+      }
     }
   }
   return best;

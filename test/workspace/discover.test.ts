@@ -71,6 +71,8 @@ describe('discoverWorkspaces + moduleLabel', () => {
     expect(moduleLabel('packages/ui/src/Button.tsx', 1, ws)).toBe('@acme/ui');
     expect(moduleLabel('README.md', 2, ws)).toBe('(root)');
     expect(findNearestWorkspace('packages/api/src/x.ts', ws)?.path).toBe('packages/api');
+    expect(findNearestWorkspace('packages\\ui\\src\\Button.tsx', ws)?.path).toBe('packages/ui');
+    expect(moduleLabel('packages\\ui\\src\\Button.tsx', 1, ws)).toBe('@acme/ui');
   });
 
   it('discovers pnpm-workspace.yaml', async () => {

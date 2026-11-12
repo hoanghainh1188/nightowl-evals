@@ -67,7 +67,11 @@ async function locateHook(root: string, hook: GitHookSpec): Promise<{ readonly p
   return { path };
 }
 
-export async function installGitHook(root: string, hook: GitHookSpec): Promise<InstallResult> {
+export async function installGitHook(
+  root: string,
+  hook: GitHookSpec,
+  platform: NodeJS.Platform = process.platform,
+): Promise<InstallResult> {
   const located = await locateHook(root, hook);
   if (!('path' in located)) return located;
   const { path } = located;
@@ -78,7 +82,8 @@ export async function installGitHook(root: string, hook: GitHookSpec): Promise<I
   if (edit.status === 'created') {
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, edit.content, { mode: 0o755 });
-    await chmod(path, 0o755);
+    // Execute bit is POSIX; on win32 Git does not require it the same way.
+    if (platform !== 'win32') await chmod(path, 0o755);
   } else {
     // Rewrite in place so the hook keeps its existing permissions.
     await writeFile(path, edit.content);
