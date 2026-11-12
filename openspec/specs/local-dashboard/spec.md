@@ -97,3 +97,10 @@ Khi bật cờ làm thô path đã document, HTML `nightowl dashboard` SHALL coa
 #### Scenario: Coarsen trên HTML
 - **WHEN** chạy dashboard với coarsen path bật
 - **THEN** file HTML không chứa ít nhất một path sâu đầy đủ đã có trong dữ liệu nếu coarsen áp dụng; thoát 0
+
+### Requirement: Dashboard tôn trọng workspace
+HTML `nightowl dashboard` SHALL dùng cùng quy tắc module/workspace như `report` khi có discovery, và SHALL chấp nhận `--workspace`. SHALL NOT lộ tên/email developer.
+
+#### Scenario: Filter workspace trên dashboard
+- **WHEN** chạy dashboard với `--workspace` hợp lệ trên monorepo fixture
+- **THEN** HTML module section chỉ phản ánh workspace đó; mã thoát 0

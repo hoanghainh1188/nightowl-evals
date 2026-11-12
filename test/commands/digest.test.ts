@@ -36,6 +36,13 @@ describe('nightowl digest', () => {
     expect(result.err).toMatch(/since/i);
   });
 
+  it('rejects unknown --workspace', async () => {
+    await seed(repo.path, [{ filePath: 'src/a.ts' }]);
+    const result = await run(['--workspace', 'missing-pkg']);
+    expect(result.code).toBe(1);
+    expect(result.err).toMatch(/unknown --workspace/);
+  });
+
   it('prints markdown with totals and flagged, and does not change the DB', async () => {
     await seed(repo.path, [
       { filePath: 'src/a.ts', category: 'logic', status: 'flagged', createdAt: '2026-11-10T00:00:00.000Z' },
