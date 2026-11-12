@@ -85,10 +85,13 @@ describe('nightowl doctor', () => {
         return {
           pragma: (name: string) => (name === 'integrity_check' ? 'ok' : CURRENT_SCHEMA_VERSION),
           countFailures: () => ({ total: 0, byStatus: {} }),
+          countEventsByKind: () => ({ 'ci-fail': 0, 'pr-review': 0, revert: 0 }),
           listEvents: () => [],
           close: () => {},
         } as unknown as Store;
       },
+      platform: () => 'linux' as NodeJS.Platform,
+      isExecutable: async () => true,
       ...overrides,
     };
   }
@@ -106,6 +109,8 @@ describe('nightowl doctor', () => {
     expect(cmd.help).toContain('Usage: nightowl doctor');
     expect(cmd.help).toContain('--strict');
     expect(cmd.help).toMatch(/multi-agent|maturity/i);
+    expect(cmd.help).toMatch(/workspace|monorepo/i);
+    expect(cmd.help).toMatch(/readiness|signals/i);
   });
 
   it('rejects invalid arguments with exit code 1', async () => {
@@ -158,13 +163,15 @@ describe('nightowl doctor', () => {
         ({
           pragma: (name: string) => (name === 'integrity_check' ? 'ok' : CURRENT_SCHEMA_VERSION),
           countFailures: () => ({ total: 2, byStatus: { flagged: 2 } }),
+          countEventsByKind: () => ({ 'ci-fail': 0, 'pr-review': 0, revert: 0 }),
           listEvents: () => [{}, {}],
           close: () => {},
         }) as unknown as Store,
     });
     const { code, out } = await runDoctor([], deps);
     expect(code).toBe(0);
-    expect(out).toContain('2 failures recorded');
+    expect(out).toContain('2 failures recorded (2 reportable)');
+    expect(out).toContain('Signals: ci-fail 0, pr-review 0, revert 0');
     expect(out).not.toContain('No failures recorded yet — report/CI gate will have little signal');
   });
 
@@ -334,6 +341,7 @@ describe('nightowl doctor', () => {
         ({
           pragma: (name: string) => (name === 'integrity_check' ? 'row 1: page 3 is corrupted' : CURRENT_SCHEMA_VERSION),
           countFailures: () => ({ total: 0, byStatus: {} }),
+          countEventsByKind: () => ({ 'ci-fail': 0, 'pr-review': 0, revert: 0 }),
           listEvents: () => [],
           close: () => {},
         }) as unknown as Store,
@@ -354,6 +362,7 @@ describe('nightowl doctor', () => {
         ({
           pragma: (name: string) => (name === 'integrity_check' ? 'ok' : 1),
           countFailures: () => ({ total: 0, byStatus: {} }),
+          countEventsByKind: () => ({ 'ci-fail': 0, 'pr-review': 0, revert: 0 }),
           listEvents: () => [],
           close: () => {},
         }) as unknown as Store,
@@ -374,6 +383,7 @@ describe('nightowl doctor', () => {
         ({
           pragma: (name: string) => (name === 'integrity_check' ? 'ok' : 999),
           countFailures: () => ({ total: 0, byStatus: {} }),
+          countEventsByKind: () => ({ 'ci-fail': 0, 'pr-review': 0, revert: 0 }),
           listEvents: () => [],
           close: () => {},
         }) as unknown as Store,
@@ -438,5 +448,74 @@ describe('nightowl doctor', () => {
     const { out } = await runDoctor([], deps);
     expect(out).toContain('✓ pre-commit (lefthook) runs \'nightowl precommit\'');
     expect(out).toContain('✓ post-commit (lefthook) runs \'nightowl postcommit\'');
+  });
+
+  it('warns when workspace config is present but discovery is empty', async () => {
+    await writeFiles(repo.path, {
+      'package.json': JSON.stringify({ name: 'root', workspaces: ['packages/*'] }),
+    });
+    const { code, out } = await runDoctor();
+    expect(code).toBe(0);
+    expect(out).toContain('Workspace');
+    expect(out).toContain('Workspace config present but no packages discovered');
+  });
+
+  it('reports discovered workspace packages as ok', async () => {
+    await writeFiles(repo.path, {
+      'package.json': JSON.stringify({ name: 'root', workspaces: ['packages/*'] }),
+      'packages/ui/package.json': JSON.stringify({ name: '@acme/ui' }),
+    });
+    const { code, out } = await runDoctor();
+    expect(code).toBe(0);
+    expect(out).toContain('Discovered 1 workspace package');
+  });
+
+  it('fails --strict when workspace discovery warns', async () => {
+    await writeFiles(repo.path, {
+      'package.json': JSON.stringify({ name: 'root', workspaces: ['packages/*'] }),
+    });
+    const { code, out } = await runDoctor(['--strict']);
+    expect(code).toBe(1);
+    expect(out).toContain('no packages discovered');
+  });
+
+  it('warns when NightOwl git hooks are not executable on POSIX', async () => {
+    await writeFiles(repo.path, { [`${DATA_DIR}/${DB_FILE}`]: 'sqlite database' });
+    const deps = createTestDeps({
+      isExecutable: async () => false,
+      platform: () => 'linux',
+    });
+    const { code, out } = await runDoctor([], deps);
+    expect(code).toBe(0);
+    expect(out).toContain('.git/hooks/pre-commit is not executable');
+    expect(out).toContain('chmod +x');
+  });
+
+  it('skips execute-bit checks on win32', async () => {
+    await writeFiles(repo.path, { [`${DATA_DIR}/${DB_FILE}`]: 'sqlite database' });
+    const deps = createTestDeps({
+      isExecutable: async () => false,
+      platform: () => 'win32',
+    });
+    const { out } = await runDoctor([], deps);
+    expect(out).not.toContain('is not executable');
+  });
+
+  it('summarizes signal counts in readiness', async () => {
+    await writeFiles(repo.path, { [`${DATA_DIR}/${DB_FILE}`]: 'sqlite database' });
+    const deps = createTestDeps({
+      openStore: async () =>
+        ({
+          pragma: (name: string) => (name === 'integrity_check' ? 'ok' : CURRENT_SCHEMA_VERSION),
+          countFailures: () => ({ total: 1, byStatus: { flagged: 1 } }),
+          countEventsByKind: () => ({ 'ci-fail': 2, 'pr-review': 1, revert: 0 }),
+          listEvents: () => [{}],
+          close: () => {},
+        }) as unknown as Store,
+    });
+    const { code, out } = await runDoctor([], deps);
+    expect(code).toBe(0);
+    expect(out).toContain('1 failures recorded (1 reportable)');
+    expect(out).toContain('Signals: ci-fail 2, pr-review 1, revert 0');
   });
 });

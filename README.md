@@ -245,12 +245,13 @@ nightowl init [--shared] [--agents <list>]
 Diagnoses local environment prerequisites and validates hook installations.
 
 ```bash
-nightowl doctor [--strict] [--json]
+nightowl doctor [--strict]
 ```
 
 - `--strict`: Exits with code `1` if any warnings or missing hooks are detected.
-- `--json`: Outputs diagnostic status as a machine-readable JSON structure.
-- Warns (**Report readiness**) when the DB is healthy but has no non-dismissed failures yet — `report`/CI gate will have little signal; with `--strict` that warning also exits `1`.
+- Checks monorepo **workspace** discovery when `package.json` workspaces / `pnpm-workspace.yaml` is present; warns if config exists but no packages resolve.
+- Warns when NightOwl git hooks are not executable (POSIX); skips that check on Windows.
+- Summarizes **report readiness**: reportable (non-dismissed) failures plus CI/PR/revert signal counts; warns when there are no reportable failures yet.
 
 #### `nightowl uninstall`
 
