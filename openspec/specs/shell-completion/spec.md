@@ -79,3 +79,10 @@ Catalog completion SHALL gồm lệnh `digest` và các flag dài đã document 
 #### Scenario: Catalog có digest
 - **WHEN** dựng catalog completion từ registry lệnh
 - **THEN** có mục `digest` với danh sách flag không rỗng gồm ít nhất một flag thời gian/định dạng
+
+### Requirement: Completion flag privacy
+Catalog completion SHALL gồm các flag privacy mới trên `export` (ít nhất `--redact-paths` và `--privacy-dry-run` hoặc tên đã document), và flag coarsen path trên các lệnh báo cáo nếu chúng hỗ trợ.
+
+#### Scenario: Catalog export có redact-paths
+- **WHEN** dựng catalog completion
+- **THEN** entry `export` gồm flag privacy đã document

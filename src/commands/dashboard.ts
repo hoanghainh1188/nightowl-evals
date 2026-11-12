@@ -7,6 +7,7 @@ import { renderCommandHelp } from '../cli/help.js';
 import { groupFailures } from '../cluster/group.js';
 import { formatDashboardHtml } from '../dashboard/format.js';
 import { openLocalPath } from '../dashboard/open-local.js';
+import { redactPathsInReport } from '../privacy/index.js';
 import { buildReport } from '../report/build.js';
 import { TOP_CLUSTERS } from '../report/format.js';
 import { parseDateOption } from '../shared/date-option.js';
@@ -31,6 +32,7 @@ interface Options {
   readonly output: string | null;
   readonly open: boolean;
   readonly agents: readonly string[] | null;
+  readonly redactPaths: boolean;
 }
 
 function parseOptions(args: readonly string[]): Options | string {
@@ -44,6 +46,7 @@ function parseOptions(args: readonly string[]): Options | string {
         output: { type: 'string', short: 'o' },
         open: { type: 'boolean', default: false },
         agent: { type: 'string', multiple: true },
+        'redact-paths': { type: 'boolean' },
       },
       strict: true,
       allowPositionals: false,
@@ -71,7 +74,7 @@ function parseOptions(args: readonly string[]): Options | string {
   }
   const agents = agentFlags.length === 0 ? null : agentFlags;
 
-  return { since, depth, output, open: values.open === true, agents };
+  return { since, depth, output, open: values.open === true, agents, redactPaths: values['redact-paths'] === true };
 }
 
 export function createDashboardCommand(deps: DashboardDeps = { cwd: () => process.cwd(), now: () => new Date() }): Command {
@@ -93,6 +96,7 @@ export function createDashboardCommand(deps: DashboardDeps = { cwd: () => proces
         ['--agent <id>', 'Only include this agent (repeatable)'],
         ['-o, --output <file>', `Write HTML to this path (default: ${DEFAULT_DASHBOARD_RELATIVE})`],
         ['--open', 'Open the HTML file with the OS default browser (file://, no HTTP server)'],
+        ['--redact-paths', 'Coarsen module/path labels in the HTML (share-out)'],
       ],
     }),
     run: async (args, io) => {
@@ -117,7 +121,7 @@ export function createDashboardCommand(deps: DashboardDeps = { cwd: () => proces
           limit: TOP_CLUSTERS,
           excludeDismissed: true,
         });
-        const report = buildReport({
+        const built = buildReport({
           failures: store.countFailuresForReport(options.since, options.agents),
           checks: store.countChecksForReport(options.since, options.agents),
           depth: options.depth,
@@ -132,6 +136,7 @@ export function createDashboardCommand(deps: DashboardDeps = { cwd: () => proces
           autoNoise: store.countAutoNoiseFailures(options.since),
           clusters,
         });
+        const report = options.redactPaths ? redactPathsInReport(built) : built;
         const html = formatDashboardHtml(report);
         const write =
           deps.writeFile ??

@@ -20,6 +20,8 @@ import { loadStubHarness } from '../export/swe-bench-harness.js';
 import { resolveBaseCommit, resolveRepoName, toSweBenchInstance } from '../export/swe-bench.js';
 import { containsInlineSecret, isSensitivePath } from '../hooks/claude-code/sensitive.js';
 import { GitError, runGit } from '../hooks/git/run-git.js';
+import { formatPrivacyDryRun } from '../privacy/index.js';
+import { privatizeFailureExport, scanFailuresPrivacy } from '../privacy/export-case.js';
 import { UNCLASSIFIED } from '../report/build.js';
 import { isSymlink, writeFileAtomic } from '../setup/fs-utils.js';
 import { parseDateOption } from '../shared/date-option.js';
@@ -47,6 +49,8 @@ interface Options {
   readonly format: ExportFormat;
   // Absolute or cwd-relative path; used only for swe-bench harness fill.
   readonly regressionsDir: string | null;
+  readonly redactPaths: boolean;
+  readonly privacyDryRun: boolean;
 }
 
 function parseOptions(args: readonly string[]): Options | string {
@@ -61,6 +65,8 @@ function parseOptions(args: readonly string[]): Options | string {
         category: { type: 'string', multiple: true },
         format: { type: 'string' },
         'regressions-dir': { type: 'string' },
+        'redact-paths': { type: 'boolean' },
+        'privacy-dry-run': { type: 'boolean' },
       },
       strict: true,
       allowPositionals: false,
@@ -85,6 +91,8 @@ function parseOptions(args: readonly string[]): Options | string {
     categories: values.category ?? null,
     format: formatRaw,
     regressionsDir: values['regressions-dir'] ?? null,
+    redactPaths: values['redact-paths'] === true,
+    privacyDryRun: values['privacy-dry-run'] === true,
   };
 }
 
@@ -135,10 +143,13 @@ function fileBeforeFor(failure: FailureToExport, before: ReadonlyMap<string, str
 async function buildContent(store: Store, options: Options): Promise<{ content: string; count: number; sensitive: number }> {
   const prepared = await prepare(store, options);
   const { failures, before, sensitive } = prepared;
+  const privatized = failures.map((failure) =>
+    privatizeFailureExport(failure, fileBeforeFor(failure, before), options.redactPaths),
+  );
 
   if (options.format === 'jsonl') {
-    const lines = failures.map((failure) =>
-      JSON.stringify(toEvalCase(failure, evalId(failure), fileBeforeFor(failure, before))),
+    const lines = privatized.map(({ failure, fileBefore }) =>
+      JSON.stringify(toEvalCase(failure, evalId(failure), fileBefore)),
     );
     return { content: lines.map((line) => `${line}\n`).join(''), count: lines.length, sensitive };
   }
@@ -146,22 +157,19 @@ async function buildContent(store: Store, options: Options): Promise<{ content: 
   if (options.format === 'swe-bench') {
     const repo = await resolveRepoName(store.root);
     const lines: string[] = [];
-    for (const failure of failures) {
+    for (const { failure, fileBefore } of privatized) {
       const baseCommit = await resolveBaseCommit(store.root, failure.commitSha);
       const id = evalId(failure);
       const harness =
         options.regressionsDir === null
           ? null
           : await loadStubHarness(options.regressionsDir, id, store.root);
-      lines.push(
-        JSON.stringify(toSweBenchInstance(failure, fileBeforeFor(failure, before), repo, baseCommit, harness)),
-      );
+      lines.push(JSON.stringify(toSweBenchInstance(failure, fileBefore, repo, baseCommit, harness)));
     }
     return { content: lines.map((line) => `${line}\n`).join(''), count: lines.length, sensitive };
   }
 
-  const rows = failures.map((failure) => ({ failure, fileBefore: fileBeforeFor(failure, before) }));
-  return { content: toPromptfooYaml(rows), count: failures.length, sensitive };
+  return { content: toPromptfooYaml(privatized), count: privatized.length, sensitive };
 }
 
 async function isReplaceable(path: string, format: ExportFormat): Promise<boolean> {
@@ -243,6 +251,8 @@ export function createExportCommand(deps: ExportDeps = { cwd: () => process.cwd(
         'Writes one case per failure: prompt, file before, AI version and your version.',
         'Formats: jsonl (nightowl.eval/v1), swe-bench (compatible fields), promptfoo (YAML config).',
         'The file contains code from this project; keep it private.',
+        'Text fields are redacted for secrets/emails; use --redact-paths to coarsen file paths.',
+        '--privacy-dry-run reports redaction counts without writing an export file (never prints secret plaintext).',
       ],
       options: [
         ['--out <file>', `Where to write; - for stdout (default: ${DATA_DIR}/${EXPORT_DIR}/<format-file>)`],
@@ -254,6 +264,8 @@ export function createExportCommand(deps: ExportDeps = { cwd: () => process.cwd(
         ['--force', 'Overwrite a file that is not a NightOwl export'],
         ['--since <YYYY-MM-DD>', 'Only failures from this date on'],
         ['--category <name>', `Only this category; repeatable (${[...CATEGORY_NAMES].join(', ')})`],
+        ['--redact-paths', 'Coarsen file paths in the export (e.g. src/a/b.ts → src/**/b.ts)'],
+        ['--privacy-dry-run', 'Count privacy hits and skip writing the export file'],
       ],
     }),
     run: async (args, io) => {
@@ -281,6 +293,12 @@ export function createExportCommand(deps: ExportDeps = { cwd: () => process.cwd(
         return 1;
       }
       try {
+        if (options.privacyDryRun) {
+          const all = store.listFailuresToExport({ since: options.since, categories: options.categories });
+          const counts = scanFailuresPrivacy(all, options.redactPaths);
+          io.stderr(formatPrivacyDryRun(counts));
+          return 0;
+        }
         await write(await buildContent(store, options), options, store.root, cwd, io);
         return 0;
       } catch (error) {

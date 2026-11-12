@@ -300,6 +300,7 @@ nightowl customer-report --since 2026-11-01 --agent claude-code -o report.md
 | `--depth <1-5>` | Module folder depth (default: `2`) |
 | `--agent <id>` | Only include this agent (repeatable) |
 | `-o, --output <file>` | Write report to a file (creates parent directories; does not dump the full body to stdout) |
+| `--redact-paths` | Coarsen module/path labels for share-out (e.g. `src/hooks/git` → `src/**/git`) |
 
 #### `nightowl dashboard`
 
@@ -318,6 +319,7 @@ nightowl dashboard -o dist/ai-dashboard.html --agent claude-code --since 2026-11
 | `--agent <id>` | Only include this agent (repeatable) |
 | `-o, --output <file>` | Write HTML to this path (default: `.nightowl/dashboard.html`) |
 | `--open` | Open the file with the OS default browser (`file://`; does not start an HTTP server) |
+| `--redact-paths` | Coarsen module/path labels in the HTML for share-out |
 
 #### `nightowl digest`
 
@@ -336,6 +338,7 @@ nightowl digest --since 2026-11-01 --format html -o .nightowl/digest.html
 | `--agent <id>` | Only include this agent (repeatable) |
 | `--format <md\|html>` | Output format (default: `md`) |
 | `-o, --output <file>` | Write to a file (`html` default: `.nightowl/digest.html`) |
+| `--redact-paths` | Accepted for share-out consistency (no-op while digest has no path labels) |
 
 #### `nightowl ingest-ci`
 
@@ -509,14 +512,17 @@ Compiles recorded failures into evaluation datasets.
 
 ```bash
 nightowl export [--out <file>] [--format jsonl|swe-bench|promptfoo] \
-  [--regressions-dir <dir>] [--since <YYYY-MM-DD>] [--category <name>] [--force]
+  [--regressions-dir <dir>] [--since <YYYY-MM-DD>] [--category <name>] [--force] \
+  [--redact-paths] [--privacy-dry-run]
 ```
 
 - `--format jsonl` (default): `nightowl.eval/v1` JSONL → `.nightowl/export/evals.jsonl`.
 - `--format swe-bench`: best-effort SWE-bench-**compatible** JSONL (`instance_id`, `repo`, `base_commit`, `problem_statement`, `patch`, …). Without `--regressions-dir`, harness fields like `FAIL_TO_PASS` / `test_patch` stay empty. With `--regressions-dir` pointing at stubs from `suggest-regressions` (`{id}.test.ts` with the NightOwl marker), matching instances get `FAIL_TO_PASS` (relative stub path) and a `test_patch` that adds that stub. Still **not** the official SWE-bench dataset.
 - `--regressions-dir <dir>`: used for `--format swe-bench` only; directory must exist.
 - `--format promptfoo`: Promptfoo YAML config → `.nightowl/export/promptfooconfig.yaml` (replace the `echo` provider before running Promptfoo).
-- Files use mode `0600`. Export never calls the network.
+- `--redact-paths`: coarsen `file_path` values (e.g. `src/a/b.ts` → `src/**/b.ts`). Also available on `customer-report` / `dashboard` / `digest` for module labels.
+- `--privacy-dry-run`: print secret/email/path/skip counts on stderr and **do not** write an export file (never prints secret plaintext).
+- Text fields are redacted for secrets/emails on write. Files use mode `0600`. Export never calls the network.
 
 #### `nightowl eval` (opt-in)
 
