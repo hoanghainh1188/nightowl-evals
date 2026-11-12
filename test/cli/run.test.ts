@@ -30,6 +30,7 @@ describe('run', () => {
       'log',
       'report',
       'export',
+      'digest',
       'ingest-ci',
       'ingest-pr',
       'ingest-revert',

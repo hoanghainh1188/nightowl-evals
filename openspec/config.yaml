@@ -12,7 +12,7 @@ context: |
   - Grade AI, not people: never store or show developer names in reports.
   - Open-core only in this repo (CLI, hooks, SQLite, report/export). Team dashboard, advanced analytics, on-prem, and SaaS stay in private commercial repos.
   - Designs and tasks must cover macOS, Linux, and Windows unless a change explicitly scopes otherwise.
-  Roadmap status: ideation 1–35 Done (release v0.5.0; Core 32–35). Next: docs/v0.5-roadmap-ideas.md Secondary 36–39. See also docs/v0.3-roadmap-ideas.md and docs/v0.4-roadmap-ideas.md.
+  Roadmap status: ideation 1–36 Done (release v0.5.0; Core 32–35 + digest #36). Next: docs/v0.5-roadmap-ideas.md Secondary 37–39. See also docs/v0.3-roadmap-ideas.md and docs/v0.4-roadmap-ideas.md.
 
 rules:
   proposal:
