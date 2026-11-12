@@ -4,6 +4,7 @@ import { errorMessage } from '../cli/errors.js';
 import { renderCommandHelp } from '../cli/help.js';
 import { CATEGORIES } from '../classify/prompt.js';
 import { compareRuleImpact, DEFAULT_WINDOW_DAYS, formatImpactJson, formatImpactText } from '../impact/compare.js';
+import { ruleLoopNextStepsAfterMark } from '../impact/loop-hints.js';
 import { UNCLASSIFIED } from '../report/build.js';
 import { parseDateOption } from '../shared/date-option.js';
 import { printable } from '../shared/printable.js';
@@ -52,6 +53,7 @@ export function createRuleImpactCommand(deps: RuleImpactDeps = { cwd: () => proc
         'Marks a rule as applied with a local baseline snapshot, or compares failure counts',
         'in equal-length windows before and after apply. Offline; no LLM; does not change report CI gate.',
         'Default (no mark): show impact for the latest applied label (or --label / --id).',
+        'Feedback loop: suggest-rules (--write/--output) → rule-impact mark --label <id> → show / digest / dashboard.',
       ],
       options: [
         ['mark', 'Subcommand: record an applied rule + baseline'],
@@ -153,6 +155,7 @@ export function createRuleImpactCommand(deps: RuleImpactDeps = { cwd: () => proc
           io.stdout(
             `Marked rule "${saved.label}" applied_at=${saved.appliedAt} baseline_total=${saved.baseline.total} (id=${saved.id})\n`,
           );
+          io.stderr(ruleLoopNextStepsAfterMark());
           return 0;
         } catch (error) {
           io.stderr(`nightowl rule-impact: ${printable(errorMessage(error))}\n`);

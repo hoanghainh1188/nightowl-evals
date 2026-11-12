@@ -41,3 +41,10 @@ Mark lặp với cùng khóa tự nhiên đã document (ví dụ cùng `label` +
 #### Scenario: Mark cùng label trong cùng ngày (theo design dedupe)
 - **WHEN** mark hai lần với cùng `--label` theo quy tắc dedupe đã document
 - **THEN** số bản ghi tương ứng khóa đó không tăng gấp đôi sau lần hai (hoặc lần hai thoát ≠ 0 với thông báo)
+
+### Requirement: Gợi ý xem impact sau mark
+Khi `nightowl rule-impact mark` ghi bản rule-applied thành công, lệnh SHALL in trên stderr (hoặc stdout text rõ ràng đã document) gợi ý bước tiếp local: chạy lệnh xem impact (mặc định show) và/hoặc `digest` / `dashboard` để thấy tóm tắt. Lệnh SHALL NOT gọi mạng/LLM và SHALL NOT đổi hành vi `report` / CI gate.
+
+#### Scenario: Mark thành công kèm next-step
+- **WHEN** repo đã init và chạy `nightowl rule-impact mark --label convention-naming` thành công
+- **THEN** output/stderr nhắc xem impact (ví dụ chạy `nightowl rule-impact` hoặc digest/dashboard); thoát 0; store có bản applied tương ứng label

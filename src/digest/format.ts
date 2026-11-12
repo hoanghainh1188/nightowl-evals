@@ -1,3 +1,4 @@
+import { formatRuleImpactLine } from '../impact/summary.js';
 import { printable } from '../shared/printable.js';
 import type { Digest } from './build.js';
 
@@ -8,13 +9,6 @@ function escapeHtml(text: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
-}
-
-function ruleImpactLine(digest: Digest): string {
-  if (digest.ruleImpact === null) return 'Rule impact: none recorded';
-  if (digest.ruleImpact === 'unavailable') return 'Rule impact: n/a';
-  const sign = digest.ruleImpact.delta > 0 ? '+' : '';
-  return `Rule impact (${printable(digest.ruleImpact.label)}): ${digest.ruleImpact.before} → ${digest.ruleImpact.after} (delta ${sign}${digest.ruleImpact.delta})`;
 }
 
 function listMd(title: string, rows: Digest['topCategories']): string[] {
@@ -30,7 +24,7 @@ export function formatDigestMarkdown(digest: Digest): string {
     `New failures (not dismissed): **${digest.total}**`,
     `Open for review (flagged): **${digest.flagged}**`,
     `Signals: ci-fail ${digest.signals.ciFail}, pr-review ${digest.signals.prReview}, revert ${digest.signals.revert}`,
-    ruleImpactLine(digest),
+    formatRuleImpactLine(digest.ruleImpact),
     '',
     ...listMd('Top categories', digest.topCategories),
     '',
@@ -59,7 +53,7 @@ export function formatDigestHtml(digest: Digest): string {
     `<li><strong>New failures (not dismissed)</strong>: ${digest.total}</li>`,
     `<li><strong>Open for review (flagged)</strong>: ${digest.flagged}</li>`,
     `<li><strong>Signals</strong>: ci-fail ${digest.signals.ciFail}, pr-review ${digest.signals.prReview}, revert ${digest.signals.revert}</li>`,
-    `<li>${escapeHtml(ruleImpactLine(digest))}</li>`,
+    `<li>${escapeHtml(formatRuleImpactLine(digest.ruleImpact))}</li>`,
     `</ul>`,
     `<h2>Top categories</h2><ul>${rows(digest.topCategories)}</ul>`,
     `<h2>Top agents</h2><ul>${rows(digest.topAgents)}</ul>`,

@@ -35,6 +35,7 @@ describe('nightowl rule-impact', () => {
     const mark = await run(['mark', '--label', 'convention-naming', '--category', 'convention', '--at', '2026-11-01']);
     expect(mark.code).toBe(0);
     expect(mark.out).toMatch(/baseline_total=4/);
+    expect(mark.err).toMatch(/digest|dashboard|rule-impact/);
 
     const show = await run(['--json', '--before-days', '14', '--after-days', '14']);
     expect(show.code).toBe(0);
@@ -147,5 +148,11 @@ describe('nightowl rule-impact', () => {
     const json = JSON.parse(show.out) as { after: { incomplete: boolean }; before_days: number };
     expect(json.after.incomplete).toBe(false);
     expect(json.before_days).toBe(14);
+  });
+
+  it('documents feedback loop in --help', () => {
+    const help = createRuleImpactCommand().help;
+    expect(help).toContain('suggest-rules');
+    expect(help).toMatch(/digest|dashboard/);
   });
 });

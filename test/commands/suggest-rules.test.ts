@@ -112,6 +112,8 @@ describe('nightowl suggest-rules', () => {
     expect(first.code).toBe(0);
     expect(first.out).toBe('');
     expect(first.err).toContain('wrote');
+    expect(first.err).toContain('rule-impact mark');
+    expect(first.err).toMatch(/digest|dashboard/);
     expect(await readFile(target, 'utf8')).toContain(RULES_MARKER_START);
 
     await writeFile(target, 'my notes\n');
@@ -131,6 +133,7 @@ describe('nightowl suggest-rules', () => {
     const first = await run(['--write', 'CLAUDE.md']);
     expect(first.code).toBe(0);
     expect(first.err).toContain('updated NightOwl block');
+    expect(first.err).toContain('rule-impact mark');
     const once = await readFile(target, 'utf8');
     expect(once.startsWith('# Project')).toBe(true);
     expect(once).toContain('Keep me.');
@@ -193,5 +196,6 @@ describe('nightowl suggest-rules', () => {
     expect(cmd.help).toContain('--output');
     expect(cmd.help).toContain('no longer an alias');
     expect(cmd.help).toContain('--yes');
+    expect(cmd.help).toContain('rule-impact mark');
   });
 });

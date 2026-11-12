@@ -15,6 +15,7 @@ import {
 } from '../classify/run-api.js';
 import { type RunClaude, runClaude } from '../classify/run-claude.js';
 import { UNCLASSIFIED } from '../report/build.js';
+import { ruleLoopNextStepsAfterSuggest } from '../impact/loop-hints.js';
 import { formatSuggestedRules, hasRulesMarker, upsertRulesBlock } from '../rules/format.js';
 import { buildHeuristicRules } from '../rules/heuristic.js';
 import { enrichRulesWithLlm, type RulesLlmDeps, type RulesTransport } from '../rules/llm.js';
@@ -178,6 +179,7 @@ async function writeStandaloneOutput(path: string, content: string, force: boole
   }
   await writeFileAtomic(target, content, 0o600);
   io.stderr(`nightowl suggest-rules: wrote ${shown}\n`);
+  io.stderr(ruleLoopNextStepsAfterSuggest());
 }
 
 async function writeProjectRulesBlock(path: string, block: string, force: boolean, cwd: string, io: Io): Promise<void> {
@@ -196,6 +198,7 @@ async function writeProjectRulesBlock(path: string, block: string, force: boolea
   const mode = existing.length === 0 ? 0o600 : undefined;
   await writeFileAtomic(target, upserted.content, mode);
   io.stderr(`nightowl suggest-rules: updated NightOwl block in ${shown}\n`);
+  io.stderr(ruleLoopNextStepsAfterSuggest());
 }
 
 export function createSuggestRulesCommand(deps: SuggestRulesDeps = defaultDeps): Command {
@@ -211,6 +214,7 @@ export function createSuggestRulesCommand(deps: SuggestRulesDeps = defaultDeps):
         'Default: print to stdout only (does not edit project rule files).',
         `--output writes a standalone NightOwl suggestion file (${RULES_MARKER_START} … ${RULES_MARKER_END}).`,
         `--write inserts or updates that same marker block inside a project rules file (e.g. CLAUDE.md) without changing text outside the block.`,
+        'After --write/--output: mark with rule-impact mark --label <id>, then digest/dashboard.',
         'Note: --write is no longer an alias for --output.',
       ],
       options: [

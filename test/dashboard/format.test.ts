@@ -45,7 +45,12 @@ function sampleReport(overrides: Partial<Report> = {}): Report {
 
 describe('formatDashboardHtml', () => {
   it('renders metrics without external http(s) URLs', () => {
-    const html = formatDashboardHtml(sampleReport());
+    const html = formatDashboardHtml(sampleReport(), {
+      label: 'convention-naming',
+      before: 4,
+      after: 1,
+      delta: -3,
+    });
     expect(html.startsWith('<!DOCTYPE html>')).toBe(true);
     expect(html).toContain('NightOwl local dashboard');
     expect(html).toContain('Total failures');
@@ -61,11 +66,11 @@ describe('formatDashboardHtml', () => {
     expect(html).toContain('Top clusters');
     expect(html).toContain('Signals');
     expect(html).toContain('revert 4');
+    expect(html).toContain('Rule impact (convention-naming): 4 → 1 (delta -3)');
     expect(html).not.toMatch(/https?:\/\//);
   });
 
-
-  it('renders empty state', () => {
+  it('renders empty state with none recorded rule impact', () => {
     const html = formatDashboardHtml(
       sampleReport({
         total: 0,
@@ -75,8 +80,10 @@ describe('formatDashboardHtml', () => {
         byAgent: {},
         headToHead: [],
       }),
+      null,
     );
     expect(html).toContain('Not enough data yet');
+    expect(html).toContain('Rule impact: none recorded');
   });
 
   it('does not include author-like strings present only in unrelated fixture text', () => {
