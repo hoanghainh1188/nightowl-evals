@@ -127,6 +127,7 @@ export function createDashboardCommand(deps: DashboardDeps = { cwd: () => proces
           signals: {
             ciFail: signalCounts['ci-fail'] ?? 0,
             prReview: signalCounts['pr-review'] ?? 0,
+            revert: signalCounts['revert'] ?? 0,
           },
           autoNoise: store.countAutoNoiseFailures(options.since),
           clusters,

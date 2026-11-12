@@ -18,6 +18,7 @@ export const COMMAND_FLAGS: Readonly<Record<string, readonly string[]>> = Object
   export: ['--out', '--format', '--regressions-dir', '--force', '--since', '--category'],
   'ingest-ci': ['--file', '--format', '--commit'],
   'ingest-pr': ['--file', '--github', '--pr'],
+  'ingest-revert': ['--since'],
   precommit: [],
   postcommit: [],
   prune: ['--days', '--dry-run', '--vacuum'],

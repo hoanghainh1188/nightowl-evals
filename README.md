@@ -354,6 +354,18 @@ nightowl ingest-pr --github --pr 42   # requires GITHUB_TOKEN and GITHUB_REPOSIT
 ]
 ```
 
+#### `nightowl ingest-revert`
+
+Scans **local** git history for standard `This reverts commit <sha>` messages and records `revert` events when the reverted SHA matches a stored `failure.commit_sha`. Does **not** invent `failures.ai_content` and does not call the network. Requires an existing DB (`nightowl init`) and a git working tree.
+
+```bash
+nightowl ingest-revert [--since YYYY-MM-DD]
+```
+
+Default lookback is **30 days**. Counts appear under **Signals** on `report` / `dashboard` (not mixed into failure `total`).
+
+**Limitations:** squash merges, rewritten history, cherry-picks, and manual reverts without the standard git revert message may not be detected.
+
 #### `nightowl review`
 
 Interactive triage tool to review recorded failures and distinguish genuine AI bugs from intentional developer changes.

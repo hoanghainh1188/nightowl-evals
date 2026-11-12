@@ -26,6 +26,7 @@ export interface HeadToHeadRow {
 export interface ReportSignals {
   readonly ciFail: number;
   readonly prReview: number;
+  readonly revert: number;
 }
 
 export interface Report {
@@ -144,6 +145,7 @@ export function buildReport(input: ReportInput): Report {
     signals: Object.freeze({
       ciFail: input.signals?.ciFail ?? 0,
       prReview: input.signals?.prReview ?? 0,
+      revert: input.signals?.revert ?? 0,
     }),
     noise: Object.freeze({
       reviewRate: reviewed === 0 ? null : dismissed / reviewed,
