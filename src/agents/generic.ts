@@ -1,43 +1,11 @@
+import { cwdOf, eventNameOf, filePathOf, isRecord, promptOf, sessionIdOf } from './fields.js';
 import type { AgentId } from './ids.js';
 import { isAgentId } from './ids.js';
 import { normalizeEditFromDisk, normalizePrompt } from './snapshot.js';
 import type { AgentParseResult } from './types.js';
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function sessionId(data: Record<string, unknown>): string | null {
-  for (const key of ['session_id', 'conversation_id', 'thread_id', 'chat_id'] as const) {
-    if (typeof data[key] === 'string') return data[key];
-  }
-  return null;
-}
-
-function cwdOf(data: Record<string, unknown>, fallback: string): string {
-  return typeof data.cwd === 'string' ? data.cwd : fallback;
-}
-
-function filePathOf(data: Record<string, unknown>): string | null {
-  for (const key of ['file_path', 'filePath', 'path'] as const) {
-    if (typeof data[key] === 'string') return data[key];
-  }
-  return null;
-}
-
-function promptOf(data: Record<string, unknown>): string | null {
-  for (const key of ['prompt', 'text', 'message', 'user_message'] as const) {
-    if (typeof data[key] === 'string') return data[key];
-  }
-  return null;
-}
-
-const KIND_HINTS: Readonly<Record<AgentId, { prompt?: readonly string[]; edit?: readonly string[] }>> = Object.freeze({
-  'claude-code': {},
-  cursor: {},
-  windsurf: { prompt: ['pre_user_prompt', 'UserPromptSubmit'], edit: ['post_file_edit', 'after_file_edit', 'PostToolUse'] },
-  cline: { prompt: ['task_prompt', 'UserPromptSubmit'], edit: ['file_edited', 'tool_result', 'PostToolUse'] },
-  roo: { prompt: ['UserPromptSubmit', 'prompt'], edit: ['file_written', 'PostToolUse', 'after_edit'] },
+/** Event hints for manual (and legacy) agents still routed through the generic parser. */
+const KIND_HINTS: Readonly<Partial<Record<AgentId, { prompt?: readonly string[]; edit?: readonly string[] }>>> = Object.freeze({
   'copilot-workspace': { prompt: ['prompt_submitted', 'UserPromptSubmit'], edit: ['file_changed', 'PostToolUse'] },
   aider: { prompt: ['user_input', 'UserPromptSubmit'], edit: ['file_update', 'after_write', 'PostToolUse'] },
 });
@@ -45,7 +13,8 @@ const KIND_HINTS: Readonly<Record<AgentId, { prompt?: readonly string[]; edit?: 
 export function looksLikeAgent(data: Record<string, unknown>, agent: AgentId): boolean {
   if (data.agent === agent || data.nightowl_agent === agent) return true;
   const hints = KIND_HINTS[agent];
-  const name = typeof data.hook_event_name === 'string' ? data.hook_event_name : typeof data.event === 'string' ? data.event : '';
+  if (!hints) return false;
+  const name = eventNameOf(data);
   return Boolean(
     (hints.prompt?.includes(name) && promptOf(data) !== null) || (hints.edit?.includes(name) && filePathOf(data) !== null),
   );
@@ -67,9 +36,9 @@ export async function parseGenericAgent(
   if (!forced && !looksLikeAgent(data, agent)) return null;
 
   const cwd = cwdOf(data, root);
-  const sid = sessionId(data);
-  const hints = KIND_HINTS[agent];
-  const name = typeof data.hook_event_name === 'string' ? data.hook_event_name : typeof data.event === 'string' ? data.event : '';
+  const sid = sessionIdOf(data);
+  const hints = KIND_HINTS[agent] ?? { prompt: [], edit: [] };
+  const name = eventNameOf(data);
 
   const asPrompt =
     forced && promptOf(data) !== null && filePathOf(data) === null
@@ -95,7 +64,7 @@ export async function parseGenericAgent(
       root,
       cwd,
       filePath,
-      tool: typeof name === 'string' && name.length > 0 ? name : 'edit',
+      tool: name.length > 0 ? name : 'edit',
       input: data.tool_input ?? data.input ?? null,
     });
     return event === null ? null : { agent, event: { ...event, cwd } };

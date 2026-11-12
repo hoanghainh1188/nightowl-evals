@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { detectAndParse } from '../../src/agents/detect.js';
+import { parseCline } from '../../src/agents/cline.js';
 import { parseCursor } from '../../src/agents/cursor.js';
 import { parseGenericAgent } from '../../src/agents/generic.js';
 import { maturityOf } from '../../src/agents/ids.js';
+import { parseRoo } from '../../src/agents/roo.js';
+import { parseWindsurf } from '../../src/agents/windsurf.js';
 import { createFakeRepo, type TempDir, writeFiles } from '../helpers/temp-repo.js';
 
 describe('agent adapters', () => {
@@ -40,35 +43,83 @@ describe('agent adapters', () => {
     });
   });
 
-  it.each([
-    ['windsurf', 'post_file_edit', 'pre_user_prompt'],
-    ['cline', 'file_edited', 'task_prompt'],
-    ['roo', 'file_written', 'UserPromptSubmit'],
-  ] as const)('normalizes %s edit and prompt fixtures (best-effort)', async (agent, editEvent, promptEvent) => {
-    expect(maturityOf(agent)).toBe('best-effort');
-    const edit = await parseGenericAgent(
+  it('parses dedicated windsurf fixtures with session + cwd', async () => {
+    expect(maturityOf('windsurf')).toBe('best-effort');
+    const edit = await parseWindsurf(
       JSON.stringify({
-        hook_event_name: editEvent,
-        session_id: 's1',
+        hook_event_name: 'post_file_edit',
+        session_id: 'ws-1',
         cwd: repo.path,
         file_path: 'src/a.ts',
+        tool_input: { language: 'typescript' },
       }),
       repo.path,
-      agent,
     );
-    expect(edit).toMatchObject({ agent, event: { kind: 'edit', filePath: 'src/a.ts', agent } });
+    expect(edit).toMatchObject({
+      agent: 'windsurf',
+      event: { kind: 'edit', filePath: 'src/a.ts', sessionId: 'ws-1', agent: 'windsurf' },
+    });
 
-    const prompt = await parseGenericAgent(
+    const prompt = await parseWindsurf(
       JSON.stringify({
-        hook_event_name: promptEvent,
-        session_id: 's1',
+        hook_event_name: 'pre_user_prompt',
+        conversation_id: 'ws-1',
         cwd: repo.path,
-        prompt: 'hello',
+        prompt: 'refactor hooks',
       }),
       repo.path,
-      agent,
     );
-    expect(prompt).toMatchObject({ agent, event: { kind: 'prompt', agent } });
+    expect(prompt).toMatchObject({ agent: 'windsurf', event: { kind: 'prompt', sessionId: 'ws-1' } });
+  });
+
+  it('parses dedicated cline fixtures', async () => {
+    expect(maturityOf('cline')).toBe('best-effort');
+    const edit = await parseCline(
+      JSON.stringify({
+        hook_event_name: 'file_edited',
+        thread_id: 'cl-1',
+        cwd: repo.path,
+        path: 'src/a.ts',
+      }),
+      repo.path,
+    );
+    expect(edit).toMatchObject({ agent: 'cline', event: { kind: 'edit', filePath: 'src/a.ts', sessionId: 'cl-1' } });
+
+    const prompt = await parseCline(
+      JSON.stringify({
+        hook_event_name: 'task_prompt',
+        thread_id: 'cl-1',
+        cwd: repo.path,
+        user_message: 'add tests',
+      }),
+      repo.path,
+    );
+    expect(prompt).toMatchObject({ agent: 'cline', event: { kind: 'prompt', sessionId: 'cl-1' } });
+  });
+
+  it('parses dedicated roo fixtures', async () => {
+    expect(maturityOf('roo')).toBe('best-effort');
+    const edit = await parseRoo(
+      JSON.stringify({
+        event: 'file_written',
+        chat_id: 'ro-1',
+        cwd: repo.path,
+        filePath: 'src/a.ts',
+      }),
+      repo.path,
+    );
+    expect(edit).toMatchObject({ agent: 'roo', event: { kind: 'edit', filePath: 'src/a.ts', sessionId: 'ro-1' } });
+
+    const prompt = await parseRoo(
+      JSON.stringify({
+        hook_event_name: 'UserPromptSubmit',
+        chat_id: 'ro-1',
+        cwd: repo.path,
+        message: 'ship it',
+      }),
+      repo.path,
+    );
+    expect(prompt).toMatchObject({ agent: 'roo', event: { kind: 'prompt', sessionId: 'ro-1' } });
   });
 
   it.each([
@@ -108,6 +159,7 @@ describe('agent adapters', () => {
   it('does not invent an event when forced agent payload is not a valid contract', async () => {
     expect(await detectAndParse(JSON.stringify({ nonsense: true }), repo.path, 'windsurf')).toBeNull();
     expect(await detectAndParse('not-json', repo.path, 'cline')).toBeNull();
+    expect(await parseGenericAgent(JSON.stringify({ nonsense: true }), repo.path, 'aider', true)).toBeNull();
   });
 
   it('auto-detects best-effort windsurf without --agent', async () => {
@@ -121,5 +173,29 @@ describe('agent adapters', () => {
       repo.path,
     );
     expect(parsed).toMatchObject({ agent: 'windsurf', event: { kind: 'edit' } });
+  });
+
+  it('auto-detects cline and roo by dedicated event names', async () => {
+    const cline = await detectAndParse(
+      JSON.stringify({
+        hook_event_name: 'task_prompt',
+        session_id: 's1',
+        cwd: repo.path,
+        prompt: 'hi',
+      }),
+      repo.path,
+    );
+    expect(cline).toMatchObject({ agent: 'cline', event: { kind: 'prompt' } });
+
+    const roo = await detectAndParse(
+      JSON.stringify({
+        hook_event_name: 'file_written',
+        session_id: 's1',
+        cwd: repo.path,
+        file_path: 'src/a.ts',
+      }),
+      repo.path,
+    );
+    expect(roo).toMatchObject({ agent: 'roo', event: { kind: 'edit' } });
   });
 });

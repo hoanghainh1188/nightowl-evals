@@ -144,8 +144,9 @@ export function createInitCommand(deps: InitDeps = defaultDeps): Command {
       usage: '[--shared] [--agents <list>]',
       description: [
         'Adds, without removing anything already there:',
-        '  Claude Code + Cursor (verified) and best-effort agent hook configs that run nightowl log',
-        '  Manual-maturity agents (e.g. aider, copilot-workspace) are not given fake native hooks — see README',
+        '  Claude Code + Cursor (verified) and best-effort agent configs with the documented NightOwl shape',
+        '  (Windsurf hook events; Cline/Roo markers with nightowl + command). Repairs incomplete shapes on re-run.',
+        '  Manual-maturity agents (e.g. aider, copilot-workspace) are not given fake native hooks — see README limits',
         '  .git/hooks/pre-commit        runs nightowl precommit',
         '  .git/hooks/post-commit       runs nightowl postcommit',
         `  .gitignore                   ${NIGHTOWL_IGNORE} and, if needed, ${PERSONAL_SETTINGS}`,

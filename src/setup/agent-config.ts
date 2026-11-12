@@ -45,11 +45,29 @@ function nightowlBlock(agent: AgentId): Json {
 const WINDSURF_EVENTS = ['pre_user_prompt', 'post_file_edit'] as const;
 
 function windsurfNightowlEntry(): Json {
-  return { nightowl: true, command: HOOK_COMMAND_LINE };
+  return { nightowl: true, agent: 'windsurf', command: HOOK_COMMAND_LINE };
+}
+
+function isCompleteMarker(entry: Json, agent: AgentId): boolean {
+  return entry.nightowl === true && isNightowlCommand(entry.command) && (entry.agent === undefined || entry.agent === agent);
+}
+
+function completeMarker(existing: Json, agent: AgentId): Json {
+  return {
+    ...existing,
+    nightowl: true,
+    agent,
+    command: isNightowlCommand(existing.command) ? existing.command : HOOK_COMMAND_LINE,
+    events: Array.isArray(existing.events) ? existing.events : ['prompt', 'edit'],
+  };
 }
 
 function hasNightowlCommand(list: unknown): boolean {
   return Array.isArray(list) && list.some((entry) => isObject(entry) && (entry.nightowl === true || isNightowlCommand(entry.command)));
+}
+
+function isCompleteWindsurfEntry(entry: unknown): boolean {
+  return isObject(entry) && entry.nightowl === true && isNightowlCommand(entry.command);
 }
 
 export function mergeWindsurfHooks(existing: unknown): { value: Json; status: FileChange; added: boolean } {
@@ -58,8 +76,12 @@ export function mergeWindsurfHooks(existing: unknown): { value: Json; status: Fi
   let added = false;
   for (const event of WINDSURF_EVENTS) {
     const list = Array.isArray(hooks[event]) ? [...(hooks[event] as unknown[])] : [];
-    if (!hasNightowlCommand(list)) {
+    const idx = list.findIndex((entry) => isObject(entry) && (entry.nightowl === true || isNightowlCommand(entry.command)));
+    if (idx < 0) {
       list.push(windsurfNightowlEntry());
+      added = true;
+    } else if (!isCompleteWindsurfEntry(list[idx])) {
+      list[idx] = { ...(list[idx] as Json), ...windsurfNightowlEntry() };
       added = true;
     }
     hooks[event] = list;
@@ -97,16 +119,30 @@ export function hasWindsurfNightowlHooks(doc: unknown): boolean {
   return WINDSURF_EVENTS.some((event) => hasNightowlCommand(hooks[event]));
 }
 
+export function hasCompleteWindsurfShape(doc: unknown): boolean {
+  if (!isObject(doc) || !isObject(doc.hooks)) return false;
+  const hooks = doc.hooks;
+  return WINDSURF_EVENTS.every((event) => {
+    const list = hooks[event];
+    return Array.isArray(list) && list.some((entry) => isCompleteWindsurfEntry(entry));
+  });
+}
+
 export function mergeAgentConfig(existing: unknown, agent: AgentId): { value: Json; status: FileChange; added: boolean } {
   if (agent === 'windsurf') return mergeWindsurfHooks(existing);
 
   if (isObject(existing) && (existing.nightowl === true || isNightowlCommand(existing.command))) {
-    return { value: existing, status: 'unchanged', added: false };
+    if (isCompleteMarker(existing, agent)) return { value: existing, status: 'unchanged', added: false };
+    return { value: completeMarker(existing, agent), status: 'updated', added: true };
   }
-  if (isObject(existing) && isObject(existing.hooks) && Array.isArray(existing.hooks)) {
+  if (isObject(existing) && Array.isArray(existing.hooks)) {
     const hooks = [...existing.hooks];
-    if (hooks.some((h) => isObject(h) && (h.nightowl === true || isNightowlCommand(h.command)))) {
-      return { value: existing, status: 'unchanged', added: false };
+    const idx = hooks.findIndex((h) => isObject(h) && (h.nightowl === true || isNightowlCommand(h.command)));
+    if (idx >= 0) {
+      const entry = hooks[idx] as Json;
+      if (isCompleteMarker(entry, agent)) return { value: existing, status: 'unchanged', added: false };
+      hooks[idx] = completeMarker(entry, agent);
+      return { value: { ...existing, hooks }, status: 'updated', added: true };
     }
     hooks.push(nightowlBlock(agent));
     return { value: { ...existing, hooks }, status: 'updated', added: true };
@@ -115,7 +151,7 @@ export function mergeAgentConfig(existing: unknown, agent: AgentId): { value: Js
     return { value: nightowlBlock(agent), status: 'created', added: true };
   }
   if (isObject(existing)) {
-    return { value: { ...existing, ...nightowlBlock(agent) }, status: 'updated', added: true };
+    return { value: completeMarker(existing, agent), status: 'updated', added: true };
   }
   return { value: nightowlBlock(agent), status: 'created', added: true };
 }
@@ -146,6 +182,17 @@ export function hasNightowlAgentMarker(doc: unknown, agent: AgentId): boolean {
   if (doc.nightowl === true || isNightowlCommand(doc.command)) return true;
   if (Array.isArray(doc.hooks)) {
     return doc.hooks.some((h) => isObject(h) && (h.nightowl === true || isNightowlCommand(h.command)));
+  }
+  return false;
+}
+
+/** Stricter shape check for best-effort configs: nightowl flag + nightowl command (+ agent when set). */
+export function hasCompleteBestEffortShape(doc: unknown, agent: AgentId): boolean {
+  if (agent === 'windsurf') return hasCompleteWindsurfShape(doc);
+  if (!isObject(doc)) return false;
+  if (doc.nightowl === true || isNightowlCommand(doc.command)) return isCompleteMarker(doc, agent);
+  if (Array.isArray(doc.hooks)) {
+    return doc.hooks.some((h) => isObject(h) && isCompleteMarker(h, agent));
   }
   return false;
 }
