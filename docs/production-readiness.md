@@ -1,6 +1,8 @@
 # Kế Hoạch Chuẩn Bị Cho Sản Phẩm Production-Ready (Production Readiness Roadmap)
 
-Tài liệu này ghi lại kết quả đánh giá kỹ thuật và lộ trình nâng cấp các module của **NightOwl Evals** (`@hoanghainh/nightowl-evals`) từ giai đoạn MVP sang bản phát hành chính thức sẵn sàng cho sản xuất (Production-Ready).
+Tài liệu này ghi mức độ sẵn sàng kỹ thuật của **NightOwl Evals** (`@hoanghainh/nightowl-evals`) sau khi hoàn thành lộ trình Production-Ready gốc (1–17) và các vòng ideation **v0.3–v0.5** (ship `0.5.0` / `0.5.1`). Phạm vi vẫn **open-core / local-first**.
+
+Hướng tiếp theo: [`v0.6-roadmap-ideas.md`](v0.6-roadmap-ideas.md). Lịch sử v0.5: [`v0.5-roadmap-ideas.md`](v0.5-roadmap-ideas.md).
 
 ---
 
@@ -8,56 +10,61 @@ Tài liệu này ghi lại kết quả đánh giá kỹ thuật và lộ trình 
 
 | Module | Tỷ lệ hoàn thiện | Trạng thái | Đánh giá tóm tắt |
 | :--- | :---: | :---: | :--- |
-| **1. Core CLI & Lifecycle** | **85%** | Near Production | Kiến trúc I/O và sub-command sạch sẽ; cần lệnh tự chẩn đoán (`doctor`) và shell completion. |
-| **2. Setup & Hook Injection** | **80%** | Near Production | Xử lý worktree, symlink và `core.hooksPath` tốt; cần hỗ trợ hook manager (Husky, Lefthook). |
-| **3. Ingestion & Hook Capture Engine** | **85%** | Near Production | Fail-open chuẩn, timeout 2s, thuật toán phân biệt `manual-fix` & `ai-self-fix` thông minh; cần quét inline secrets. |
-| **4. Storage Layer (`node:sqlite`)** | **80%** | Near Production | Hỗ trợ WAL, busy retry, migration versioning tốt; cần cơ chế dọn dẹp dung lượng (retention / vacuum). |
-| **5. Classification Module** | **75%** | MVP+ | Subprocess Claude cô lập tốt; phụ thuộc CLI cục bộ, cần xử lý rate limit và tùy chọn API key. |
-| **6. Analytics & Review** | **85%** | Near Production | Hiển thị terminal trực quan; cần xuất định dạng máy đọc (`--json`) cho CI/CD pipeline. |
-| **7. Export & Evaluation Pipeline** | **70%** | MVP | Xuất JSONL chuẩn; cần bổ sung cơ chế chấm điểm bằng test runner thực tế (execution verifier). |
-| **8. Cross-Platform & Infrastructure** | **65%** | MVP | Chạy hoàn hảo trên macOS/Linux; cần hoàn thiện xử lý Windows (process killing, permissions, shell). |
+| **1. Core CLI & Lifecycle** | **95%** | Production | Subcommands ổn định; `doctor`, shell completion, help đầy đủ. |
+| **2. Setup & Hook Injection** | **90%** | Production | Worktree / `core.hooksPath`; Husky & Lefthook; multi-agent `init`. |
+| **3. Ingestion & Hook Capture** | **90%** | Production | Fail-open, timeout; inline secret scan; CI/PR/revert signals. |
+| **4. Storage (`node:sqlite`)** | **90%** | Production | WAL, migrations, `prune` / retention; schema hiện hành trên `main`. |
+| **5. Classification** | **85%** | Production | Claude CLI + tùy chọn API key; LLM opt-in. |
+| **6. Analytics & Review** | **90%** | Production | `report`/`--json`, dashboard, digest, clusters, TUI review, noise estimate. |
+| **7. Export & Eval** | **85%** | Production | JSONL + privacy; eval runner; eval A/B compare local. |
+| **8. Cross-Platform & CI** | **80%** | Near Production | macOS/Linux vững; Windows process kill đã fix — còn edge path/permission (xem v0.6). |
+| **9. Team local surfaces** | **85%** | Production | Customer-report, Action CI gate, workspace-aware modules, rule-impact. |
 
 ---
 
-## 2. Các khoảng trống kỹ thuật trọng yếu (Technical Gaps)
+## 2. Khoảng trống còn mở (Remaining Gaps)
 
-### 2.1. Nền tảng & Hệ điều hành (P0)
-- **Windows Process Tree Killing**: `src/classify/run-claude.ts` sử dụng `process.kill(-pid, 'SIGKILL')`. Trên Windows, lệnh này không hợp lệ và gây lỗi. Cần cơ chế kill tương thích đa nền tảng.
-- **Quyền thư mục (File Permissions)**: Chế độ `0700` (`chmod`) trong `data-dir.ts` mang tính đặc thù POSIX, cần fallback phù hợp trên Windows NTFS.
+Các mục dưới đây **không** còn là gap Production-Ready gốc; chúng là hướng sâu hơn cho giai đoạn team local — chi tiết trong [`v0.6-roadmap-ideas.md`](v0.6-roadmap-ideas.md).
 
-### 2.2. Bảo mật & Quyền riêng tư (P0)
-- **Inline Secret Scanning**: Hiện tại chỉ loại trừ theo tên file (`.env`, `*.pem`, `credentials.*`). Cần bổ sung bộ lọc regex quét các pattern API token/key phổ biến (AWS, GitHub, Anthropic, OpenAI) ngay trong nội dung diff trước khi lưu vào SQLite.
+### 2.1. DX máy team / Windows
+- Doctor sâu hơn: workspace discovery, độ thật của hook file, readiness tín hiệu/`report`.
+- Windows: path normalize, quyền NTFS, edge case còn lại ngoài kill process group.
 
-### 2.3. Vận hành & Quản trị dữ liệu (P1)
-- **Lệnh tự chẩn đoán (`nightowl doctor`)**: Kiểm tra phiên bản Node (>=22.13), tình trạng SQLite, PATH của `claude` CLI, tính hợp lệ của git hooks và database health.
-- **Data Retention & Vacuum**: Snapshot code tối đa 512KB/lần có thể làm dung lượng SQLite tăng cao. Cần bổ sung lệnh `nightowl prune --days <N>` và cấu hình tự động dọn dẹp snapshot cũ.
-- **Hỗ trợ Hook Managers**: Khi phát hiện dự án dùng Husky (`.husky/`) hoặc Lefthook (`lefthook.yml`), cung cấp snippet tích hợp thay vì chỉ dừng lại ở cảnh báo `manual`.
+### 2.2. Tin cậy dữ liệu & vòng rule
+- Siết vòng `suggest-rules` → apply → `rule-impact` → digest/dashboard.
+- Adapter đa agent còn best-effort: fixture/doctor thật hơn.
 
-### 2.4. Báo cáo & Đánh giá nâng cao (P1 - P2)
-- **Xuất dữ liệu có cấu trúc (`nightowl report --json`)**: Cho phép pipeline CI/CD hoặc các dashboard nội bộ đọc số liệu thống kê lỗi.
-- **Execution-based Eval Verifier**: Chạy lại test suite thực tế (ví dụ: `npm test`, `pytest`) trên code do model sinh ra để đo lường độ chính xác khách quan thay vì chỉ so sánh diff/text.
+### 2.3. Quy mô & monorepo
+- `--workspace` MVP chỉ lọc failure; `changedRate` / checks / signals còn full-window (`#45`).
+- DB lớn: ngân sách query/index cho report/dashboard (`#47`).
+- Prune UX: dry-run dung lượng, retention profiles (`#44`).
+- Gói share-out local đã redact, offline (`#46`).
 
 ---
 
-## 3. Lộ trình triển khai (Implementation Roadmap)
+## 3. Lộ trình đã hoàn thành (Archive)
 
 ```
-Giai đoạn 1: Ổn định nền tảng (Hardening - P0)
-├── Change: fix-cross-platform-process (Tương thích Windows process tree)
-├── Change: add-inline-secret-filter (Quét và chặn lưu API keys trong diff)
-└── Change: add-doctor-command (Lệnh nightowl doctor kiểm tra môi trường)
+Đã xong — Production-Ready gốc (P0–P2)
+├── fix-cross-platform-process
+├── add-inline-secret-filter
+├── add-doctor-command
+├── add-storage-prune
+├── add-hook-manager-support
+├── add-report-json
+├── add-eval-test-runner
+└── add-direct-api-classify
 
-Giai đoạn 2: Quản trị dữ liệu & Vận hành (Data Ops - P1)
-├── Change: add-storage-prune (Lệnh prune và cơ chế auto retention)
-├── Change: add-hook-manager-support (Hỗ trợ cấu hình cho Husky & Lefthook)
-└── Change: add-report-json (Xuất báo cáo định dạng JSON)
+Đã xong — Ideation v0.3 / v0.4 / v0.5 (xem roadmap docs)
+├── multi-agent, rules, regressions, TUI, Action, completion, …
+├── CI/PR signals, rule-impact, customer-report, …
+└── dashboard, noise, clusters, revert, digest, privacy, eval A/B, workspace
 
-Giai đoạn 3: Mở rộng đánh giá (Advanced Evals - P2)
-├── Change: add-eval-test-runner (Chấm điểm bằng test suite thực tế)
-└── Change: add-direct-api-classify (Tùy chọn phân loại trực tiếp qua API)
+Tiếp theo — v0.6 (ideation 40+)
+└── docs/v0.6-roadmap-ideas.md
 ```
 
-### Chi tiết các Change đề xuất
+### Bảng Change Production-Ready gốc (lịch sử)
 
 | Thứ tự | Tên Change | Nội dung | Mức độ ưu tiên | Trạng thái |
 | :---: | :--- | --- | :---: | :---: |
