@@ -118,8 +118,9 @@ describe('nightowl eval', () => {
       const [name] = await readdir(runsDir());
       const file = join(runsDir(), name as string);
       const rows = (await readFile(file, 'utf8')).trim().split('\n').map((l) => JSON.parse(l));
-      expect(rows).toHaveLength(6);
-      expect(rows[0]).toEqual({
+      expect(rows).toHaveLength(7);
+      expect(rows[0]).toMatchObject({ schema: 'nightowl.eval-run-meta/v1', label: null, models: ['haiku', 'sonnet'] });
+      expect(rows[1]).toEqual({
         run_at: '2026-11-10T09:30:00.000Z',
         case_id: 'a',
         model: 'haiku',
@@ -149,7 +150,32 @@ describe('nightowl eval', () => {
       expect(result.out).toMatch(/^ {2}haiku +1 +0 +0\.00 +1$/m);
       const [file] = await readdir(runsDir());
       const rows = (await readFile(join(runsDir(), file as string), 'utf8')).trim().split('\n').map((l) => JSON.parse(l));
-      expect(rows[0]).toMatchObject({ case_id: 'a', output: null, score: null, error: 'claude did not answer in time' });
+      expect(rows[1]).toMatchObject({ case_id: 'a', output: null, score: null, error: 'claude did not answer in time' });
+    });
+
+    it('tags runs with --label and writes --report html', async () => {
+      await writeSuite([evalLine('a')]);
+      const out = join(repo.path, '.nightowl', 'eval-report.html');
+      const result = await run(
+        ['--yes', '--model', 'haiku', '--label', 'rules-v2', '--report', 'html', '-o', out],
+        deps({ haiku: [GOOD] }),
+      );
+      expect(result.code).toBe(0);
+      const [name] = await readdir(runsDir());
+      const meta = JSON.parse((await readFile(join(runsDir(), name as string), 'utf8')).split('\n')[0]!);
+      expect(meta).toMatchObject({ schema: 'nightowl.eval-run-meta/v1', label: 'rules-v2' });
+      const html = await readFile(out, 'utf8');
+      expect(html).toContain('rules-v2');
+      expect(html).not.toMatch(/https?:\/\//);
+    });
+
+    it('dry-run mentions --report without calling models', async () => {
+      await writeSuite([evalLine('a')]);
+      const result = await run(['--report', 'md', '--label', 'exp1'], deps({}));
+      expect(result.code).toBe(0);
+      expect(result.out).toContain('Would tag the run with label exp1');
+      expect(result.out).toContain('Would also write an A/B md report');
+      expect(calls).toEqual([]);
     });
 
     it('does not call a failed call a fail when comparing models', async () => {
@@ -272,9 +298,12 @@ describe('nightowl eval', () => {
       expect(shellCalls).toEqual([{ command: 'npm test', cwd: repo.path, timeoutMs: 120_000 }]);
       expect(result.out).toMatch(/tests ok/i);
       expect(await readFile(join(repo.path, 'src/age.ts'), 'utf8')).toBe('export const isAdult = (age) => false;\n');
-      const [name] = await readdir(runsDir());
-      const row = JSON.parse((await readFile(join(runsDir(), name as string), 'utf8')).trim());
-      expect(row).toMatchObject({ tests_passed: true, tests_exit_code: 0, tests_error: null, pass: true });
+      const name = (await readdir(runsDir())).find((f) => f.endsWith('.jsonl'));
+      const parsed = (await readFile(join(runsDir(), name as string), 'utf8'))
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(parsed[1]).toMatchObject({ tests_passed: true, tests_exit_code: 0, tests_error: null, pass: true });
     });
 
     it('with --require-tests, textual pass and failing tests become pass false', async () => {
@@ -286,9 +315,12 @@ describe('nightowl eval', () => {
         deps({ haiku: [GOOD] }, {}, { passed: false, exitCode: 1, error: 'failed' }),
       );
       expect(result.code).toBe(0);
-      const [name] = await readdir(runsDir());
-      const row = JSON.parse((await readFile(join(runsDir(), name as string), 'utf8')).trim());
-      expect(row).toMatchObject({
+      const name = (await readdir(runsDir())).find((f) => f.endsWith('.jsonl'));
+      const parsed = (await readFile(join(runsDir(), name as string), 'utf8'))
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(parsed[1]).toMatchObject({
         coverage: 1,
         score: 1,
         pass: false,

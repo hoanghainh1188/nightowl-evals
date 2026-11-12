@@ -1,11 +1,23 @@
 import { randomBytes } from 'node:crypto';
-import { join, relative, resolve } from 'node:path';
+import { mkdir, readFile } from 'node:fs/promises';
+import { dirname, join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { errorMessage } from '../cli/errors.js';
 import { renderCommandHelp } from '../cli/help.js';
 import type { Io } from '../cli/io.js';
 import { type RunClaude, runClaude } from '../classify/run-claude.js';
 import { type EvalCase, type LoadedCases, loadCases, type SkipReason } from '../eval/cases.js';
+import {
+  DEFAULT_COMPARE_HTML_RELATIVE,
+  EVAL_LABEL_PATTERN,
+  RUN_META_SCHEMA,
+  buildCompareReport,
+  formatCompareHtml,
+  formatCompareMarkdown,
+  formatRunMetaLine,
+  parseRunFile,
+  type RunResultRow,
+} from '../eval/compare.js';
 import { parseGeneratedFile } from '../eval/parse.js';
 import { buildEvalPrompt, GENERATED_FILE_SCHEMA } from '../eval/prompt.js';
 import {
@@ -27,6 +39,7 @@ import { DATA_DIR } from '../storage/store.js';
 import { INSTALL_HINT, MODEL_NAME } from './classify.js';
 import type { Command } from './command.js';
 import { EXPORT_DIR, EXPORT_FILE } from './export.js';
+import { ruleAppliedNote } from './rule-applied-note.js';
 
 export const DEFAULT_MODELS: readonly string[] = Object.freeze(['haiku', 'sonnet']);
 export const DEFAULT_EVAL_LIMIT = 20;
@@ -60,6 +73,10 @@ interface Options {
   readonly testCommand: string | null;
   readonly testTimeoutSec: number;
   readonly requireTests: boolean;
+  readonly label: string | null;
+  readonly report: 'md' | 'html' | null;
+  readonly baseline: string | null;
+  readonly reportOutput: string | null;
 }
 
 interface Result {
@@ -86,6 +103,10 @@ function parseOptions(args: readonly string[]): Options | string {
         'test-command': { type: 'string' },
         'test-timeout': { type: 'string' },
         'require-tests': { type: 'boolean' },
+        label: { type: 'string' },
+        report: { type: 'string' },
+        baseline: { type: 'string' },
+        output: { type: 'string', short: 'o' },
       },
       strict: true,
       allowPositionals: false,
@@ -112,6 +133,21 @@ function parseOptions(args: readonly string[]): Options | string {
   }
   const requireTests = values['require-tests'] === true;
   if (requireTests && testCommand === null) return '--require-tests needs --test-command';
+  const label = values.label === undefined ? null : values.label;
+  if (label === '') return '--label needs a non-empty id';
+  if (label !== null && !EVAL_LABEL_PATTERN.test(label)) {
+    return '--label must be 1–64 characters: letters, digits, _ . / : @ + -';
+  }
+  const reportRaw = values.report;
+  if (reportRaw !== undefined && reportRaw !== 'md' && reportRaw !== 'html') return '--report must be md or html';
+  if (values.baseline === '') return '--baseline needs a results JSONL path';
+  if (values.output === '') return '--output needs a file path';
+  if (values.baseline !== undefined && reportRaw === undefined) {
+    return '--baseline needs --report';
+  }
+  if (values.output !== undefined && reportRaw === undefined) {
+    return '--output needs --report';
+  }
   return {
     yes: values.yes === true,
     input: values.input ?? null,
@@ -121,6 +157,10 @@ function parseOptions(args: readonly string[]): Options | string {
     testCommand,
     testTimeoutSec,
     requireTests,
+    label,
+    report: reportRaw === undefined ? null : reportRaw,
+    baseline: values.baseline ?? null,
+    reportOutput: values.output ?? null,
   };
 }
 
@@ -162,6 +202,10 @@ function rerunHint(options: Options): string {
     ...(options.testCommand === null ? [] : [`--test-command ${shellQuote(options.testCommand)}`]),
     ...(options.testTimeoutSec === DEFAULT_TEST_TIMEOUT_SEC ? [] : [`--test-timeout ${options.testTimeoutSec}`]),
     ...(options.requireTests ? ['--require-tests'] : []),
+    ...(options.label === null ? [] : [`--label ${shellQuote(options.label)}`]),
+    ...(options.report === null ? [] : [`--report ${options.report}`]),
+    ...(options.baseline === null ? [] : [`--baseline ${shellQuote(options.baseline)}`]),
+    ...(options.reportOutput === null ? [] : [`--output ${shellQuote(options.reportOutput)}`]),
   ].join(' ');
 }
 
@@ -172,11 +216,25 @@ function dryRun(cases: readonly EvalCase[], loaded: LoadedCases, options: Option
       ? ''
       : `After each answer, would run ${printable(options.testCommand)} in the project root ` +
         `(timeout ${options.testTimeoutSec}s${options.requireTests ? '; pass requires tests' : ''}).\n`;
+  const labelNote = options.label === null ? '' : `Would tag the run with label ${printable(options.label)}.\n`;
+  const reportNote =
+    options.report === null
+      ? ''
+      : `Would also write an A/B ${options.report} report` +
+        (options.baseline === null ? '' : ` vs baseline ${printable(options.baseline)}`) +
+        (options.reportOutput === null && options.report === 'html'
+          ? ` to ${DEFAULT_COMPARE_HTML_RELATIVE}`
+          : options.reportOutput === null
+            ? ' to stdout'
+            : ` to ${printable(options.reportOutput)}`) +
+        '.\n';
   io.stdout(
     `Would run ${cases.length} cases × ${options.models.length} models (${options.models.join(', ')}) = ` +
       `${cases.length * options.models.length} calls to Claude Code, ${(bytes / 1024).toFixed(1)} KB${skippedNote(loaded)}.\n` +
       `Files whose content would be sent:\n${listFiles(cases)}` +
       testNote +
+      labelNote +
+      reportNote +
       `Nothing was sent. The code leaves your machine only if you run:\n  ${printable(rerunHint(options))}\n`,
   );
   return 0;
@@ -300,10 +358,31 @@ async function resultsFile(root: string, runAt: Date): Promise<string> {
   return join(await ensurePrivateDir(root, RUNS_DIR), `${stamp}-${randomBytes(3).toString('hex')}.jsonl`);
 }
 
-async function saveResults(file: string, runAt: Date, results: readonly Result[]): Promise<void> {
+function toRows(runAt: string, results: readonly Result[]): readonly RunResultRow[] {
+  return results.map((r) => ({
+    run_at: runAt,
+    case_id: r.caseId,
+    model: r.model,
+    coverage: r.score?.coverage ?? null,
+    repeat: r.score?.repeat ?? null,
+    score: r.score?.score ?? null,
+    pass: r.score?.pass ?? null,
+    tests_passed: r.testsPassed,
+    error: r.error,
+  }));
+}
+
+async function saveResults(
+  file: string,
+  runAt: Date,
+  results: readonly Result[],
+  options: Options,
+): Promise<void> {
+  const iso = runAt.toISOString();
+  const meta = formatRunMetaLine({ label: options.label, models: options.models, run_at: iso });
   const lines = results.map((r) =>
     JSON.stringify({
-      run_at: runAt.toISOString(),
+      run_at: iso,
       case_id: r.caseId,
       model: r.model,
       output: r.output,
@@ -317,7 +396,50 @@ async function saveResults(file: string, runAt: Date, results: readonly Result[]
       error: r.error,
     }),
   );
-  await writeFileAtomic(file, lines.map((line) => `${line}\n`).join(''), 0o600);
+  await writeFileAtomic(file, [meta, ...lines].map((line) => `${line}\n`).join(''), 0o600);
+}
+
+async function writeReport(
+  options: Options,
+  cwd: string,
+  runAt: string,
+  results: readonly Result[],
+  io: Io,
+): Promise<string | null> {
+  if (options.report === null) return null;
+  let baseline = null;
+  if (options.baseline !== null) {
+    try {
+      baseline = parseRunFile(await readFile(resolve(cwd, options.baseline), 'utf8'));
+    } catch (error) {
+      return `cannot read baseline: ${errorMessage(error)}`;
+    }
+  }
+  const report = buildCompareReport({
+    current: {
+      meta: { schema: RUN_META_SCHEMA, label: options.label, models: options.models, run_at: runAt },
+      rows: toRows(runAt, results),
+    },
+    baseline,
+    ruleNote: await ruleAppliedNote(cwd),
+  });
+  const content = options.report === 'html' ? formatCompareHtml(report) : formatCompareMarkdown(report);
+  if (options.report === 'md' && options.reportOutput === null) {
+    io.stdout(content);
+    return null;
+  }
+  const outPath =
+    options.reportOutput === null
+      ? resolve(cwd, DEFAULT_COMPARE_HTML_RELATIVE)
+      : resolve(cwd, options.reportOutput);
+  try {
+    await mkdir(dirname(outPath), { recursive: true });
+    await writeFileAtomic(outPath, content, 0o600);
+  } catch (error) {
+    return `cannot write report ${printable(outPath)}: ${errorMessage(error)}`;
+  }
+  io.stderr(`A/B report written to ${printable(relative(cwd, outPath) || outPath)}\n`);
+  return null;
 }
 
 async function runAll(
@@ -351,7 +473,7 @@ async function runAll(
   const all = byCase.flatMap((c) => c.results);
   let saved: string;
   try {
-    await saveResults(file, runAt, all);
+    await saveResults(file, runAt, all, options);
     saved = `Results saved to ${printable(relative(deps.cwd(), file) || file)}\n`;
   } catch (error) {
     io.stderr(`nightowl eval: could not save the results: ${printable(errorMessage(error))}\n`);
@@ -365,6 +487,11 @@ async function runAll(
       saved +
       'Scores compare the lines each model changed with the lines the developer changed; a different but valid fix scores low.\n',
   );
+  const reportError = await writeReport(options, deps.cwd(), runAt.toISOString(), all, io);
+  if (reportError !== null) {
+    io.stderr(`nightowl eval: ${printable(reportError)}\n`);
+    return 1;
+  }
   return saved === '' || all.some((r) => r.error !== null) ? 1 : 0;
 }
 
@@ -391,6 +518,10 @@ export function createEvalCommand(deps: EvalDeps = defaultDeps): Command {
           `Seconds before the test command is killed (default: ${DEFAULT_TEST_TIMEOUT_SEC})`,
         ],
         ['--require-tests', 'Count as pass only when textual score passes and the test command exits 0'],
+        ['--label <id>', 'Tag this run in results metadata (prompt/rules experiment label)'],
+        ['--report md|html', 'Also emit a local A/B compare report after --yes'],
+        ['--baseline <file>', 'With --report: compare against this prior results JSONL'],
+        ['-o, --output <file>', 'With --report: write the report to this path (html default under .nightowl/)'],
       ],
     }),
     run: async (args, io) => {

@@ -3,6 +3,7 @@ import type { Command } from './command.js';
 import { completionCommand } from './completion.js';
 import { doctorCommand } from './doctor.js';
 import { evalCommand } from './eval.js';
+import { evalCompareCommand } from './eval-compare.js';
 import { exportCommand } from './export.js';
 import { initCommand } from './init.js';
 import { failuresCommand } from './failures.js';
@@ -41,6 +42,7 @@ export const commands: readonly Command[] = Object.freeze([
   failuresCommand,
   classifyCommand,
   evalCommand,
+  evalCompareCommand,
   reviewCommand,
   suggestRulesCommand,
   suggestRegressionsCommand,
