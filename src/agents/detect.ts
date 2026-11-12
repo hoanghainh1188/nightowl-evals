@@ -1,15 +1,36 @@
 import { looksLikeClaudeCode, parseClaudeCode } from './claude-code.js';
+import { looksLikeCline, parseCline } from './cline.js';
 import { looksLikeCursor, parseCursor } from './cursor.js';
 import { agentFromExplicitField, parseGenericAgent } from './generic.js';
+import { isRecord } from './fields.js';
 import type { AgentId } from './ids.js';
-import { isAgentId, maturityOf, parseAgentId } from './ids.js';
+import { isAgentId, parseAgentId } from './ids.js';
+import { looksLikeRoo, parseRoo } from './roo.js';
 import type { AgentParseResult } from './types.js';
+import { looksLikeWindsurf, parseWindsurf } from './windsurf.js';
 
-/** Best-effort agents auto-detected by event-name hints (after Claude/Cursor/explicit). */
-const BEST_EFFORT_ORDER: readonly AgentId[] = Object.freeze(['windsurf', 'cline', 'roo']);
+type DedicatedParser = (text: string, root: string, forced?: boolean) => Promise<AgentParseResult | null>;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+const DEDICATED: Readonly<Partial<Record<AgentId, DedicatedParser>>> = Object.freeze({
+  'claude-code': (text, root) => parseClaudeCode(text, root),
+  cursor: (text, root) => parseCursor(text, root),
+  windsurf: parseWindsurf,
+  cline: parseCline,
+  roo: parseRoo,
+});
+
+/** Auto-detect order for best-effort dedicated adapters (after Claude/Cursor/explicit). */
+const BEST_EFFORT_DETECT: readonly { id: AgentId; looks: (data: Record<string, unknown>) => boolean; parse: DedicatedParser }[] =
+  Object.freeze([
+    { id: 'windsurf', looks: looksLikeWindsurf, parse: parseWindsurf },
+    { id: 'cline', looks: looksLikeCline, parse: parseCline },
+    { id: 'roo', looks: looksLikeRoo, parse: parseRoo },
+  ]);
+
+async function parseById(id: AgentId, text: string, root: string, forced: boolean): Promise<AgentParseResult | null> {
+  const dedicated = DEDICATED[id];
+  if (dedicated) return dedicated(text, root, forced);
+  return parseGenericAgent(text, root, id, forced);
 }
 
 export async function detectAndParse(
@@ -20,10 +41,7 @@ export async function detectAndParse(
   if (forcedAgent !== undefined && forcedAgent !== null) {
     const id = parseAgentId(forcedAgent);
     if (id === null) return null;
-    if (id === 'claude-code') return parseClaudeCode(text, root);
-    if (id === 'cursor') return parseCursor(text, root);
-    // Forced path (manual wrap or best-effort): require a parseable contract, do not invent events.
-    return parseGenericAgent(text, root, id, true);
+    return parseById(id, text, root, true);
   }
 
   let data: unknown;
@@ -35,19 +53,14 @@ export async function detectAndParse(
   if (!isRecord(data)) return null;
 
   const explicit = agentFromExplicitField(data);
-  if (explicit !== null) {
-    if (explicit === 'claude-code') return parseClaudeCode(text, root);
-    if (explicit === 'cursor') return parseCursor(text, root);
-    // Explicit agent field: parse even for manual maturity (user tagged the payload).
-    return parseGenericAgent(text, root, explicit, true);
-  }
+  if (explicit !== null) return parseById(explicit, text, root, true);
 
   if (looksLikeClaudeCode(data)) return parseClaudeCode(text, root);
   if (looksLikeCursor(data)) return parseCursor(text, root);
 
-  for (const agent of BEST_EFFORT_ORDER) {
-    if (maturityOf(agent) === 'manual') continue;
-    const parsed = await parseGenericAgent(text, root, agent, false);
+  for (const entry of BEST_EFFORT_DETECT) {
+    if (!entry.looks(data)) continue;
+    const parsed = await entry.parse(text, root, false);
     if (parsed !== null) return parsed;
   }
   return null;

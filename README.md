@@ -115,17 +115,17 @@ Generic benchmarks (like HumanEval or SWE-bench) evaluate AI on standardized alg
 
 ### Supported agents
 
-| Agent | Id | Maturity | Capture / setup |
-|-------|----|----------|-----------------|
-| Claude Code | `claude-code` | **verified** | `.claude/settings(.local).json` hooks via `nightowl init` |
-| Cursor | `cursor` | **verified** | `.cursor/hooks.json` (`beforeSubmitPrompt`, `afterFileEdit`) |
-| Windsurf | `windsurf` | **best-effort** | `.windsurf/hooks.json` NightOwl hook entries (tool may need matching Cascade hook support) |
-| Cline | `cline` | **best-effort** | `.cline/nightowl.json` project marker + pipe events to `nightowl log --agent cline` |
-| Roo Code | `roo` | **best-effort** | `.roo/nightowl.json` project marker + pipe events to `nightowl log --agent roo` |
-| Copilot Workspace | `copilot-workspace` | **manual** | No native project hook file from `init`. Wrap: `echo '<json>' \| nightowl log --agent copilot-workspace` |
-| Aider | `aider` | **manual** | No native project hook file from `init`. Wrap after edits: `nightowl log --agent aider` with JSON on stdin |
+| Agent | Id | Maturity | Capture / setup | Limits |
+|-------|----|----------|-----------------|--------|
+| Claude Code | `claude-code` | **verified** | `.claude/settings(.local).json` hooks via `nightowl init` | Prompt + edit via native hooks |
+| Cursor | `cursor` | **verified** | `.cursor/hooks.json` (`beforeSubmitPrompt`, `afterFileEdit`) | Prompt + edit via native hooks |
+| Windsurf | `windsurf` | **best-effort** | `.windsurf/hooks.json` (`pre_user_prompt`, `post_file_edit`) + dedicated parser | IDE must honor Cascade hooks; stay best-effort until that path is stable |
+| Cline | `cline` | **best-effort** | `.cline/nightowl.json` marker (`nightowl` + command) + dedicated parser; prefer `--agent cline` | Marker is not a native Cline hook — pipe/wrap events into `nightowl log` |
+| Roo Code | `roo` | **best-effort** | `.roo/nightowl.json` marker + dedicated parser; prefer `--agent roo` | Same as Cline: project marker + wrap, not a guaranteed IDE-native hook |
+| Copilot Workspace | `copilot-workspace` | **manual** | No native project hook file from `init`. Wrap: `echo '<json>' \| nightowl log --agent copilot-workspace` | Document-only wrap; no auto-detect |
+| Aider | `aider` | **manual** | No native project hook file from `init`. Wrap after edits: `nightowl log --agent aider` with JSON on stdin | Document-only wrap; no auto-detect |
 
-**Maturity:** `verified` = NightOwl installs hooks the tool reads and adapters have fixtures; `best-effort` = install + parse documented but the IDE may need extra setup; `manual` = document-only wrap around `nightowl log` (init does not invent a fake native hook).
+**Maturity:** `verified` = NightOwl installs hooks the tool reads and adapters have fixtures; `best-effort` = dedicated parse + install/doctor shape checks, but the IDE may still need extra setup; `manual` = document-only wrap around `nightowl log` (init does not invent a fake native hook). `nightowl doctor` warns when a best-effort config file exists but is missing required NightOwl fields/events.
 
 **Git fallback:** if a commit changes a file with no recent agent snapshot, NightOwl records an `unattributed-change` observation (optionally inferring the agent from branch names like `cursor/...`). It does **not** invent `ai_content` or create a full failure pair without a real snapshot.
 

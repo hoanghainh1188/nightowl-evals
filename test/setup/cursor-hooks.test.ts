@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { installCursorHooks, mergeCursorHooks, uninstallCursorHooks } from '../../src/setup/cursor-hooks.js';
 import {
   AGENT_CONFIGS,
+  hasCompleteBestEffortShape,
   hasNightowlAgentMarker,
   installAgentConfig,
   mergeAgentConfig,
@@ -51,6 +52,7 @@ describe('best-effort agent configs', () => {
     expect(result.status).toBe('created');
     const doc = JSON.parse(await readFile(join(repo.path, spec.file), 'utf8'));
     expect(hasNightowlAgentMarker(doc, spec.id)).toBe(true);
+    expect(hasCompleteBestEffortShape(doc, spec.id)).toBe(true);
     const again = mergeAgentConfig(doc, spec.id);
     expect(again.added).toBe(false);
   });
@@ -59,9 +61,22 @@ describe('best-effort agent configs', () => {
     const merged = mergeWindsurfHooks(null);
     expect(merged.added).toBe(true);
     expect(merged.value.hooks).toMatchObject({
-      pre_user_prompt: [expect.objectContaining({ nightowl: true })],
-      post_file_edit: [expect.objectContaining({ nightowl: true })],
+      pre_user_prompt: [expect.objectContaining({ nightowl: true, agent: 'windsurf', command: expect.any(String) })],
+      post_file_edit: [expect.objectContaining({ nightowl: true, agent: 'windsurf', command: expect.any(String) })],
     });
+    expect(hasCompleteBestEffortShape(merged.value, 'windsurf')).toBe(true);
+  });
+
+  it('repairs incomplete Cline/Roo markers and Windsurf entries on re-merge', () => {
+    const cline = mergeAgentConfig({ nightowl: true }, 'cline');
+    expect(cline.added).toBe(true);
+    expect(hasCompleteBestEffortShape(cline.value, 'cline')).toBe(true);
+
+    const windsurf = mergeWindsurfHooks({
+      hooks: { pre_user_prompt: [{ nightowl: true }], post_file_edit: [{ nightowl: true }] },
+    });
+    expect(windsurf.added).toBe(true);
+    expect(hasCompleteBestEffortShape(windsurf.value, 'windsurf')).toBe(true);
   });
 
   it('does not write native hook files for manual agents; warns with wrap hint', async () => {

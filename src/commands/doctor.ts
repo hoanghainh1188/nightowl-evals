@@ -7,7 +7,12 @@ import { errorMessage } from '../cli/errors.js';
 import { renderCommandHelp } from '../cli/help.js';
 import type { Io } from '../cli/io.js';
 import { runGit } from '../hooks/git/run-git.js';
-import { AGENT_CONFIGS, hasNightowlAgentMarker, LEGACY_AGENT_CONFIGS } from '../setup/agent-config.js';
+import {
+  AGENT_CONFIGS,
+  hasCompleteBestEffortShape,
+  hasNightowlAgentMarker,
+  LEGACY_AGENT_CONFIGS,
+} from '../setup/agent-config.js';
 import {
   hasNightowlHooks,
   PERSONAL_SETTINGS,
@@ -312,12 +317,20 @@ export async function checkAgentHooks(deps: DoctorDeps, root: string | null): Pr
     }
     try {
       const doc = JSON.parse(raw) as unknown;
-      if (hasNightowlAgentMarker(doc, spec.id)) {
+      if (hasCompleteBestEffortShape(doc, spec.id)) {
         checks.push({
           category: 'Agent Hooks',
           name: `${spec.id} config`,
           status: 'ok',
           message: `NightOwl entry present in ${spec.file} (${maturityOf(spec.id)})`,
+        });
+      } else if (hasNightowlAgentMarker(doc, spec.id)) {
+        checks.push({
+          category: 'Agent Hooks',
+          name: `${spec.id} config`,
+          status: 'warn',
+          message: `${spec.file} NightOwl shape incomplete (missing command/agent fields or Windsurf events)`,
+          remedy: `Run 'nightowl init --agents ${spec.id}' to repair the documented contract.`,
         });
       } else {
         checks.push({
@@ -677,9 +690,10 @@ export function createDoctorCommand(deps: DoctorDeps = defaultDoctorDeps): Comma
       description: [
         'Diagnoses system requirements, Git repository status, Claude Code hooks,',
         'multi-agent ingest configs by maturity (verified / best-effort / manual),',
+        'including best-effort config shape (not only file presence),',
         'Git hook authenticity (commands + execute bit on POSIX; skipped on Windows), monorepo workspace',
         'discovery when configured, and report readiness (failures + CI/PR/revert signals).',
-        'Paths with \\ are normalized like / for module/workspace checks.',
+        'Paths with \\ are normalized like / for module/workspace checks. See README for per-agent limits.',
       ],
       options: [
         ['--strict', 'Exit with code 1 if any warnings or failures are detected.'],
