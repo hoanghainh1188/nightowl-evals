@@ -38,8 +38,8 @@ describe('report queries', () => {
 
   it('counts judged checks by day and leaves superseded ones out', () => {
     expect(store.countChecksForReport(null)).toEqual([
-      { day: '2026-11-01', outcome: 'not-a-failure', agent: 'claude-code', count: 1 },
-      { day: '2026-11-02', outcome: 'failure', agent: 'claude-code', count: 1 },
+      { day: '2026-11-01', outcome: 'not-a-failure', agent: 'claude-code', filePath: 'x.ts', count: 1 },
+      { day: '2026-11-02', outcome: 'failure', agent: 'claude-code', filePath: 'x.ts', count: 1 },
     ]);
   });
 

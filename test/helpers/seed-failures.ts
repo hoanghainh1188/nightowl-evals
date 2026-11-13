@@ -24,6 +24,8 @@ export interface SeedCheck {
   readonly createdAt: string;
   readonly outcome: 'failure' | 'not-a-failure' | 'superseded';
   readonly agent?: string | null;
+  /** Path on the check event; omit for default `x.ts`, set null/'' for unscoped checks. */
+  readonly filePath?: string | null;
 }
 
 // Writes rows straight into the database with chosen dates, statuses and categories.
@@ -75,7 +77,10 @@ export async function seed(root: string, failures: readonly SeedFailure[], check
     }
     const attach = db.prepare('INSERT INTO checks_attached (check_id, outcome) VALUES (?, ?)');
     for (const c of checks) {
-      const id = (event.get(c.createdAt, 'git', 'commit-check', 'x.ts', '{}', c.agent ?? 'claude-code') as { id: number }).id;
+      const checkPath = c.filePath === undefined ? 'x.ts' : c.filePath;
+      const id = (
+        event.get(c.createdAt, 'git', 'commit-check', checkPath, '{}', c.agent ?? 'claude-code') as { id: number }
+      ).id;
       attach.run(id, c.outcome);
     }
     return ids;

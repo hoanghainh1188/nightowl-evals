@@ -21,8 +21,8 @@ describe('formatText', () => {
         ...base,
         failures: [row('src/hooks/a.ts', 'logic', '2026-11-02', 3), row('src/cli/b.ts', 'convention', '2026-11-04')],
         checks: [
-          { day: '2026-11-02', outcome: 'failure', agent: 'claude-code', count: 4 },
-          { day: '2026-11-02', outcome: 'not-a-failure', agent: 'claude-code', count: 12 },
+          { day: '2026-11-02', outcome: 'failure', agent: 'claude-code', filePath: null, count: 4 },
+          { day: '2026-11-02', outcome: 'not-a-failure', agent: 'claude-code', filePath: null, count: 12 },
         ],
       }),
     );

@@ -13,10 +13,10 @@ describe('report by agent', () => {
         { filePath: 'b.ts', category: 'logic', status: 'flagged', source: 'manual-fix', agent: 'claude-code', day: '2026-11-09', count: 1 },
       ],
       checks: [
-        { day: '2026-11-09', outcome: 'failure', agent: 'cursor', count: 3 },
-        { day: '2026-11-09', outcome: 'not-a-failure', agent: 'cursor', count: 9 },
-        { day: '2026-11-09', outcome: 'failure', agent: 'claude-code', count: 1 },
-        { day: '2026-11-09', outcome: 'not-a-failure', agent: 'claude-code', count: 9 },
+        { day: '2026-11-09', outcome: 'failure', agent: 'cursor', filePath: null, count: 3 },
+        { day: '2026-11-09', outcome: 'not-a-failure', agent: 'cursor', filePath: null, count: 9 },
+        { day: '2026-11-09', outcome: 'failure', agent: 'claude-code', filePath: null, count: 1 },
+        { day: '2026-11-09', outcome: 'not-a-failure', agent: 'claude-code', filePath: null, count: 9 },
       ],
     });
     expect(report.byAgent).toEqual({ 'claude-code': 1, cursor: 3 });

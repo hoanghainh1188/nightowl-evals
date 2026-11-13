@@ -101,8 +101,8 @@ describe('buildReport', () => {
       ...base,
       failures: [],
       checks: [
-        { day: '2026-11-02', outcome: 'failure', agent: 'claude-code', count: 1 },
-        { day: '2026-11-03', outcome: 'not-a-failure', agent: 'claude-code', count: 3 },
+        { day: '2026-11-02', outcome: 'failure', agent: 'claude-code', filePath: null, count: 1 },
+        { day: '2026-11-03', outcome: 'not-a-failure', agent: 'claude-code', filePath: null, count: 3 },
       ],
     });
     expect(report.changedRate).toEqual({ failures: 1, checked: 4, rate: 0.25 });
