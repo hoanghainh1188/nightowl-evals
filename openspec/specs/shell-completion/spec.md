@@ -100,3 +100,10 @@ Catalog completion SHALL gồm `--workspace` trên các lệnh báo cáo hỗ tr
 #### Scenario: Catalog report có --workspace
 - **WHEN** dựng catalog completion
 - **THEN** entry `report` gồm `--workspace`
+
+### Requirement: Completion flag prune profile
+Catalog completion của `prune` SHALL gồm `--profile` (và giữ `--days`, `--dry-run`, `--vacuum`) khi change thêm flag đó.
+
+#### Scenario: Catalog prune có --profile
+- **WHEN** đọc catalog completion lệnh `prune`
+- **THEN** entry gồm `--profile`

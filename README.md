@@ -436,15 +436,16 @@ At post-commit attach, NightOwl scores AI vs committed content for likely noise:
 
 #### `nightowl prune`
 
-Cleans up old file snapshots to keep database size optimal while preserving permanent failure records.
+Cleans up old file snapshots to keep database size optimal while preserving permanent failure records. Reports estimated snapshot payload bytes; with `--vacuum`, also prints DB file size before/after.
 
 ```bash
-nightowl prune [--days <N>] [--dry-run] [--vacuum]
+nightowl prune [--days <N>] [--profile <short|default|long>] [--dry-run] [--vacuum]
 ```
 
-- `--days <N>`: Prune snapshots older than `N` days (default: `30`).
-- `--dry-run`: Preview how many records would be deleted without changing anything.
-- `--vacuum`: Run SQLite `VACUUM` to reclaim disk space after pruning.
+- `--days <N>`: Prune snapshots older than `N` days (default: `30`). Overrides `--profile` when both are set.
+- `--profile <short|default|long>`: Named retention (`short`=7, `default`=30, `long`=90 days).
+- `--dry-run`: Preview snapshot count and estimated bytes without changing anything (`--vacuum` is skipped).
+- `--vacuum`: Run SQLite `VACUUM` after pruning and report database file size before/after.
 
 #### `nightowl failures`
 

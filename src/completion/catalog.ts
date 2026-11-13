@@ -41,7 +41,7 @@ export const COMMAND_FLAGS: Readonly<Record<string, readonly string[]>> = Object
   'ingest-revert': ['--since'],
   precommit: [],
   postcommit: [],
-  prune: ['--days', '--dry-run', '--vacuum'],
+  prune: ['--days', '--profile', '--dry-run', '--vacuum'],
   failures: [],
   classify: ['--yes', '--transport', '--limit', '--model', '--redo'],
   eval: [

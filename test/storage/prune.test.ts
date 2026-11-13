@@ -4,8 +4,11 @@ import { migrate } from '../../src/storage/migrations.js';
 import {
   computeCutoffDate,
   countPrunableSnapshots,
+  estimatePrunableSnapshots,
+  isRetentionProfile,
   pruneSnapshots,
   pruneStorage,
+  RETENTION_PROFILES,
   vacuumDatabase,
 } from '../../src/storage/prune.js';
 
@@ -39,15 +42,23 @@ describe('storage prune', () => {
     expect(cutoff).toBe('2026-10-10T12:00:00.000Z');
   });
 
-  it('counts prunable snapshots older than cutoff date', () => {
+  it('exposes retention profiles short/default/long', () => {
+    expect(RETENTION_PROFILES).toEqual({ short: 7, default: 30, long: 90 });
+    expect(isRetentionProfile('short')).toBe(true);
+    expect(isRetentionProfile('nope')).toBe(false);
+  });
+
+  it('counts and estimates bytes for prunable snapshots', () => {
     insertEvent('2026-09-01T00:00:00.000Z', 'old snapshot 1');
     insertEvent('2026-09-15T00:00:00.000Z', 'old snapshot 2');
-    insertEvent('2026-09-20T00:00:00.000Z', null); // Already null snapshot
+    insertEvent('2026-09-20T00:00:00.000Z', null);
     insertEvent('2026-11-05T00:00:00.000Z', 'new snapshot');
 
     const cutoff = '2026-10-01T00:00:00.000Z';
-    const count = countPrunableSnapshots(db, cutoff);
-    expect(count).toBe(2);
+    expect(countPrunableSnapshots(db, cutoff)).toBe(2);
+    const estimate = estimatePrunableSnapshots(db, cutoff);
+    expect(estimate.snapshots).toBe(2);
+    expect(estimate.bytesEstimated).toBe('old snapshot 1'.length + 'old snapshot 2'.length);
   });
 
   it('prunes snapshots older than cutoff while keeping newer snapshots intact', () => {
@@ -78,17 +89,26 @@ describe('storage prune', () => {
     expect(third.snapshot_skipped).toBeNull();
   });
 
-  it('supports dry-run mode without modifying the database', () => {
+  it('supports dry-run mode without modifying the database and reports bytes', () => {
     insertEvent('2026-09-01T00:00:00.000Z', 'old snapshot');
     const now = new Date('2026-11-09T12:00:00.000Z');
 
     const result = pruneStorage(db, { olderThanDays: 30, dryRun: true, now });
     expect(result.snapshotsPruned).toBe(1);
+    expect(result.bytesEstimated).toBe('old snapshot'.length);
     expect(result.cutoffDate).toBe('2026-10-10T12:00:00.000Z');
 
     const row = db.prepare('SELECT payload FROM events').get() as { payload: string };
     const payload = JSON.parse(row.payload);
     expect(payload.snapshot).toBe('old snapshot');
+  });
+
+  it('pruneStorage returns bytes estimated before clearing snapshots', () => {
+    insertEvent('2026-09-01T00:00:00.000Z', 'abcdef');
+    const now = new Date('2026-11-09T12:00:00.000Z');
+    const result = pruneStorage(db, { olderThanDays: 30, now });
+    expect(result.snapshotsPruned).toBe(1);
+    expect(result.bytesEstimated).toBe(6);
   });
 
   it('executes vacuum successfully', () => {
