@@ -26,6 +26,15 @@ export const COMMAND_FLAGS: Readonly<Record<string, readonly string[]>> = Object
   ],
   dashboard: ['--since', '--depth', '--workspace', '--agent', '--output', '-o', '--open', '--redact-paths'],
   digest: ['--since', '--depth', '--workspace', '--agent', '--format', '--output', '-o', '--redact-paths'],
+  'share-pack': [
+    '--since',
+    '--depth',
+    '--agent',
+    '--no-redact-paths',
+    '--output',
+    '-o',
+    '--archive',
+  ],
   export: [
     '--out',
     '--format',

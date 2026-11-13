@@ -107,3 +107,10 @@ Catalog completion của `prune` SHALL gồm `--profile` (và giữ `--days`, `-
 #### Scenario: Catalog prune có --profile
 - **WHEN** đọc catalog completion lệnh `prune`
 - **THEN** entry gồm `--profile`
+
+### Requirement: Completion cho share-pack
+Catalog completion SHALL gồm subcommand share-pack (tên đã document) với các flag dài đã document (ít nhất `--output`/`-o`, cờ redaction/archive/`--since` nếu có).
+
+#### Scenario: Catalog có share-pack
+- **WHEN** dựng catalog completion từ registry lệnh
+- **THEN** có mục `share-pack` (hoặc tên đã chọn) với danh sách flag không rỗng

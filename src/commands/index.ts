@@ -20,6 +20,7 @@ import { digestCommand } from './digest.js';
 import { reportCommand } from './report.js';
 import { reviewCommand } from './review.js';
 import { ruleImpactCommand } from './rule-impact.js';
+import { sharePackCommand } from './share-pack.js';
 import { suggestRegressionsCommand } from './suggest-regressions.js';
 import { suggestRulesCommand } from './suggest-rules.js';
 import { uninstallCommand } from './uninstall.js';
@@ -32,6 +33,7 @@ export const commands: readonly Command[] = Object.freeze([
   customerReportCommand,
   dashboardCommand,
   digestCommand,
+  sharePackCommand,
   exportCommand,
   ingestCiCommand,
   ingestPrCommand,
