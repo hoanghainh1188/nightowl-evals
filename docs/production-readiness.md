@@ -1,8 +1,8 @@
 # Kế Hoạch Chuẩn Bị Cho Sản Phẩm Production-Ready (Production Readiness Roadmap)
 
-Tài liệu này ghi mức độ sẵn sàng kỹ thuật của **NightOwl Evals** (`@hoanghainh/nightowl-evals`) sau Production-Ready gốc (1–17) và ideation **v0.3–v0.6 Core** (ship `0.5.0` / `0.5.1` / `0.6.0`). Phạm vi vẫn **open-core / local-first**.
+Tài liệu này ghi mức độ sẵn sàng kỹ thuật của **NightOwl Evals** (`@hoanghainh/nightowl-evals`) sau Production-Ready gốc (1–17) và ideation **v0.3–v0.6** (ship `0.5.0` / `0.5.1` / `0.6.0` / `0.6.1`). Phạm vi vẫn **open-core / local-first**.
 
-Hướng tiếp theo: Secondary v0.6 (#44–47) trong [`v0.6-roadmap-ideas.md`](v0.6-roadmap-ideas.md). Lịch sử v0.5: [`v0.5-roadmap-ideas.md`](v0.5-roadmap-ideas.md).
+Hướng tiếp theo: ideation sau v0.6 khi có; lịch sử v0.6: [`v0.6-roadmap-ideas.md`](v0.6-roadmap-ideas.md). Lịch sử v0.5: [`v0.5-roadmap-ideas.md`](v0.5-roadmap-ideas.md).
 
 ---
 
@@ -22,21 +22,20 @@ Hướng tiếp theo: Secondary v0.6 (#44–47) trong [`v0.6-roadmap-ideas.md`](
 
 ---
 
-## 2. Khoảng trống còn mở (Remaining Gaps)
+## 2. Ideation v0.6 đã ship (Remaining Gaps → closed)
 
-Các mục dưới đây **không** còn là gap Production-Ready gốc; chúng là hướng sâu hơn cho giai đoạn team local — chi tiết trong [`v0.6-roadmap-ideas.md`](v0.6-roadmap-ideas.md).
+Các mục dưới đây **không** còn là gap Production-Ready gốc; chúng là hướng sâu hơn cho giai đoạn team local đã đóng trong `0.6.0` / `0.6.1` — chi tiết trong [`v0.6-roadmap-ideas.md`](v0.6-roadmap-ideas.md).
 
 ### 2.1. Đã ship trong `0.6.0` Core
 - Doctor team readiness / workspace / authenticity (`#40`).
 - Windows local DX: path normalize, NTFS best-effort, hook chmod skip (`#41`).
 - Vòng rule local siết hơn (`#42`); adapter best-effort sâu hơn + shape checks (`#43`).
 
-### 2.2. Quy mô & monorepo (Secondary còn mở)
-- `--workspace` MVP chỉ lọc failure; `changedRate` / checks / signals còn full-window (`#45`).
-- DB lớn: ngân sách query/index cho report/dashboard (`#47`).
-- Prune UX: dry-run dung lượng, retention profiles (`#44`).
-- Share-pack local (`#46`).
-- Gói share-out local đã redact, offline (`#46`).
+### 2.2. Đã ship trong `0.6.1` Secondary
+- Prune UX: dry-run bytes, retention profiles, vacuum size (`#44`).
+- `--workspace` scope `changedRate` / path-bearing checks (`#45`).
+- Share-pack local offline đã redact (`#46`).
+- DB lớn: report-window indexes + doctor/report timing (`#47`).
 
 ---
 
@@ -53,14 +52,15 @@ Các mục dưới đây **không** còn là gap Production-Ready gốc; chúng 
 ├── add-eval-test-runner
 └── add-direct-api-classify
 
-Đã xong — Ideation v0.3 / v0.4 / v0.5 / v0.6 Core (xem roadmap docs)
+Đã xong — Ideation v0.3 / v0.4 / v0.5 / v0.6 (xem roadmap docs)
 ├── multi-agent, rules, regressions, TUI, Action, completion, …
 ├── CI/PR signals, rule-impact, customer-report, …
 ├── dashboard, noise, clusters, revert, digest, privacy, eval A/B, workspace
-└── doctor team, Windows DX, rule feedback loop, deeper multi-agent adapters (`0.6.0`)
+├── doctor team, Windows DX, rule feedback loop, deeper multi-agent adapters (`0.6.0`)
+└── prune UX, workspace metrics, share-pack, large-DB timing (`0.6.1`)
 
-Tiếp theo — v0.6 Secondary (#44–47)
-└── docs/v0.6-roadmap-ideas.md
+Tiếp theo — ideation sau v0.6 (khi có)
+└── (chưa mở)
 ```
 
 
