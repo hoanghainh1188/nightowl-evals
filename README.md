@@ -28,6 +28,8 @@
     - [`nightowl report`](#nightowl-report)
     - [`nightowl customer-report`](#nightowl-customer-report)
     - [`nightowl dashboard`](#nightowl-dashboard)
+    - [`nightowl digest`](#nightowl-digest)
+    - [`nightowl share-pack`](#nightowl-share-pack)
     - [`nightowl ingest-ci`](#nightowl-ingest-ci)
     - [`nightowl ingest-pr`](#nightowl-ingest-pr)
     - [`nightowl review`](#nightowl-review)
@@ -347,6 +349,25 @@ nightowl digest --since 2026-11-01 --format html -o .nightowl/digest.html
 | `--format <md\|html>` | Output format (default: `md`) |
 | `-o, --output <file>` | Write to a file (`html` default: `.nightowl/digest.html`) |
 | `--redact-paths` | Accepted for share-out consistency (no-op while digest has no path labels) |
+
+#### `nightowl share-pack`
+
+Builds a **local offline share pack** for teammates: `report.md`, `digest.md`, and `manifest.json` (privacy flags + file list). **Path redaction is on by default.** Does not call the network, upload, or include developer names. Optional `--archive` writes a `.tar.gz` beside the pack directory (Node zlib; not zip).
+
+```bash
+nightowl share-pack
+nightowl share-pack --since 7d -o dist/share
+nightowl share-pack --archive --no-redact-paths
+```
+
+| Option | Description |
+| :--- | :--- |
+| `--since <YYYY-MM-DD\|Nd>` | Window start (default: last **7** days UTC; e.g. `7d`) |
+| `--depth <1-5>` | Module folder depth (default: `2`) |
+| `--agent <id>` | Only include this agent (repeatable) |
+| `--no-redact-paths` | Keep full module/path labels (default: paths are coarsened) |
+| `-o, --output <dir>` | Pack directory (default: `.nightowl/share/<stamp>/`) |
+| `--archive` | Also write `<dir>.tar.gz` locally (no upload) |
 
 #### `nightowl ingest-ci`
 

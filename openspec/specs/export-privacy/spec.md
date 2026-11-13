@@ -30,3 +30,10 @@ Chế độ dry-run privacy (cờ đã document) SHALL báo số/loại chỗ s�
 #### Scenario: Dry-run có secret
 - **WHEN** chạy dry-run trên nội dung có secret inline
 - **THEN** báo cáo có đếm/loại secret ≥ 1 và stdout/stderr không chứa chuỗi secret gốc
+
+### Requirement: Share-pack dùng profile privacy chung
+Lệnh share-pack SHALL áp dụng cùng profile redaction/coarsen path đã document của export-privacy cho nội dung report/digest trong gói khi redaction bật (mặc định bật cho share). SHALL NOT gọi mạng.
+
+#### Scenario: Pack bật coarsen path
+- **WHEN** tạo share-pack với redaction mặc định và report có module path sâu
+- **THEN** path trong file report của gói đã coarsen theo profile chung
