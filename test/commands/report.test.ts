@@ -58,6 +58,26 @@ describe('nightowl report', () => {
     expect(recent.since).toBe('2026-11-01T00:00:00.000Z');
   });
 
+  it('prints --debug-timing to stderr without changing JSON stdout', async () => {
+    await seed(repo.path, spec);
+    const without = await run(['--json']);
+    expect(without.code).toBe(0);
+    expect(without.err).toBe('');
+    const withTiming = await run(['--json', '--debug-timing']);
+    expect(withTiming.code).toBe(0);
+    expect(withTiming.out).toBe(without.out);
+    expect(JSON.parse(withTiming.out).total).toBe(5);
+    expect(withTiming.err).toMatch(
+      /^nightowl report: timing: failures=\d+ms checks=\d+ms clustering=\d+ms build=\d+ms total=\d+ms\n$/,
+    );
+  });
+
+  it('documents --debug-timing in help', () => {
+    const command = createReportCommand({ cwd: () => repo.path, now: () => new Date() });
+    expect(command.help).toContain('--debug-timing');
+    expect(command.help).toMatch(/stderr/i);
+  });
+
   it('counts CI/PR signal events separately from failures', async () => {
     await seed(repo.path, []);
     const { openStore } = await import('../../src/storage/store.js');

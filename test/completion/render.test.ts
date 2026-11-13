@@ -35,9 +35,11 @@ describe('renderCompletion', () => {
     if (shell === 'fish') {
       expect(script).toContain('-l format');
       expect(script).toContain('-l fail-on-rate');
+      expect(script).toContain('-l debug-timing');
     } else {
       expect(script).toContain('--format');
       expect(script).toContain('--fail-on-rate');
+      expect(script).toContain('--debug-timing');
     }
   });
 

@@ -27,10 +27,17 @@ import { detectHookManager } from '../setup/hook-manager.js';
 import { isOnPath } from '../setup/path.js';
 import { printable } from '../shared/printable.js';
 import { SIGNAL_KINDS } from '../storage/events.js';
+import { sinceDaysAgo } from '../digest/since.js';
 import { CURRENT_SCHEMA_VERSION } from '../storage/migrations.js';
 import { findProjectRoot } from '../storage/project-root.js';
 import { loadSqlite } from '../storage/sqlite.js';
 import { DATA_DIR, DB_FILE, openStore, type Store } from '../storage/store.js';
+import {
+  DOCTOR_REPORT_SAMPLE_DAYS,
+  measureSync,
+  REPORT_QUERY_BUDGET_MS,
+  type Timed,
+} from '../storage/timing.js';
 import { discoverWorkspaces, hasWorkspaceConfig } from '../workspace/index.js';
 import type { Command } from './command.js';
 
@@ -71,6 +78,10 @@ export interface DoctorDeps {
   /** Defaults to process.platform; used to skip execute-bit checks on win32. */
   readonly platform?: () => NodeJS.Platform;
   readonly isExecutable?: (path: string) => Promise<boolean>;
+  /** Optional clock for report-query timing (tests). */
+  readonly now?: () => Date;
+  readonly measureSync?: <T>(fn: () => T) => Timed<T>;
+  readonly reportQueryBudgetMs?: number;
 }
 
 export const defaultDoctorDeps: DoctorDeps = {
@@ -631,6 +642,30 @@ export async function checkStorage(deps: DoctorDeps, root: string | null): Promi
           "Record AI failures via agent/git hooks (run 'nightowl init' if needed), then re-run doctor before relying on report.",
       });
     }
+
+    const measure = deps.measureSync ?? measureSync;
+    const budgetMs = deps.reportQueryBudgetMs ?? REPORT_QUERY_BUDGET_MS;
+    const now = deps.now?.() ?? new Date();
+    const since = sinceDaysAgo(now, DOCTOR_REPORT_SAMPLE_DAYS);
+    const timed = measure(() => store!.countFailuresForReport(since));
+    const ms = Math.round(timed.ms);
+    if (timed.ms > budgetMs) {
+      checks.push({
+        category: 'NightOwl Database',
+        name: 'Report query timing',
+        status: 'warn',
+        message: `Report-read sample took ${ms}ms (budget ${budgetMs}ms over last ${DOCTOR_REPORT_SAMPLE_DAYS}d)`,
+        remedy:
+          'Run nightowl prune --vacuum on old snapshots, keep --since windows tight, or use nightowl report --debug-timing to see which step is slow.',
+      });
+    } else {
+      checks.push({
+        category: 'NightOwl Database',
+        name: 'Report query timing',
+        status: 'ok',
+        message: `Report-read sample ${ms}ms (budget ${budgetMs}ms, last ${DOCTOR_REPORT_SAMPLE_DAYS}d)`,
+      });
+    }
   } catch (error) {
     checks.push({
       category: 'NightOwl Database',
@@ -693,6 +728,7 @@ export function createDoctorCommand(deps: DoctorDeps = defaultDoctorDeps): Comma
         'including best-effort config shape (not only file presence),',
         'Git hook authenticity (commands + execute bit on POSIX; skipped on Windows), monorepo workspace',
         'discovery when configured, and report readiness (failures + CI/PR/revert signals).',
+        'Also samples report-query timing against a local budget (warns when slow).',
         'Paths with \\ are normalized like / for module/workspace checks. See README for per-agent limits.',
       ],
       options: [

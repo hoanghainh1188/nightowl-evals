@@ -85,6 +85,7 @@ describe('nightowl doctor', () => {
         return {
           pragma: (name: string) => (name === 'integrity_check' ? 'ok' : CURRENT_SCHEMA_VERSION),
           countFailures: () => ({ total: 0, byStatus: {} }),
+          countFailuresForReport: () => [],
           countEventsByKind: () => ({ 'ci-fail': 0, 'pr-review': 0, revert: 0 }),
           listEvents: () => [],
           close: () => {},
@@ -92,6 +93,9 @@ describe('nightowl doctor', () => {
       },
       platform: () => 'linux' as NodeJS.Platform,
       isExecutable: async () => true,
+      measureSync: <T>(fn: () => T) => ({ result: fn(), ms: 12 }),
+      reportQueryBudgetMs: 500,
+      now: () => new Date('2026-11-13T12:00:00.000Z'),
       ...overrides,
     };
   }
@@ -111,6 +115,7 @@ describe('nightowl doctor', () => {
     expect(cmd.help).toMatch(/multi-agent|maturity/i);
     expect(cmd.help).toMatch(/workspace|monorepo/i);
     expect(cmd.help).toMatch(/readiness|signals/i);
+    expect(cmd.help).toMatch(/timing|budget|performance/i);
   });
 
   it('rejects invalid arguments with exit code 1', async () => {
@@ -150,6 +155,7 @@ describe('nightowl doctor', () => {
     expect(out).toContain('✓ Database integrity check passed (ok)');
     expect(out).toContain(`✓ Schema version is ${CURRENT_SCHEMA_VERSION} (up to date)`);
     expect(out).toContain('! No failures recorded yet — report/CI gate will have little signal');
+    expect(out).toContain('✓ Report-read sample 12ms (budget 500ms, last 30d)');
     expect(out).toContain('Result:');
     expect(out).toContain('0 failures');
     expect(out).toContain('NightOwl hooks present in .cursor/hooks.json (verified)');
@@ -163,6 +169,7 @@ describe('nightowl doctor', () => {
         ({
           pragma: (name: string) => (name === 'integrity_check' ? 'ok' : CURRENT_SCHEMA_VERSION),
           countFailures: () => ({ total: 2, byStatus: { flagged: 2 } }),
+          countFailuresForReport: () => [],
           countEventsByKind: () => ({ 'ci-fail': 0, 'pr-review': 0, revert: 0 }),
           listEvents: () => [{}, {}],
           close: () => {},
@@ -173,6 +180,25 @@ describe('nightowl doctor', () => {
     expect(out).toContain('2 failures recorded (2 reportable)');
     expect(out).toContain('Signals: ci-fail 0, pr-review 0, revert 0');
     expect(out).not.toContain('No failures recorded yet — report/CI gate will have little signal');
+  });
+
+  it('warns when report-query sample exceeds timing budget', async () => {
+    await writeFiles(repo.path, { [`${DATA_DIR}/${DB_FILE}`]: 'sqlite database' });
+    const deps = createTestDeps({
+      measureSync: <T>(fn: () => T) => ({ result: fn(), ms: 750 }),
+      openStore: async () =>
+        ({
+          pragma: (name: string) => (name === 'integrity_check' ? 'ok' : CURRENT_SCHEMA_VERSION),
+          countFailures: () => ({ total: 1, byStatus: { flagged: 1 } }),
+          countFailuresForReport: () => [],
+          countEventsByKind: () => ({ 'ci-fail': 0, 'pr-review': 0, revert: 0 }),
+          listEvents: () => [{}],
+          close: () => {},
+        }) as unknown as Store,
+    });
+    const { code, out } = await runDoctor([], deps);
+    expect(code).toBe(0);
+    expect(out).toContain('! Report-read sample took 750ms (budget 500ms over last 30d)');
   });
 
   it('fails --strict when report readiness warns on empty failures', async () => {
@@ -341,6 +367,7 @@ describe('nightowl doctor', () => {
         ({
           pragma: (name: string) => (name === 'integrity_check' ? 'row 1: page 3 is corrupted' : CURRENT_SCHEMA_VERSION),
           countFailures: () => ({ total: 0, byStatus: {} }),
+          countFailuresForReport: () => [],
           countEventsByKind: () => ({ 'ci-fail': 0, 'pr-review': 0, revert: 0 }),
           listEvents: () => [],
           close: () => {},
@@ -362,6 +389,7 @@ describe('nightowl doctor', () => {
         ({
           pragma: (name: string) => (name === 'integrity_check' ? 'ok' : 1),
           countFailures: () => ({ total: 0, byStatus: {} }),
+          countFailuresForReport: () => [],
           countEventsByKind: () => ({ 'ci-fail': 0, 'pr-review': 0, revert: 0 }),
           listEvents: () => [],
           close: () => {},
@@ -383,6 +411,7 @@ describe('nightowl doctor', () => {
         ({
           pragma: (name: string) => (name === 'integrity_check' ? 'ok' : 999),
           countFailures: () => ({ total: 0, byStatus: {} }),
+          countFailuresForReport: () => [],
           countEventsByKind: () => ({ 'ci-fail': 0, 'pr-review': 0, revert: 0 }),
           listEvents: () => [],
           close: () => {},
@@ -508,6 +537,7 @@ describe('nightowl doctor', () => {
         ({
           pragma: (name: string) => (name === 'integrity_check' ? 'ok' : CURRENT_SCHEMA_VERSION),
           countFailures: () => ({ total: 1, byStatus: { flagged: 1 } }),
+          countFailuresForReport: () => [],
           countEventsByKind: () => ({ 'ci-fail': 2, 'pr-review': 1, revert: 0 }),
           listEvents: () => [{}],
           close: () => {},

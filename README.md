@@ -254,6 +254,7 @@ nightowl doctor [--strict]
 - Checks monorepo **workspace** discovery when `package.json` workspaces / `pnpm-workspace.yaml` is present; warns if config exists but no packages resolve.
 - Warns when NightOwl git hooks are not executable (POSIX); skips that check on Windows.
 - Summarizes **report readiness**: reportable (non-dismissed) failures plus CI/PR/revert signal counts; warns when there are no reportable failures yet.
+- Samples a report-window query and **warns** when it exceeds the local timing budget (~500ms over the last 30 days). Use `nightowl report --debug-timing` for step timings; `nightowl prune --vacuum` can shrink large DBs.
 
 #### `nightowl uninstall`
 
@@ -286,6 +287,7 @@ nightowl report [options]
 | `--json` | Output full breakdown as structured JSON |
 | `-o, --output <file>` | Write report directly to a file (creates parent directories) |
 | `--fail-on-rate <0-100>` | **CI Quality Gate**: Exit with code `1` if failure rate exceeds threshold (uses scoped `changedRate` when `--workspace` is set) |
+| `--debug-timing` | Print report-read step timings (`failures` / `checks` / `clustering` / `build` / `total`) to **stderr**; stdout/JSON unchanged |
 
 In monorepos with `package.json` `workspaces` or `pnpm-workspace.yaml`, module buckets prefer the package `name` (e.g. `@acme/ui`) over depth-based path prefixes. Discovery supports simple one-segment globs such as `packages/*` (not `**`). With `--workspace`, failures, modules, clusters, and `changedRate` (checks with a known file path) are scoped to those packages; CI/PR/revert signals and noise stay full-window. Combining `--workspace` with `--fail-on-rate` may warn on stderr if checks lack paths or the scoped denominator is empty — the gate still uses the scoped rate (so existing CI that already pairs both flags may see a different rate).
 

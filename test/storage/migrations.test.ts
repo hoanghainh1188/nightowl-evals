@@ -36,7 +36,7 @@ describe('schema v1 → current', () => {
       expect(db.prepare('SELECT file_path, ai_content, prompt_event_id FROM failures').all()).toEqual([
         { file_path: 'a.ts', ai_content: 'x', prompt_event_id: null },
       ]);
-      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(8);
+      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(9);
     } finally {
       db.close();
     }
@@ -128,7 +128,7 @@ describe('migration v3 to v4', () => {
     (await openStore({ cwd: repo.path })).close();
     const db = new DatabaseSync(dbFile);
     try {
-      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(8);
+      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(9);
       expect(db.prepare('SELECT source, feedback_event_id FROM failures').all()).toEqual([
         { source: 'manual-fix', feedback_event_id: null },
         { source: 'manual-fix', feedback_event_id: null },
@@ -172,7 +172,7 @@ describe('migration v4 to v5', () => {
     (await openStore({ cwd: repo.path })).close();
     const db = new DatabaseSync(dbFile);
     try {
-      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(8);
+      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(9);
       expect(columns(db, 'events')).toContain('agent');
       expect(columns(db, 'failures')).toContain('agent');
       expect(db.prepare('SELECT source, agent FROM events ORDER BY id').all()).toEqual([
@@ -208,7 +208,7 @@ describe('migration v5 to v6', () => {
     (await openStore({ cwd: repo.path })).close();
     const db = new DatabaseSync(dbFile);
     try {
-      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(8);
+      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(9);
       expect(columns(db, 'events')).toContain('dedupe_key');
       expect(db.prepare('SELECT source, dedupe_key FROM events').all()).toEqual([{ source: 'agent-hook', dedupe_key: null }]);
       db.exec(
@@ -249,7 +249,7 @@ describe('migration v6 to v7', () => {
     (await openStore({ cwd: repo.path })).close();
     const db = new DatabaseSync(dbFile);
     try {
-      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(8);
+      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(9);
       expect(columns(db, 'rule_applications')).toEqual(
         expect.arrayContaining(['id', 'created_at', 'applied_at', 'label', 'categories', 'agents', 'modules', 'depth', 'baseline']),
       );
@@ -288,7 +288,7 @@ describe('migration v7 to v8', () => {
     (await openStore({ cwd: repo.path })).close();
     const db = new DatabaseSync(dbFile);
     try {
-      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(8);
+      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(9);
       expect(columns(db, 'failures')).toEqual(expect.arrayContaining(['noise_score', 'noise_reasons']));
       expect(columns(db, 'noise_stats')).toEqual(
         expect.arrayContaining(['reason_key', 'dismiss_count', 'confirm_count', 'updated_at']),
@@ -302,6 +302,54 @@ describe('migration v7 to v8', () => {
       expect(db.prepare('SELECT reason_key, dismiss_count FROM noise_stats').all()).toEqual([
         { reason_key: 'comment-only', dismiss_count: 1 },
       ]);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+describe('migration v8 to v9', () => {
+  let repo: Awaited<ReturnType<typeof createFakeRepo>>;
+  let dbFile: string;
+
+  beforeEach(async () => {
+    repo = await createFakeRepo();
+    await mkdir(join(repo.path, '.nightowl'), { mode: 0o700 });
+    dbFile = join(repo.path, '.nightowl', 'nightowl.db');
+    const db = new DatabaseSync(dbFile);
+    for (const sql of migrations.slice(0, 8)) db.exec(sql);
+    db.exec(
+      `INSERT INTO events (created_at, source, kind, file_path, payload, agent) VALUES ('t', 'agent-hook', 'edit', 'a.ts', '{}', 'claude-code')`,
+    );
+    db.exec(
+      `INSERT INTO failures (created_at, file_path, ai_event_id, ai_content, final_content, agent) VALUES ('2026-11-01T00:00:00.000Z', 'a.ts', 1, 'x', 'y', 'claude-code')`,
+    );
+    db.exec('PRAGMA user_version = 8');
+    db.close();
+  });
+  afterEach(() => repo.cleanup());
+
+  it('adds report-window indexes and keeps failure rows queryable by since', async () => {
+    (await openStore({ cwd: repo.path })).close();
+    const db = new DatabaseSync(dbFile);
+    try {
+      expect((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(9);
+      const indexNames = (
+        db.prepare(`SELECT name FROM sqlite_master WHERE type = 'index' ORDER BY name`).all() as Array<{ name: string }>
+      ).map((row) => row.name);
+      expect(indexNames).toEqual(
+        expect.arrayContaining(['failures_created_at', 'failures_agent_created', 'checked_edits_check_id']),
+      );
+      expect(
+        db
+          .prepare(`SELECT COUNT(*) AS n FROM failures WHERE created_at >= ?`)
+          .get('2026-10-01T00:00:00.000Z'),
+      ).toEqual({ n: 1 });
+      expect(
+        db
+          .prepare(`SELECT COUNT(*) AS n FROM failures WHERE created_at >= ?`)
+          .get('2026-11-02T00:00:00.000Z'),
+      ).toEqual({ n: 0 });
     } finally {
       db.close();
     }
