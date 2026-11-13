@@ -148,6 +148,12 @@ export const migrations: readonly string[] = Object.freeze([
     updated_at     TEXT    NOT NULL
   );
   `,
+  `
+  -- Report-window indexes for large local DBs (semantics unchanged).
+  CREATE INDEX IF NOT EXISTS failures_created_at ON failures (created_at);
+  CREATE INDEX IF NOT EXISTS failures_agent_created ON failures (agent, created_at);
+  CREATE INDEX IF NOT EXISTS checked_edits_check_id ON checked_edits (check_id);
+  `,
 ]);
 
 export const CURRENT_SCHEMA_VERSION = migrations.length;

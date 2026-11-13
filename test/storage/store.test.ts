@@ -128,6 +128,7 @@ describe('schema', () => {
     ).map((row) => row.name);
     expect(names).toEqual([
       'checked_edits',
+      'checked_edits_check_id',
       'checks_attached',
       'events',
       'events_agent',
@@ -136,12 +137,14 @@ describe('schema', () => {
       'events_kind_time',
       'events_session',
       'failures',
+      'failures_agent_created',
+      'failures_created_at',
       'noise_stats',
       'rule_applications',
       'rule_applications_applied_at',
     ]);
-    expect(rawQuery<{ user_version: number }>(repo.path, 'PRAGMA user_version')[0]?.user_version).toBe(8);
-    expect(CURRENT_SCHEMA_VERSION).toBe(8);
+    expect(rawQuery<{ user_version: number }>(repo.path, 'PRAGMA user_version')[0]?.user_version).toBe(9);
+    expect(CURRENT_SCHEMA_VERSION).toBe(9);
   });
 
   it('leaves data and version untouched when reopened', async () => {
@@ -151,7 +154,7 @@ describe('schema', () => {
     const second = await openStore({ cwd: repo.path });
     expect(second.listEvents()).toHaveLength(1);
     second.close();
-    expect(rawQuery<{ user_version: number }>(repo.path, 'PRAGMA user_version')[0]?.user_version).toBe(8);
+    expect(rawQuery<{ user_version: number }>(repo.path, 'PRAGMA user_version')[0]?.user_version).toBe(9);
   });
 
   it('refuses a database written by a newer NightOwl without changing it', async () => {

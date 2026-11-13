@@ -114,3 +114,10 @@ Catalog completion SHALL gồm subcommand share-pack (tên đã document) với 
 #### Scenario: Catalog có share-pack
 - **WHEN** dựng catalog completion từ registry lệnh
 - **THEN** có mục `share-pack` (hoặc tên đã chọn) với danh sách flag không rỗng
+
+### Requirement: Completion flag report debug-timing
+Catalog completion của `report` SHALL gồm `--debug-timing` khi change thêm cờ đó.
+
+#### Scenario: Catalog report có --debug-timing
+- **WHEN** đọc catalog completion lệnh `report`
+- **THEN** entry gồm `--debug-timing`

@@ -9,6 +9,7 @@ import { buildReport } from '../report/build.js';
 import { formatJson, formatText, TOP_CLUSTERS } from '../report/format.js';
 import { parseDateOption } from '../shared/date-option.js';
 import { SIGNAL_KINDS } from '../storage/events.js';
+import { formatReportTimingLine, measureSync } from '../storage/timing.js';
 import {
   applyWorkspaceFilter,
   prepareWorkspaces,
@@ -35,6 +36,7 @@ interface Options {
   readonly failOnRate: number | null;
   readonly agents: readonly string[] | null;
   readonly workspaces: readonly string[];
+  readonly debugTiming: boolean;
 }
 
 function parseOptions(args: readonly string[]): Options | string {
@@ -50,6 +52,7 @@ function parseOptions(args: readonly string[]): Options | string {
         'fail-on-rate': { type: 'string' },
         agent: { type: 'string', multiple: true },
         workspace: { type: 'string', multiple: true },
+        'debug-timing': { type: 'boolean' },
       },
       strict: true,
       allowPositionals: false,
@@ -90,6 +93,7 @@ function parseOptions(args: readonly string[]): Options | string {
     failOnRate,
     agents,
     workspaces: values.workspace ?? [],
+    debugTiming: values['debug-timing'] === true,
   };
 }
 
@@ -106,6 +110,7 @@ export function createReportCommand(deps: ReportDeps = { cwd: () => process.cwd(
         'In monorepos, modules use package/workspace names when package.json workspaces or pnpm-workspace.yaml are present.',
         'With --workspace, failures and changedRate (path-bearing checks) are scoped to those packages;',
         'CI/PR/revert signals stay full --since window. Combining --workspace with --fail-on-rate may warn if checks lack paths.',
+        'With --debug-timing, prints read-step timings to stderr; stdout/JSON stay unchanged.',
       ],
       options: [
         ['--since <YYYY-MM-DD>', 'Only failures from this date on'],
@@ -118,6 +123,7 @@ export function createReportCommand(deps: ReportDeps = { cwd: () => process.cwd(
         ['--json', 'Print the same data as JSON'],
         ['-o, --output <file>', 'Write report output to a file'],
         ['--fail-on-rate <0-100>', 'Exit with code 1 if changed rate exceeds threshold (CI gate; uses scoped rate when --workspace is set)'],
+        ['--debug-timing', 'Print report-read step timings to stderr (stdout unchanged)'],
       ],
     }),
     run: async (args, io) => {
@@ -137,47 +143,63 @@ export function createReportCommand(deps: ReportDeps = { cwd: () => process.cwd(
           io.stderr(`nightowl report: ${ws}\n`);
           return 1;
         }
+        const totalStart = performance.now();
         const signalCounts = store.countEventsByKind(SIGNAL_KINDS, options.since);
-        const clustered = applyWorkspaceFilter(
-          store.listFailuresForClustering(options.since, options.agents),
-          ws.filter,
-          ws.all,
-        );
-        const clusters = groupFailures(clustered, {
-          depth: options.depth,
-          minCount: 2,
-          limit: TOP_CLUSTERS,
-          excludeDismissed: true,
-          workspaces: ws.all,
+        const clusteringTimed = measureSync(() => {
+          const clustered = applyWorkspaceFilter(
+            store.listFailuresForClustering(options.since, options.agents),
+            ws.filter,
+            ws.all,
+          );
+          return groupFailures(clustered, {
+            depth: options.depth,
+            minCount: 2,
+            limit: TOP_CLUSTERS,
+            excludeDismissed: true,
+            workspaces: ws.all,
+          });
         });
-        const checkScope = scopeChecksForWorkspace(
-          store.countChecksForReport(options.since, options.agents),
-          ws.filter,
-          ws.all,
+        const clusters = clusteringTimed.result;
+        const checksTimed = measureSync(() =>
+          scopeChecksForWorkspace(store.countChecksForReport(options.since, options.agents), ws.filter, ws.all),
         );
+        const checkScope = checksTimed.result;
         const warn = workspaceFailOnRateWarning(ws.filter !== null, options.failOnRate !== null, checkScope);
         if (warn !== null) io.stderr(warn);
 
-        const report = buildReport({
-          failures: applyWorkspaceFilter(
-            store.countFailuresForReport(options.since, options.agents),
-            ws.filter,
-            ws.all,
-          ),
-          checks: checkScope.scoped,
-          depth: options.depth,
-          since: options.since,
-          generatedAt: deps.now().toISOString(),
-          agents: options.agents,
-          signals: {
-            ciFail: signalCounts['ci-fail'] ?? 0,
-            prReview: signalCounts['pr-review'] ?? 0,
-            revert: signalCounts['revert'] ?? 0,
-          },
-          autoNoise: store.countAutoNoiseFailures(options.since),
-          clusters,
-          workspaces: ws.all,
-        });
+        const failuresTimed = measureSync(() =>
+          applyWorkspaceFilter(store.countFailuresForReport(options.since, options.agents), ws.filter, ws.all),
+        );
+        const buildTimed = measureSync(() =>
+          buildReport({
+            failures: failuresTimed.result,
+            checks: checkScope.scoped,
+            depth: options.depth,
+            since: options.since,
+            generatedAt: deps.now().toISOString(),
+            agents: options.agents,
+            signals: {
+              ciFail: signalCounts['ci-fail'] ?? 0,
+              prReview: signalCounts['pr-review'] ?? 0,
+              revert: signalCounts['revert'] ?? 0,
+            },
+            autoNoise: store.countAutoNoiseFailures(options.since),
+            clusters,
+            workspaces: ws.all,
+          }),
+        );
+        const report = buildTimed.result;
+        if (options.debugTiming) {
+          io.stderr(
+            formatReportTimingLine({
+              failures: failuresTimed.ms,
+              checks: checksTimed.ms,
+              clustering: clusteringTimed.ms,
+              build: buildTimed.ms,
+              total: performance.now() - totalStart,
+            }),
+          );
+        }
         const outputContent = options.json ? formatJson(report) : formatText(report);
         if (options.output !== null) {
           const write =

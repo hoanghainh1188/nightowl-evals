@@ -12,7 +12,7 @@ export const COMMAND_FLAGS: Readonly<Record<string, readonly string[]>> = Object
   init: ['--shared', '--agents'],
   doctor: ['--strict'],
   log: ['--agent'],
-  report: ['--since', '--depth', '--workspace', '--agent', '--json', '--output', '-o', '--fail-on-rate'],
+  report: ['--since', '--depth', '--workspace', '--agent', '--json', '--output', '-o', '--fail-on-rate', '--debug-timing'],
   'customer-report': [
     '--lang',
     '--format',
