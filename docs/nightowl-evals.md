@@ -97,7 +97,7 @@ Mục tiêu: ghi được lỗi thật trên dự án cá nhân của anh. Dữ 
 - [x] Tuần 4: Chạy lại bộ test với 2 model, so điểm.
 - [x] Tuần 4: Tổng kết: đáng làm tiếp không? (Kết luận: Dự án đạt chất lượng kỹ thuật cao, tiếp tục phát triển theo kế hoạch Production-Ready).
 
-Chi tiết mức độ sẵn sàng kỹ thuật: xem [`docs/production-readiness.md`](production-readiness.md). Lộ trình ideation: v0.5 Done — [`docs/v0.5-roadmap-ideas.md`](v0.5-roadmap-ideas.md); v0.6 Core Done (`0.6.0`) — Secondary còn mở — [`docs/v0.6-roadmap-ideas.md`](v0.6-roadmap-ideas.md).
+Chi tiết mức độ sẵn sàng kỹ thuật: xem [`docs/production-readiness.md`](production-readiness.md). Lộ trình ideation: v0.5 Done — [`docs/v0.5-roadmap-ideas.md`](v0.5-roadmap-ideas.md); v0.6 Done (`0.6.0` Core / `0.6.1` Secondary) — [`docs/v0.6-roadmap-ideas.md`](v0.6-roadmap-ideas.md).
 
 ## Chuyển giao cho Claude Code
 
