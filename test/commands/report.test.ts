@@ -253,4 +253,54 @@ describe('nightowl report', () => {
     expect(bad.code).toBe(1);
     expect(bad.err).toMatch(/unknown --workspace: missing-pkg/);
   });
+
+  it('scopes changedRate to --workspace and keeps unfiltered parity', async () => {
+    await writeFile(join(repo.path, 'package.json'), JSON.stringify({ name: 'root', workspaces: ['packages/*'] }));
+    await mkdir(join(repo.path, 'packages', 'ui', 'src'), { recursive: true });
+    await mkdir(join(repo.path, 'packages', 'api', 'src'), { recursive: true });
+    await writeFile(join(repo.path, 'packages', 'ui', 'package.json'), JSON.stringify({ name: '@acme/ui' }));
+    await writeFile(join(repo.path, 'packages', 'api', 'package.json'), JSON.stringify({ name: '@acme/api' }));
+    await seed(
+      repo.path,
+      [{ filePath: 'packages/ui/src/Button.tsx', category: 'logic' }],
+      [
+        { createdAt: '2026-11-04T10:00:00.000Z', outcome: 'failure', filePath: 'packages/ui/src/Button.tsx' },
+        { createdAt: '2026-11-04T10:01:00.000Z', outcome: 'not-a-failure', filePath: 'packages/ui/src/Icon.tsx' },
+        { createdAt: '2026-11-04T10:02:00.000Z', outcome: 'not-a-failure', filePath: 'packages/api/src/route.ts' },
+        { createdAt: '2026-11-04T10:03:00.000Z', outcome: 'not-a-failure', filePath: 'packages/api/src/other.ts' },
+      ],
+    );
+
+    const full = JSON.parse((await run(['--json'])).out);
+    expect(full.changed_rate).toEqual({ failures: 1, checked: 4, rate: 0.25 });
+
+    const scoped = JSON.parse((await run(['--json', '--workspace', '@acme/ui'])).out);
+    expect(scoped.changed_rate).toEqual({ failures: 1, checked: 2, rate: 0.5 });
+  });
+
+  it('warns on --workspace + --fail-on-rate when checks lack file_path', async () => {
+    await writeFile(join(repo.path, 'package.json'), JSON.stringify({ name: 'root', workspaces: ['packages/*'] }));
+    await mkdir(join(repo.path, 'packages', 'ui', 'src'), { recursive: true });
+    await writeFile(join(repo.path, 'packages', 'ui', 'package.json'), JSON.stringify({ name: '@acme/ui' }));
+    await seed(
+      repo.path,
+      [{ filePath: 'packages/ui/src/a.ts', category: 'logic' }],
+      [
+        { createdAt: '2026-11-04T10:00:00.000Z', outcome: 'not-a-failure', filePath: 'packages/ui/src/a.ts' },
+        { createdAt: '2026-11-04T10:01:00.000Z', outcome: 'not-a-failure', filePath: null },
+      ],
+    );
+
+    const result = await run(['--workspace', '@acme/ui', '--fail-on-rate', '90']);
+    expect(result.code).toBe(0);
+    expect(result.err).toMatch(/lack file_path/);
+  });
+
+  it('documents scoped changedRate vs full-window signals in --help', async () => {
+    const { createReportCommand } = await import('../../src/commands/report.js');
+    const help = createReportCommand().help;
+    expect(help).toMatch(/changedRate/);
+    expect(help).toMatch(/Signals stay full-window|signals stay full/i);
+    expect(help).toMatch(/fail-on-rate/);
+  });
 });

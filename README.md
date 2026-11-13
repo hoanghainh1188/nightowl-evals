@@ -279,13 +279,13 @@ nightowl report [options]
 | :--- | :--- |
 | `--since <YYYY-MM-DD>` | Filter records created from this date forward |
 | `--depth <1-5>` | Folder levels that make up a module when the path is outside a package (default: `2`) |
-| `--workspace <name\|path>` | Only failures in this npm/pnpm package/workspace (repeatable; package `name` or relative path) |
+| `--workspace <name\|path>` | Scope failures and `changedRate` (path-bearing checks) to this npm/pnpm package/workspace (repeatable; package `name` or relative path). Signals stay full-window. |
 | `--agent <id>` | Only include this agent (repeatable) |
 | `--json` | Output full breakdown as structured JSON |
 | `-o, --output <file>` | Write report directly to a file (creates parent directories) |
-| `--fail-on-rate <0-100>` | **CI Quality Gate**: Exit with code `1` if failure rate exceeds threshold |
+| `--fail-on-rate <0-100>` | **CI Quality Gate**: Exit with code `1` if failure rate exceeds threshold (uses scoped `changedRate` when `--workspace` is set) |
 
-In monorepos with `package.json` `workspaces` or `pnpm-workspace.yaml`, module buckets prefer the package `name` (e.g. `@acme/ui`) over depth-based path prefixes. Discovery supports simple one-segment globs such as `packages/*` (not `**`). With `--workspace`, failure totals/modules/clusters are filtered; `changedRate`, signals, and noise stay full-window (MVP).
+In monorepos with `package.json` `workspaces` or `pnpm-workspace.yaml`, module buckets prefer the package `name` (e.g. `@acme/ui`) over depth-based path prefixes. Discovery supports simple one-segment globs such as `packages/*` (not `**`). With `--workspace`, failures, modules, clusters, and `changedRate` (checks with a known file path) are scoped to those packages; CI/PR/revert signals and noise stay full-window. Combining `--workspace` with `--fail-on-rate` may warn on stderr if checks lack paths or the scoped denominator is empty — the gate still uses the scoped rate (so existing CI that already pairs both flags may see a different rate).
 
 #### `nightowl customer-report`
 

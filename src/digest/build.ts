@@ -2,7 +2,7 @@ import { resolveRuleImpactSummary, type RuleImpactSummary, type RuleImpactView }
 import { buildReport, type ReportSignals } from '../report/build.js';
 import { SIGNAL_KINDS } from '../storage/events.js';
 import type { Store } from '../storage/store.js';
-import { applyWorkspaceFilter } from '../workspace/for-report.js';
+import { applyWorkspaceFilter, scopeChecksForWorkspace } from '../workspace/for-report.js';
 import type { Workspace } from '../workspace/types.js';
 
 export const TOP_DIGEST_ROWS = 5;
@@ -59,12 +59,17 @@ export function buildDigest(input: BuildDigestInput): Digest {
     prReview: signalCounts['pr-review'] ?? 0,
     revert: signalCounts['revert'] ?? 0,
   });
+  const wsAll = input.workspaces ?? input.workspaceFilter ?? [];
   const failures = applyWorkspaceFilter(
     input.store.countFailuresForReport(input.since, agents),
     input.workspaceFilter ?? null,
-    input.workspaces ?? input.workspaceFilter ?? [],
+    wsAll,
   );
-  const checks = input.store.countChecksForReport(input.since, agents);
+  const checks = scopeChecksForWorkspace(
+    input.store.countChecksForReport(input.since, agents),
+    input.workspaceFilter ?? null,
+    wsAll,
+  ).scoped;
   const report =
     input.workspaces === undefined
       ? buildReport({

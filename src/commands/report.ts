@@ -9,7 +9,12 @@ import { buildReport } from '../report/build.js';
 import { formatJson, formatText, TOP_CLUSTERS } from '../report/format.js';
 import { parseDateOption } from '../shared/date-option.js';
 import { SIGNAL_KINDS } from '../storage/events.js';
-import { applyWorkspaceFilter, prepareWorkspaces } from '../workspace/for-report.js';
+import {
+  applyWorkspaceFilter,
+  prepareWorkspaces,
+  scopeChecksForWorkspace,
+  workspaceFailOnRateWarning,
+} from '../workspace/for-report.js';
 import type { Command } from './command.js';
 import { openExistingStore } from './existing-store.js';
 
@@ -99,15 +104,20 @@ export function createReportCommand(deps: ReportDeps = { cwd: () => process.cwd(
         'Summarizes recorded failures by type, module, agent and ISO week. Reads only; changes nothing.',
         'Includes by_agent and head_to_head comparison of edit-change rates per agent.',
         'In monorepos, modules use package/workspace names when package.json workspaces or pnpm-workspace.yaml are present.',
+        'With --workspace, failures and changedRate (path-bearing checks) are scoped to those packages;',
+        'CI/PR/revert signals stay full --since window. Combining --workspace with --fail-on-rate may warn if checks lack paths.',
       ],
       options: [
         ['--since <YYYY-MM-DD>', 'Only failures from this date on'],
         [`--depth <1-${MAX_DEPTH}>`, `Folder levels that make up a module when outside a package (default: ${DEFAULT_DEPTH})`],
-        ['--workspace <name|path>', 'Only failures in this package/workspace (repeatable; name or path)'],
+        [
+          '--workspace <name|path>',
+          'Scope failures and changedRate to this package/workspace (repeatable; name or path). Signals stay full-window.',
+        ],
         ['--agent <id>', 'Only include this agent (repeatable)'],
         ['--json', 'Print the same data as JSON'],
         ['-o, --output <file>', 'Write report output to a file'],
-        ['--fail-on-rate <0-100>', 'Exit with code 1 if changed rate exceeds threshold (CI gate)'],
+        ['--fail-on-rate <0-100>', 'Exit with code 1 if changed rate exceeds threshold (CI gate; uses scoped rate when --workspace is set)'],
       ],
     }),
     run: async (args, io) => {
@@ -140,13 +150,21 @@ export function createReportCommand(deps: ReportDeps = { cwd: () => process.cwd(
           excludeDismissed: true,
           workspaces: ws.all,
         });
+        const checkScope = scopeChecksForWorkspace(
+          store.countChecksForReport(options.since, options.agents),
+          ws.filter,
+          ws.all,
+        );
+        const warn = workspaceFailOnRateWarning(ws.filter !== null, options.failOnRate !== null, checkScope);
+        if (warn !== null) io.stderr(warn);
+
         const report = buildReport({
           failures: applyWorkspaceFilter(
             store.countFailuresForReport(options.since, options.agents),
             ws.filter,
             ws.all,
           ),
-          checks: store.countChecksForReport(options.since, options.agents),
+          checks: checkScope.scoped,
           depth: options.depth,
           since: options.since,
           generatedAt: deps.now().toISOString(),

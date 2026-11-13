@@ -15,6 +15,8 @@ export interface CheckCountRow {
   readonly day: string;
   readonly outcome: 'failure' | 'not-a-failure';
   readonly agent: string | null;
+  /** Path of the checked file when known (check event or linked edit); null if unscoped. */
+  readonly filePath: string | null;
   readonly count: number;
 }
 
@@ -63,25 +65,41 @@ export function countFailuresForReport(db: DatabaseSync, filter: ReportQueryFilt
 }
 
 // Commit-checks judged after a commit, by day of the check. Superseded checks never reached a commit.
+// file_path prefers the check event path, else the earliest linked edit path (for workspace scoping).
 export function countChecksForReport(db: DatabaseSync, filter: ReportQueryFilter): readonly CheckCountRow[] {
   const agents = agentsJson(filter.agents);
+  const pathExpr = `COALESCE(
+         NULLIF(e.file_path, ''),
+         (SELECT ed.file_path FROM checked_edits k JOIN events ed ON ed.id = k.edit_id
+          WHERE k.check_id = a.check_id AND ed.file_path IS NOT NULL AND ed.file_path != ''
+          ORDER BY ed.id LIMIT 1)
+       )`;
   const rows = db
     .prepare(
-      `SELECT substr(e.created_at, 1, 10) AS day, a.outcome, e.agent, COUNT(*) AS n
+      `SELECT substr(e.created_at, 1, 10) AS day, a.outcome, e.agent, ${pathExpr} AS file_path, COUNT(*) AS n
        FROM checks_attached a JOIN events e ON e.id = a.check_id
        WHERE a.outcome != 'superseded'
          AND (? IS NULL OR e.created_at >= ?)
          AND (? IS NULL OR e.agent IN (SELECT value FROM json_each(?)))
-       GROUP BY day, a.outcome, e.agent ORDER BY day`,
+       GROUP BY day, a.outcome, e.agent, file_path ORDER BY day`,
     )
     .all(filter.since, filter.since, agents, agents) as unknown as Array<{
     day: string;
     outcome: 'failure' | 'not-a-failure';
     agent: string | null;
+    file_path: string | null;
     n: number;
   }>;
   return Object.freeze(
-    rows.map((row) => Object.freeze({ day: row.day, outcome: row.outcome, agent: row.agent, count: row.n })),
+    rows.map((row) =>
+      Object.freeze({
+        day: row.day,
+        outcome: row.outcome,
+        agent: row.agent,
+        filePath: row.file_path === '' ? null : row.file_path,
+        count: row.n,
+      }),
+    ),
   );
 }
 

@@ -13,7 +13,7 @@ import { buildReport } from '../report/build.js';
 import { TOP_CLUSTERS } from '../report/format.js';
 import { parseDateOption } from '../shared/date-option.js';
 import { SIGNAL_KINDS } from '../storage/events.js';
-import { applyWorkspaceFilter, prepareWorkspaces } from '../workspace/for-report.js';
+import { applyWorkspaceFilter, prepareWorkspaces, scopeChecksForWorkspace } from '../workspace/for-report.js';
 import type { Command } from './command.js';
 import { openExistingStore } from './existing-store.js';
 
@@ -146,13 +146,18 @@ export function createDashboardCommand(deps: DashboardDeps = { cwd: () => proces
           excludeDismissed: true,
           workspaces: ws.all,
         });
+        const checkScope = scopeChecksForWorkspace(
+          store.countChecksForReport(options.since, options.agents),
+          ws.filter,
+          ws.all,
+        );
         const built = buildReport({
           failures: applyWorkspaceFilter(
             store.countFailuresForReport(options.since, options.agents),
             ws.filter,
             ws.all,
           ),
-          checks: store.countChecksForReport(options.since, options.agents),
+          checks: checkScope.scoped,
           depth: options.depth,
           since: options.since,
           generatedAt: deps.now().toISOString(),
