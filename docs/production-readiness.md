@@ -2,7 +2,7 @@
 
 Tài liệu này ghi mức độ sẵn sàng kỹ thuật của **NightOwl Evals** (`@hoanghainh/nightowl-evals`) sau Production-Ready gốc (1–17) và ideation **v0.3–v0.6** (ship `0.5.0` / `0.5.1` / `0.6.0` / `0.6.1`). Phạm vi vẫn **open-core / local-first**.
 
-Hướng tiếp theo: ideation sau v0.6 khi có; lịch sử v0.6: [`v0.6-roadmap-ideas.md`](v0.6-roadmap-ideas.md). Lịch sử v0.5: [`v0.5-roadmap-ideas.md`](v0.5-roadmap-ideas.md).
+Hướng tiếp theo: [`v0.7-roadmap-ideas.md`](v0.7-roadmap-ideas.md) (ideation 48+). Lịch sử v0.6: [`v0.6-roadmap-ideas.md`](v0.6-roadmap-ideas.md). Lịch sử v0.5: [`v0.5-roadmap-ideas.md`](v0.5-roadmap-ideas.md).
 
 ---
 
@@ -59,8 +59,8 @@ Các mục dưới đây **không** còn là gap Production-Ready gốc; chúng 
 ├── doctor team, Windows DX, rule feedback loop, deeper multi-agent adapters (`0.6.0`)
 └── prune UX, workspace metrics, share-pack, large-DB timing (`0.6.1`)
 
-Tiếp theo — ideation sau v0.6 (khi có)
-└── (chưa mở)
+Tiếp theo — v0.7 (ideation 48+)
+└── docs/v0.7-roadmap-ideas.md
 ```
 
 
