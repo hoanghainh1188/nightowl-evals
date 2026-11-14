@@ -39,7 +39,7 @@
     - [`nightowl suggest-regressions`](#nightowl-suggest-regressions)
     - [`nightowl rule-impact`](#nightowl-rule-impact)
   - [Evaluation & Benchmarking Engine](#3-evaluation--benchmarking-engine)
-    - [`nightowl classify`](#nightowl-classify-opt-in)
+    - [`nightowl classify`](#nightowl-classify-offline--opt-in-llm)
     - [`nightowl export`](#nightowl-export)
     - [`nightowl eval`](#nightowl-eval-opt-in)
     - [`nightowl eval-compare`](#nightowl-eval-compare)
@@ -113,7 +113,7 @@ Generic benchmarks (like HumanEval or SWE-bench) evaluate AI on standardized alg
 
 - **Node.js**: `22.13.0` or newer (uses native `node:sqlite`)
 - **Git**: `2.20` or newer
-- **Claude Code** (or another supported agent): Optional for capture; Claude Code CLI is required for local `classify` and `eval`
+- **Claude Code** (or another supported agent): Optional for capture; Claude Code CLI is required for LLM `classify --yes` (transport `cli`) and `eval`. Offline `classify --offline` needs no model.
 
 ### Supported agents
 
@@ -552,17 +552,29 @@ nightowl rule-impact --label convention-naming
 
 ### 3. Evaluation & Benchmarking Engine
 
-#### `nightowl classify` (opt-in)
+#### `nightowl classify` (offline + opt-in LLM)
 
 Categorizes recorded failures into 4 distinct archetypes: `logic`, `convention`, `misread-requirement`, or `missing-context`.
+
+Prefer **offline first** — no network, no API key:
+
+```bash
+nightowl classify --offline [--limit <1-100>] [--redo]
+```
+
+- `--offline`: Applies local heuristic rules (whitespace/CRLF → `convention`, import-path-only → `missing-context`, identifier rename → `convention`, prompt-overlap hint → `misread-requirement`). Unmatched failures stay unclassified. Does **not** need `--yes`. Conservative: prefers leaving blank over guessing `logic`.
+- Stores `classifier` as `heuristic:<ruleId>` so `nightowl report` can show **heuristic vs llm vs unclassified** counts (`by_classifier_source` in JSON).
+
+LLM path stays opt-in:
 
 ```bash
 nightowl classify [--yes] [--transport cli|api] [--model <name>] [--limit <1-100>] [--redo]
 ```
 
-- `--yes`: Required to execute LLM calls (prevents unexpected API charges).
+- Without flags: dry-run of what would be sent to an LLM (DB unchanged).
+- `--yes`: Required to execute LLM calls (prevents unexpected API charges). Mutually exclusive with `--offline`.
 - `--transport cli|api`: `cli` (default) spawns local isolated `claude -p`; `api` uses direct Anthropic Messages API (`ANTHROPIC_API_KEY`).
-- `--redo`: Re-analyzes failures that were already classified.
+- `--redo`: Re-analyzes failures that were already classified (including heuristic results).
 
 #### `nightowl export`
 

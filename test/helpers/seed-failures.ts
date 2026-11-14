@@ -5,6 +5,7 @@ import { openStore } from '../../src/storage/store.js';
 export interface SeedFailure {
   readonly filePath?: string;
   readonly category?: string | null;
+  readonly classifier?: string | null;
   readonly status?: 'flagged' | 'confirmed' | 'dismissed';
   readonly createdAt?: string;
   readonly aiContent?: string;
@@ -38,8 +39,8 @@ export async function seed(root: string, failures: readonly SeedFailure[], check
     );
     const failure = db.prepare(
       `INSERT INTO failures (created_at, file_path, ai_event_id, prompt_event_id, ai_content, final_content, commit_sha,
-         category, category_reason, category_confidence, status, source, feedback_event_id, agent, noise_score, noise_reasons)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+         category, category_reason, category_confidence, classifier, status, source, feedback_event_id, agent, noise_score, noise_reasons)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
     );
     const ids: number[] = [];
     for (const f of failures) {
@@ -55,6 +56,9 @@ export async function seed(root: string, failures: readonly SeedFailure[], check
         f.feedback === undefined || f.feedback === null
           ? null
           : (event.get(createdAt, 'agent-hook', 'prompt', null, JSON.stringify({ prompt: f.feedback }), agent) as { id: number }).id;
+      const category = f.category ?? null;
+      const classifier =
+        f.classifier !== undefined ? f.classifier : category === null ? null : 'claude-code:haiku';
       const row = failure.get(
         createdAt,
         filePath,
@@ -63,9 +67,10 @@ export async function seed(root: string, failures: readonly SeedFailure[], check
         f.aiContent ?? 'ai\n',
         f.finalContent ?? 'dev\n',
         f.commitSha === undefined ? 'abcdef0123456789' : f.commitSha,
-        f.category ?? null,
+        category,
         f.reason ?? null,
         f.confidence ?? null,
+        classifier,
         f.status ?? 'flagged',
         f.source ?? 'manual-fix',
         feedback,

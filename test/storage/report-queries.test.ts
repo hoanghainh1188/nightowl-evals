@@ -31,8 +31,26 @@ describe('report queries', () => {
 
   it('groups failures by file, category, status, source and UTC day', () => {
     expect(store.countFailuresForReport(null)).toEqual([
-      { filePath: 'src/a.ts', category: 'logic', status: 'flagged', source: 'manual-fix', agent: 'claude-code', day: '2026-11-02', count: 2 },
-      { filePath: 'src/b.ts', category: null, status: 'dismissed', source: 'ai-self-fix', agent: 'claude-code', day: '2026-11-03', count: 1 },
+      {
+        filePath: 'src/a.ts',
+        category: 'logic',
+        classifier: 'claude-code:haiku',
+        status: 'flagged',
+        source: 'manual-fix',
+        agent: 'claude-code',
+        day: '2026-11-02',
+        count: 2,
+      },
+      {
+        filePath: 'src/b.ts',
+        category: null,
+        classifier: null,
+        status: 'dismissed',
+        source: 'ai-self-fix',
+        agent: 'claude-code',
+        day: '2026-11-03',
+        count: 1,
+      },
     ]);
   });
 

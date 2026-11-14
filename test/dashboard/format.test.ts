@@ -13,6 +13,7 @@ function sampleReport(overrides: Partial<Report> = {}): Report {
     dismissed: 1,
     changedRate: { failures: 1, checked: 4, rate: 0.25 },
     byCategory: { logic: 2, convention: 1, 'missing-context': 0, 'wrong-requirement': 0, unclassified: 0 },
+    byClassifierSource: { heuristic: 0, llm: 3, unclassified: 0 },
     bySource: { 'manual-fix': 3, 'ai-self-fix': 0 },
     byStatus: { confirmed: 1, dismissed: 1, flagged: 2 },
     byAgent: { 'claude-code': 2, cursor: 1 },

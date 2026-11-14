@@ -2,6 +2,7 @@ import { parseArgs } from 'node:util';
 import { errorMessage } from '../cli/errors.js';
 import { renderCommandHelp } from '../cli/help.js';
 import type { Io } from '../cli/io.js';
+import { classifyHeuristic, heuristicClassifierLabel } from '../classify/heuristic.js';
 import { CLASSIFICATION_SCHEMA, parseClaudeOutput } from '../classify/parse.js';
 import { buildPrompt } from '../classify/prompt.js';
 import { acquireClassifyLock, ClassifyLockError } from '../classify/lock.js';
@@ -49,6 +50,7 @@ const defaultDeps: ClassifyDeps = {
 
 interface Options {
   readonly yes: boolean;
+  readonly offline: boolean;
   readonly redo: boolean;
   readonly limit: number;
   readonly model: string;
@@ -62,6 +64,7 @@ function parseOptions(args: readonly string[]): Options | string {
       args: [...args],
       options: {
         yes: { type: 'boolean' },
+        offline: { type: 'boolean' },
         redo: { type: 'boolean' },
         limit: { type: 'string' },
         model: { type: 'string' },
@@ -79,7 +82,10 @@ function parseOptions(args: readonly string[]): Options | string {
   if (!MODEL_NAME.test(model)) return `invalid --model: ${model}`;
   const transportRaw = values.transport ?? 'cli';
   if (transportRaw !== 'cli' && transportRaw !== 'api') return `--transport must be cli or api`;
-  return { yes: values.yes === true, redo: values.redo === true, limit, model, transport: transportRaw };
+  const yes = values.yes === true;
+  const offline = values.offline === true;
+  if (yes && offline) return 'use either --offline or --yes, not both';
+  return { yes, offline, redo: values.redo === true, limit, model, transport: transportRaw };
 }
 
 function kilobytes(bytes: number): string {
@@ -171,20 +177,56 @@ async function classifyAll(store: Store, failures: readonly FailureToClassify[],
   return failed > 0 ? 1 : 0;
 }
 
+function classifyOffline(store: Store, failures: readonly FailureToClassify[], deps: ClassifyDeps, io: Io): number {
+  const counts = new Map<string, number>();
+  let skipped = 0;
+  for (const failure of failures) {
+    const match = classifyHeuristic({
+      filePath: failure.filePath,
+      aiContent: failure.aiContent,
+      finalContent: failure.finalContent,
+      userPrompt: failure.userPrompt,
+      feedback: failure.feedback,
+    });
+    if (match === null) {
+      skipped += 1;
+      continue;
+    }
+    store.saveClassification(failure.id, {
+      category: match.category,
+      reason: match.reason,
+      confidence: match.confidence,
+      classifier: heuristicClassifierLabel(match.ruleId),
+      classifiedAt: deps.now().toISOString(),
+    });
+    counts.set(match.category, (counts.get(match.category) ?? 0) + 1);
+  }
+  const classified = failures.length - skipped;
+  const byCategory = [...counts].map(([category, n]) => `  ${category}: ${n}\n`).join('');
+  io.stdout(
+    `Offline classified ${classified} of ${failures.length} ${failures.length === 1 ? 'failure' : 'failures'}` +
+      (skipped > 0 ? ` (${skipped} unmatched)` : '') +
+      `\n${byCategory}`,
+  );
+  return 0;
+}
+
 export function createClassifyCommand(deps: ClassifyDeps = defaultDeps): Command {
   return {
     name: 'classify',
-    summary: 'Classify failures with Claude Code or the Anthropic API (dry run unless --yes)',
+    summary: 'Classify failures offline (heuristic) or with Claude / Anthropic API (LLM needs --yes)',
     help: renderCommandHelp({
       name: 'classify',
       usage: '[options]',
       description: [
-        'Asks Claude to sort failures into: logic, convention, misread-requirement, missing-context.',
-        'Without --yes it only says what would be sent. With --yes it sends each failure to `claude -p` (default) or the Anthropic API (`--transport api`).',
+        'Sorts failures into: logic, convention, misread-requirement, missing-context.',
+        'Prefer `--offline` first: local heuristic rules, no network, no `--yes`.',
+        'Without flags it only dry-runs what an LLM call would send. `--yes` calls `claude -p` (default) or the Anthropic API (`--transport api`). LLM stays opt-in.',
         `For --transport api, set ${ANTHROPIC_API_KEY_ENV}. Short --model names (haiku, sonnet, opus) map to pinned API model ids.`,
       ],
       options: [
-        ['--yes', 'Actually call the model (default: dry run)'],
+        ['--offline', 'Apply local heuristic classification (no network; does not need --yes)'],
+        ['--yes', 'Actually call the model (default: dry run; not used with --offline)'],
         ['--transport cli|api', 'How to call the model (default: cli)'],
         [`--limit <1-${MAX_LIMIT}>`, `At most this many failures (default: ${DEFAULT_LIMIT})`],
         ['--model <name>', `Claude model or API model id (default: ${DEFAULT_MODEL})`],
@@ -214,13 +256,14 @@ export function createClassifyCommand(deps: ClassifyDeps = defaultDeps): Command
       }
       let release: (() => Promise<void>) | null = null;
       try {
-        // Taken before the list is read, so two runs never pick the same failures.
+        // Taken before the list is read, so two LLM runs never pick the same failures.
         if (options.yes) release = await acquireClassifyLock(store.root);
         const failures = store.listFailuresToClassify(options.limit, options.redo);
         if (failures.length === 0) {
           io.stdout('No failures to classify.\n');
           return 0;
         }
+        if (options.offline) return classifyOffline(store, failures, deps, io);
         return options.yes ? await classifyAll(store, failures, options, deps, io) : dryRun(failures, options, deps, io);
       } catch (error) {
         if (!(error instanceof ClassifyLockError)) throw error;

@@ -41,6 +41,22 @@ describe('nightowl report', () => {
     expect(result.out).toMatch(/^ {2}src\/cli +2 /m);
   });
 
+  it('reports classifier source breakdown in text and JSON', async () => {
+    await seed(repo.path, [
+      { filePath: 'a.ts', category: 'convention', classifier: 'heuristic:whitespace-only' },
+      { filePath: 'b.ts', category: 'logic', classifier: 'claude-code:haiku' },
+      { filePath: 'c.ts', category: null },
+      { filePath: 'd.ts', category: 'convention', classifier: 'heuristic:rename-identifier', status: 'dismissed' },
+    ]);
+    const text = await run();
+    expect(text.code).toBe(0);
+    expect(text.out).toContain('Classifier source: heuristic 1, llm 1, unclassified 1');
+    expect(text.out).toContain('By classifier source');
+    const json = JSON.parse((await run(['--json'])).out);
+    expect(json.by_classifier_source).toEqual({ heuristic: 1, llm: 1, unclassified: 1 });
+    expect(json.total).toBe(3);
+  });
+
   it('prints JSON, honouring --depth and --since', async () => {
     await seed(repo.path, [
       { filePath: 'src/hooks/git/a.ts', createdAt: '2026-10-01T00:00:00.000Z' },
