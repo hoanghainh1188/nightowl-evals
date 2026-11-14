@@ -112,10 +112,12 @@ describe('nightowl doctor', () => {
     const cmd = createDoctorCommand(createTestDeps());
     expect(cmd.help).toContain('Usage: nightowl doctor');
     expect(cmd.help).toContain('--strict');
+    expect(cmd.help).toContain('--config');
     expect(cmd.help).toMatch(/multi-agent|maturity/i);
     expect(cmd.help).toMatch(/workspace|monorepo/i);
     expect(cmd.help).toMatch(/readiness|signals/i);
     expect(cmd.help).toMatch(/timing|budget|performance/i);
+    expect(cmd.help).toMatch(/config/i);
   });
 
   it('rejects invalid arguments with exit code 1', async () => {
@@ -151,6 +153,8 @@ describe('nightowl doctor', () => {
     expect(out).toContain("✓ pre-commit runs 'nightowl precommit'");
     expect(out).toContain("✓ post-commit runs 'nightowl postcommit'");
     expect(out).toContain('✓ .nightowl/ is ignored in .gitignore');
+    expect(out).toContain('Config');
+    expect(out).toMatch(/No nightowl\.config\.json \(using built-in defaults\)|Valid config/);
     expect(out).toContain('NightOwl Database');
     expect(out).toContain('✓ Database integrity check passed (ok)');
     expect(out).toContain(`✓ Schema version is ${CURRENT_SCHEMA_VERSION} (up to date)`);
@@ -547,5 +551,16 @@ describe('nightowl doctor', () => {
     expect(code).toBe(0);
     expect(out).toContain('1 failures recorded (1 reportable)');
     expect(out).toContain('Signals: ci-fail 2, pr-review 1, revert 0');
+  });
+
+  it('fails when project config is invalid', async () => {
+    await writeFiles(repo.path, {
+      [`${DATA_DIR}/${DB_FILE}`]: 'sqlite database',
+      'nightowl.config.json': '{bad',
+    });
+    const { code, out } = await runDoctor();
+    expect(code).toBe(1);
+    expect(out).toContain('Config');
+    expect(out).toMatch(/invalid JSON/);
   });
 });

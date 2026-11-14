@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createDigestCommand } from '../../src/commands/digest.js';
@@ -81,6 +81,26 @@ describe('nightowl digest', () => {
 
   it('help mentions no email/Slack', () => {
     expect(createDigestCommand().help).toMatch(/email|Slack/i);
+    expect(createDigestCommand().help).toContain('--config');
+  });
+
+  it('uses digest.lookbackDays from config when --since is omitted', async () => {
+    await seed(repo.path, [
+      { filePath: 'src/old.ts', category: 'logic', createdAt: '2026-10-01T00:00:00.000Z' },
+      { filePath: 'src/new.ts', category: 'logic', createdAt: '2026-11-11T00:00:00.000Z' },
+    ]);
+    await writeFile(
+      join(repo.path, 'nightowl.config.json'),
+      JSON.stringify({ version: 1, digest: { lookbackDays: 2 } }),
+    );
+    const withConfig = await run();
+    expect(withConfig.code).toBe(0);
+    expect(withConfig.out).toContain('since 2026-11-10');
+    expect(withConfig.out).toMatch(/New failures \(not dismissed\): \*\*1\*\*/);
+
+    const wider = await run(['--since', '2026-09-01']);
+    expect(wider.code).toBe(0);
+    expect(wider.out).toMatch(/New failures \(not dismissed\): \*\*2\*\*/);
   });
 });
 

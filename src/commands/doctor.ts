@@ -6,6 +6,7 @@ import { AGENT_IDS, maturityOf } from '../agents/ids.js';
 import { errorMessage } from '../cli/errors.js';
 import { renderCommandHelp } from '../cli/help.js';
 import type { Io } from '../cli/io.js';
+import { loadNightowlConfig, PROJECT_CONFIG_FILE } from '../config/index.js';
 import { runGit } from '../hooks/git/run-git.js';
 import {
   AGENT_CONFIGS,
@@ -514,6 +515,44 @@ export async function checkHooks(deps: DoctorDeps, root: string | null): Promise
   return checks;
 }
 
+export async function checkConfig(root: string | null): Promise<readonly DoctorCheck[]> {
+  if (!root) return [];
+  const loaded = await loadNightowlConfig({ root });
+  if (!loaded.ok) {
+    return [
+      {
+        category: 'Config',
+        name: 'Local config',
+        status: 'fail',
+        message: loaded.error,
+        remedy: `Fix ${PROJECT_CONFIG_FILE} or ${DATA_DIR}/config.local.json (see README), or remove the invalid file.`,
+      },
+    ];
+  }
+  if (!loaded.projectPresent && !loaded.localPresent) {
+    return [
+      {
+        category: 'Config',
+        name: 'Local config',
+        status: 'ok',
+        message: `No ${PROJECT_CONFIG_FILE} (using built-in defaults)`,
+      },
+    ];
+  }
+  const parts = [
+    loaded.projectPresent ? PROJECT_CONFIG_FILE : null,
+    loaded.localPresent ? `${DATA_DIR}/config.local.json` : null,
+  ].filter((p): p is string => p !== null);
+  return [
+    {
+      category: 'Config',
+      name: 'Local config',
+      status: 'ok',
+      message: `Valid config (${parts.join(' + ')})`,
+    },
+  ];
+}
+
 export async function checkWorkspace(root: string | null): Promise<readonly DoctorCheck[]> {
   const checks: DoctorCheck[] = [];
   if (!root) return checks;
@@ -728,23 +767,31 @@ export function createDoctorCommand(deps: DoctorDeps = defaultDoctorDeps): Comma
         'including best-effort config shape (not only file presence),',
         'Git hook authenticity (commands + execute bit on POSIX; skipped on Windows), monorepo workspace',
         'discovery when configured, and report readiness (failures + CI/PR/revert signals).',
+        'Also validates local config profiles (nightowl.config.json + optional .nightowl/config.local.json).',
         'Also samples report-query timing against a local budget (warns when slow).',
         'Paths with \\ are normalized like / for module/workspace checks. See README for per-agent limits.',
+        'Config is local-only (no cloud sync); CLI flags override config defaults.',
       ],
       options: [
         ['--strict', 'Exit with code 1 if any warnings or failures are detected.'],
+        ['--config <path>', `Override project config file (default: ${PROJECT_CONFIG_FILE} at repo root)`],
       ],
     }),
     run: async (args: readonly string[], io: Io): Promise<number> => {
       let strict = false;
+      let configPath: string | undefined;
       try {
         const { values } = parseArgs({
           args: [...args],
-          options: { strict: { type: 'boolean' } },
+          options: {
+            strict: { type: 'boolean' },
+            config: { type: 'string' },
+          },
           strict: true,
           allowPositionals: false,
         });
         strict = values.strict === true;
+        configPath = values.config;
       } catch (error) {
         io.stderr(`nightowl doctor: ${printable(errorMessage(error))}\nRun 'nightowl doctor --help'.\n`);
         return 1;
@@ -770,6 +817,36 @@ export function createDoctorCommand(deps: DoctorDeps = defaultDoctorDeps): Comma
 
       const workspaceChecks = await checkWorkspace(root);
       allChecks.push(...workspaceChecks);
+
+      if (configPath !== undefined) {
+        if (root === null) {
+          allChecks.push({
+            category: 'Config',
+            name: 'Local config',
+            status: 'fail',
+            message: `no git repository found at or above ${cwd}`,
+          });
+        } else {
+          const loaded = await loadNightowlConfig({ root, cwd, configPath });
+          if (!loaded.ok) {
+            allChecks.push({
+              category: 'Config',
+              name: 'Local config',
+              status: 'fail',
+              message: loaded.error,
+            });
+          } else {
+            allChecks.push({
+              category: 'Config',
+              name: 'Local config',
+              status: 'ok',
+              message: `Valid config (--config ${configPath})`,
+            });
+          }
+        }
+      } else {
+        allChecks.push(...(await checkConfig(root)));
+      }
 
       const storageChecks = await checkStorage(deps, root);
       allChecks.push(...storageChecks);

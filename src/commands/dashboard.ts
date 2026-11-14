@@ -5,6 +5,13 @@ import { AGENT_IDS, isAnyAgentId } from '../agents/ids.js';
 import { errorMessage } from '../cli/errors.js';
 import { renderCommandHelp } from '../cli/help.js';
 import { groupFailures } from '../cluster/group.js';
+import {
+  loadConfigFromCwd,
+  pickAgents,
+  pickRedactPaths,
+  pickWorkspaces,
+  PROJECT_CONFIG_FILE,
+} from '../config/index.js';
 import { formatDashboardHtml } from '../dashboard/format.js';
 import { openLocalPath } from '../dashboard/open-local.js';
 import { resolveRuleImpactSummary } from '../impact/summary.js';
@@ -35,8 +42,9 @@ interface Options {
   readonly output: string | null;
   readonly open: boolean;
   readonly agents: readonly string[] | null;
-  readonly redactPaths: boolean;
+  readonly redactPathsExplicit: boolean | undefined;
   readonly workspaces: readonly string[];
+  readonly configPath?: string;
 }
 
 function parseOptions(args: readonly string[]): Options | string {
@@ -52,6 +60,7 @@ function parseOptions(args: readonly string[]): Options | string {
         agent: { type: 'string', multiple: true },
         'redact-paths': { type: 'boolean' },
         workspace: { type: 'string', multiple: true },
+        config: { type: 'string' },
       },
       strict: true,
       allowPositionals: false,
@@ -78,6 +87,7 @@ function parseOptions(args: readonly string[]): Options | string {
     if (!isAnyAgentId(id)) return `unknown --agent id: ${id} (known: ${AGENT_IDS.join(', ')}, unknown)`;
   }
   const agents = agentFlags.length === 0 ? null : agentFlags;
+  const configPath = values.config;
 
   return {
     since,
@@ -85,8 +95,9 @@ function parseOptions(args: readonly string[]): Options | string {
     output,
     open: values.open === true,
     agents,
-    redactPaths: values['redact-paths'] === true,
+    redactPathsExplicit: values['redact-paths'] === undefined ? undefined : values['redact-paths'] === true,
     workspaces: values.workspace ?? [],
+    ...(configPath === undefined ? {} : { configPath }),
   };
 }
 
@@ -103,6 +114,7 @@ export function createDashboardCommand(deps: DashboardDeps = { cwd: () => proces
         'Default output: .nightowl/dashboard.html. Use --open to open via the OS file handler.',
         'Includes repeat outcomes and a rule-impact line when a rule was marked (same semantics as digest).',
         'Not a CI gate (use report --fail-on-rate).',
+        `privacy.redactPaths from ${PROJECT_CONFIG_FILE} applies when --redact-paths is omitted.`,
       ],
       options: [
         ['--since <YYYY-MM-DD>', 'Only failures from this date on'],
@@ -112,6 +124,7 @@ export function createDashboardCommand(deps: DashboardDeps = { cwd: () => proces
         ['-o, --output <file>', `Write HTML to this path (default: ${DEFAULT_DASHBOARD_RELATIVE})`],
         ['--open', 'Open the HTML file with the OS default browser (file://, no HTTP server)'],
         ['--redact-paths', 'Coarsen module/path labels in the HTML (share-out)'],
+        ['--config <path>', `Override project config file (default: ${PROJECT_CONFIG_FILE})`],
       ],
     }),
     run: async (args, io) => {
@@ -121,6 +134,17 @@ export function createDashboardCommand(deps: DashboardDeps = { cwd: () => proces
         return 1;
       }
       const cwd = deps.cwd();
+      const loaded = await loadConfigFromCwd({
+        cwd,
+        ...(options.configPath === undefined ? {} : { configPath: options.configPath }),
+      });
+      if (!loaded.ok) {
+        io.stderr(`nightowl dashboard: ${loaded.error}\n`);
+        return 1;
+      }
+      const agents = pickAgents(options.agents, loaded.config);
+      const workspaces = pickWorkspaces(options.workspaces, loaded.config);
+      const redactPaths = pickRedactPaths(options.redactPathsExplicit, loaded.config, false);
       const store = await openExistingStore(cwd);
       if (typeof store === 'string') {
         io.stderr(`nightowl dashboard: ${store}\n`);
@@ -129,14 +153,14 @@ export function createDashboardCommand(deps: DashboardDeps = { cwd: () => proces
       const relativeOut = options.output ?? DEFAULT_DASHBOARD_RELATIVE;
       const absoluteOut = resolve(cwd, relativeOut);
       try {
-        const ws = await prepareWorkspaces(store.root, options.workspaces);
+        const ws = await prepareWorkspaces(store.root, workspaces);
         if (typeof ws === 'string') {
           io.stderr(`nightowl dashboard: ${ws}\n`);
           return 1;
         }
         const signalCounts = store.countEventsByKind(SIGNAL_KINDS, options.since);
         const clustered = applyWorkspaceFilter(
-          store.listFailuresForClustering(options.since, options.agents),
+          store.listFailuresForClustering(options.since, agents),
           ws.filter,
           ws.all,
         );
@@ -148,14 +172,14 @@ export function createDashboardCommand(deps: DashboardDeps = { cwd: () => proces
           workspaces: ws.all,
         });
         const checkScope = scopeChecksForWorkspace(
-          store.countChecksForReport(options.since, options.agents),
+          store.countChecksForReport(options.since, agents),
           ws.filter,
           ws.all,
         );
         const repeat = computeRepeatFromStore({
           store,
           since: options.since,
-          agents: options.agents,
+          agents: agents,
           depth: options.depth,
           workspaces: ws.all,
           workspaceFilter: ws.filter,
@@ -167,7 +191,7 @@ export function createDashboardCommand(deps: DashboardDeps = { cwd: () => proces
         }
         const built = buildReport({
           failures: applyWorkspaceFilter(
-            store.countFailuresForReport(options.since, options.agents),
+            store.countFailuresForReport(options.since, agents),
             ws.filter,
             ws.all,
           ),
@@ -175,7 +199,7 @@ export function createDashboardCommand(deps: DashboardDeps = { cwd: () => proces
           depth: options.depth,
           since: options.since,
           generatedAt: deps.now().toISOString(),
-          agents: options.agents,
+          agents: agents,
           signals: {
             ciFail: signalCounts['ci-fail'] ?? 0,
             prReview: signalCounts['pr-review'] ?? 0,
@@ -186,7 +210,7 @@ export function createDashboardCommand(deps: DashboardDeps = { cwd: () => proces
           repeat,
           workspaces: ws.all,
         });
-        const report = options.redactPaths ? redactPathsInReport(built) : built;
+        const report = redactPaths ? redactPathsInReport(built) : built;
         const generatedAt = report.generatedAt;
         const ruleImpact = resolveRuleImpactSummary(store, generatedAt);
         const html = formatDashboardHtml(report, ruleImpact);

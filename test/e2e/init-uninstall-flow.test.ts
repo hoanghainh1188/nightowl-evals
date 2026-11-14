@@ -40,7 +40,10 @@ describe('init, the personal hook and uninstall (built bin)', () => {
 
   it('records through the personal hook, stays out of git, and uninstalls cleanly', async () => {
     expect(nightowl(['init', '--agents', 'claude-code']).status).toBe(0);
-    expect(git(repo.path, ['status', '--porcelain', '--untracked-files=all'])).toBe('?? .gitignore\n');
+    // .nightowl/ is gitignored; project config is commit-able (untracked until added).
+    expect(git(repo.path, ['status', '--porcelain', '--untracked-files=all'])).toBe(
+      '?? .gitignore\n?? nightowl.config.json\n',
+    );
 
     const hook = await runClaudeHook('UserPromptSubmit', hookFixture('user-prompt-submit', repo.path));
     expect([hook.status, hook.stdout, hook.stderr]).toEqual([0, '', '']);

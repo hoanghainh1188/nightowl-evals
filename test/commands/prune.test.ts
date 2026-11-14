@@ -1,3 +1,5 @@
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createPruneCommand, type PruneDeps } from '../../src/commands/prune.js';
 import { COMMAND_FLAGS } from '../../src/completion/catalog.js';
@@ -75,7 +77,20 @@ describe('nightowl prune', () => {
     expect(cmd.help).toContain('--profile');
     expect(cmd.help).toContain('--dry-run');
     expect(cmd.help).toContain('--vacuum');
+    expect(cmd.help).toContain('--config');
     expect(cmd.help).toMatch(/bytes|size/i);
+  });
+
+  it('uses prune.profile from config when flags are omitted', async () => {
+    await writeFile(
+      join(repo.path, 'nightowl.config.json'),
+      JSON.stringify({ version: 1, prune: { profile: 'short' } }),
+    );
+    const { deps, fakeStore } = createTestDeps();
+    const { code, out } = await runPrune(['--dry-run'], deps);
+    expect(code).toBe(0);
+    expect(fakeStore.pruneCalls[0].olderThanDays).toBe(7);
+    expect(out).toContain('7 day');
   });
 
   it('lists --profile in completion catalog', () => {
