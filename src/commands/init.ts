@@ -1,13 +1,15 @@
+import { access } from 'node:fs/promises';
 import { relative } from 'node:path';
 import { parseArgs } from 'node:util';
 import { AGENT_IDS } from '../agents/ids.js';
 import { errorMessage } from '../cli/errors.js';
 import { renderCommandHelp } from '../cli/help.js';
 import type { Io } from '../cli/io.js';
+import { MINIMAL_PROJECT_CONFIG, PROJECT_CONFIG_FILE, projectConfigPath } from '../config/index.js';
 import { type AgentInstallLine, installSelectedAgents, parseAgentsList } from '../setup/agents-install.js';
 import { checkClaudeHooks, type InstallOutcome, installClaudeHooks } from '../setup/claude-install.js';
 import { PERSONAL_SETTINGS, SHARED_SETTINGS, type SettingsFile } from '../setup/claude-settings.js';
-import { SetupError } from '../setup/fs-utils.js';
+import { SetupError, writeFileAtomic } from '../setup/fs-utils.js';
 import { GIT_HOOKS, type GitHookSpec, hookLine, type InstallResult, installGitHook } from '../setup/git-hook.js';
 import { ensureGitignoreEntry, type FileChange, NIGHTOWL_IGNORE } from '../setup/gitignore.js';
 import { detectHookManager } from '../setup/hook-manager.js';
@@ -127,12 +129,24 @@ function agentLines(rows: readonly AgentInstallLine[]): { readonly lines: string
   return { lines, warnings };
 }
 
+async function ensureProjectConfig(root: string): Promise<FileChange> {
+  const path = projectConfigPath(root);
+  try {
+    await access(path);
+    return 'unchanged';
+  } catch {
+    await writeFileAtomic(path, MINIMAL_PROJECT_CONFIG);
+    return 'created';
+  }
+}
+
 async function setUp(root: string, file: SettingsFile, installClaude: boolean) {
   if (installClaude) await checkClaudeHooks(root, file);
   (await openStore({ cwd: root })).close();
   const claude = installClaude ? await installClaudeHooks(root, file) : null;
   const gitignore = await ensureGitignoreEntry(root);
-  return { claude, gitignore };
+  const config = await ensureProjectConfig(root);
+  return { claude, gitignore, config };
 }
 
 export function createInitCommand(deps: InitDeps = defaultDeps): Command {
@@ -150,8 +164,10 @@ export function createInitCommand(deps: InitDeps = defaultDeps): Command {
         '  .git/hooks/pre-commit        runs nightowl precommit',
         '  .git/hooks/post-commit       runs nightowl postcommit',
         `  .gitignore                   ${NIGHTOWL_IGNORE} and, if needed, ${PERSONAL_SETTINGS}`,
+        `  ${PROJECT_CONFIG_FILE}        minimal local config template when missing (no overwrite; no secrets)`,
         'and creates the local database in .nightowl/. Safe to run again.',
         'On Windows, Git hooks are installed without requiring a POSIX execute bit; .nightowl mode is best-effort on NTFS.',
+        'Optional machine overrides go in .nightowl/config.local.json (gitignored with .nightowl/).',
         "Undo with 'nightowl uninstall'.",
       ],
       options: [
@@ -189,6 +205,7 @@ export function createInitCommand(deps: InitDeps = defaultDeps): Command {
       const lines = [
         ...(done.claude ? [claudeLine(done.claude)] : []),
         gitignoreLine(done.claude, done.gitignore),
+        describeChange(PROJECT_CONFIG_FILE, done.config, 'version 1 template'),
         ...agents.lines,
         ...git.lines,
       ].filter((line): line is string => line !== null);

@@ -14,7 +14,7 @@ const SHARED = '.claude/settings.json';
 
 async function snapshot(root: string): Promise<Record<string, string>> {
   const result: Record<string, string> = {};
-  for (const file of ['.gitignore', PERSONAL]) {
+  for (const file of ['.gitignore', PERSONAL, 'nightowl.config.json']) {
     result[file] = await readFile(join(root, file), 'utf8');
   }
   return result;
@@ -32,11 +32,13 @@ describe('nightowl init', () => {
     const code = await createInitCommand({ cwd: () => repo.path, ...ON_PATH }).run([], fake.io);
     expect(code).toBe(0);
     expect(await readFile(join(repo.path, '.gitignore'), 'utf8')).toBe(`${PERSONAL}\n.nightowl/\n`);
+    expect(JSON.parse(await readFile(join(repo.path, 'nightowl.config.json'), 'utf8'))).toEqual({ version: 1 });
     const settings = JSON.parse(await readFile(join(repo.path, PERSONAL), 'utf8'));
     expect(Object.keys(settings.hooks)).toEqual(['PostToolUse', 'UserPromptSubmit']);
     expect(await readdir(join(repo.path, '.claude'))).toEqual(['settings.local.json']);
     expect(await readdir(join(repo.path, '.nightowl'))).toContain('nightowl.db');
     expect(fake.out()).toContain(`created .gitignore (added ${PERSONAL}, .nightowl/)`);
+    expect(fake.out()).toContain('created nightowl.config.json');
     expect(fake.out()).toContain(`created ${PERSONAL} (hooks: PostToolUse, UserPromptSubmit)`);
     expect(fake.out()).toContain('.git/hooks/pre-commit');
     expect(await readFile(join(repo.path, '.git/hooks/pre-commit'), 'utf8')).toContain('nightowl precommit');
@@ -47,10 +49,17 @@ describe('nightowl init', () => {
     expect(fake.err()).toMatch(/manual maturity|nightowl log --agent aider/);
   });
 
+  it('does not overwrite an existing nightowl.config.json', async () => {
+    await writeFile(join(repo.path, 'nightowl.config.json'), '{\n  "version": 1,\n  "failOnRate": 9\n}\n');
+    expect(await createInitCommand({ cwd: () => repo.path, ...ON_PATH }).run([], createFakeIo().io)).toBe(0);
+    expect(await readFile(join(repo.path, 'nightowl.config.json'), 'utf8')).toContain('"failOnRate": 9');
+  });
+
   it('init --help mentions agents and maturity', () => {
     const cmd = createInitCommand({ cwd: () => repo.path, ...ON_PATH });
     expect(cmd.help).toContain('--agents');
     expect(cmd.help).toMatch(/maturity/i);
+    expect(cmd.help).toContain('nightowl.config.json');
   });
 
   it.each([[['--force']], [['now']]])('rejects %j and changes nothing', async (args) => {

@@ -5,6 +5,13 @@ import { AGENT_IDS, isAnyAgentId } from '../agents/ids.js';
 import { errorMessage } from '../cli/errors.js';
 import { renderCommandHelp } from '../cli/help.js';
 import { groupFailures } from '../cluster/group.js';
+import {
+  loadConfigFromCwd,
+  pickAgents,
+  pickFailOnRate,
+  pickWorkspaces,
+  PROJECT_CONFIG_FILE,
+} from '../config/index.js';
 import { buildReport } from '../report/build.js';
 import { computeRepeatFromStore } from '../report/compute-repeat.js';
 import { formatJson, formatText, TOP_CLUSTERS } from '../report/format.js';
@@ -40,6 +47,7 @@ interface Options {
   readonly debugTiming: boolean;
   /** Raw --baseline-since value when present (YYYY-MM-DD). */
   readonly baselineSinceOption?: string;
+  readonly configPath?: string;
 }
 
 function parseOptions(args: readonly string[]): Options | string {
@@ -57,6 +65,7 @@ function parseOptions(args: readonly string[]): Options | string {
         workspace: { type: 'string', multiple: true },
         'debug-timing': { type: 'boolean' },
         'baseline-since': { type: 'string' },
+        config: { type: 'string' },
       },
       strict: true,
       allowPositionals: false,
@@ -89,6 +98,7 @@ function parseOptions(args: readonly string[]): Options | string {
   }
   const agents = agentFlags.length === 0 ? null : agentFlags;
   const baselineSinceOption = values['baseline-since'];
+  const configPath = values.config;
 
   return {
     json: values.json === true,
@@ -100,6 +110,7 @@ function parseOptions(args: readonly string[]): Options | string {
     workspaces: values.workspace ?? [],
     debugTiming: values['debug-timing'] === true,
     ...(baselineSinceOption === undefined ? {} : { baselineSinceOption }),
+    ...(configPath === undefined ? {} : { configPath }),
   };
 }
 
@@ -118,6 +129,7 @@ export function createReportCommand(deps: ReportDeps = { cwd: () => process.cwd(
         'CI/PR/revert signals stay full --since window. Combining --workspace with --fail-on-rate may warn if checks lack paths.',
         'With --debug-timing, prints read-step timings to stderr; stdout/JSON stay unchanged.',
         'Includes repeat outcomes: cluster keys that reappear after a baseline window vs new keys.',
+        `Defaults may come from ${PROJECT_CONFIG_FILE} (and .nightowl/config.local.json); CLI flags always win. Local-only, no cloud sync.`,
       ],
       options: [
         ['--since <YYYY-MM-DD>', 'Only failures from this date on'],
@@ -135,6 +147,7 @@ export function createReportCommand(deps: ReportDeps = { cwd: () => process.cwd(
         ['-o, --output <file>', 'Write report output to a file'],
         ['--fail-on-rate <0-100>', 'Exit with code 1 if changed rate exceeds threshold (CI gate; uses scoped rate when --workspace is set)'],
         ['--debug-timing', 'Print report-read step timings to stderr (stdout unchanged)'],
+        ['--config <path>', `Override project config file (default: ${PROJECT_CONFIG_FILE})`],
       ],
     }),
     run: async (args, io) => {
@@ -143,13 +156,24 @@ export function createReportCommand(deps: ReportDeps = { cwd: () => process.cwd(
         io.stderr(`nightowl report: ${options}\n`);
         return 1;
       }
+      const loaded = await loadConfigFromCwd({
+        cwd: deps.cwd(),
+        ...(options.configPath === undefined ? {} : { configPath: options.configPath }),
+      });
+      if (!loaded.ok) {
+        io.stderr(`nightowl report: ${loaded.error}\n`);
+        return 1;
+      }
+      const failOnRate = pickFailOnRate(options.failOnRate, loaded.config);
+      const agents = pickAgents(options.agents, loaded.config);
+      const workspaces = pickWorkspaces(options.workspaces, loaded.config);
       const store = await openExistingStore(deps.cwd());
       if (typeof store === 'string') {
         io.stderr(`nightowl report: ${store}\n`);
         return 1;
       }
       try {
-        const ws = await prepareWorkspaces(store.root, options.workspaces);
+        const ws = await prepareWorkspaces(store.root, workspaces);
         if (typeof ws === 'string') {
           io.stderr(`nightowl report: ${ws}\n`);
           return 1;
@@ -158,7 +182,7 @@ export function createReportCommand(deps: ReportDeps = { cwd: () => process.cwd(
         const signalCounts = store.countEventsByKind(SIGNAL_KINDS, options.since);
         const clusteringTimed = measureSync(() => {
           const clustered = applyWorkspaceFilter(
-            store.listFailuresForClustering(options.since, options.agents),
+            store.listFailuresForClustering(options.since, agents),
             ws.filter,
             ws.all,
           );
@@ -172,19 +196,19 @@ export function createReportCommand(deps: ReportDeps = { cwd: () => process.cwd(
         });
         const clusters = clusteringTimed.result;
         const checksTimed = measureSync(() =>
-          scopeChecksForWorkspace(store.countChecksForReport(options.since, options.agents), ws.filter, ws.all),
+          scopeChecksForWorkspace(store.countChecksForReport(options.since, agents), ws.filter, ws.all),
         );
         const checkScope = checksTimed.result;
-        const warn = workspaceFailOnRateWarning(ws.filter !== null, options.failOnRate !== null, checkScope);
+        const warn = workspaceFailOnRateWarning(ws.filter !== null, failOnRate !== null, checkScope);
         if (warn !== null) io.stderr(warn);
 
         const failuresTimed = measureSync(() =>
-          applyWorkspaceFilter(store.countFailuresForReport(options.since, options.agents), ws.filter, ws.all),
+          applyWorkspaceFilter(store.countFailuresForReport(options.since, agents), ws.filter, ws.all),
         );
         const repeat = computeRepeatFromStore({
           store,
           since: options.since,
-          agents: options.agents,
+          agents: agents,
           depth: options.depth,
           workspaces: ws.all,
           workspaceFilter: ws.filter,
@@ -202,7 +226,7 @@ export function createReportCommand(deps: ReportDeps = { cwd: () => process.cwd(
             depth: options.depth,
             since: options.since,
             generatedAt: deps.now().toISOString(),
-            agents: options.agents,
+            agents: agents,
             signals: {
               ciFail: signalCounts['ci-fail'] ?? 0,
               prReview: signalCounts['pr-review'] ?? 0,
@@ -238,10 +262,10 @@ export function createReportCommand(deps: ReportDeps = { cwd: () => process.cwd(
         }
         io.stdout(outputContent);
 
-        if (options.failOnRate !== null && report.changedRate.checked > 0 && report.changedRate.rate !== null) {
+        if (failOnRate !== null && report.changedRate.checked > 0 && report.changedRate.rate !== null) {
           const actualPercent = report.changedRate.rate * 100;
-          if (actualPercent > options.failOnRate) {
-            io.stderr(`nightowl report: failure rate (${Math.round(actualPercent)}%) exceeds threshold of ${options.failOnRate}%\n`);
+          if (actualPercent > failOnRate) {
+            io.stderr(`nightowl report: failure rate (${Math.round(actualPercent)}%) exceeds threshold of ${failOnRate}%\n`);
             return 1;
           }
         }

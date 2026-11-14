@@ -10,7 +10,7 @@ export function isCompletionShell(value: string): value is CompletionShell {
 /** Long flags (and notable shorts) offered after each command. Keep in sync with command help. */
 export const COMMAND_FLAGS: Readonly<Record<string, readonly string[]>> = Object.freeze({
   init: ['--shared', '--agents'],
-  doctor: ['--strict'],
+  doctor: ['--strict', '--config'],
   log: ['--agent'],
   report: [
     '--since',
@@ -23,6 +23,7 @@ export const COMMAND_FLAGS: Readonly<Record<string, readonly string[]>> = Object
     '-o',
     '--fail-on-rate',
     '--debug-timing',
+    '--config',
   ],
   'customer-report': [
     '--lang',
@@ -35,8 +36,28 @@ export const COMMAND_FLAGS: Readonly<Record<string, readonly string[]>> = Object
     '-o',
     '--redact-paths',
   ],
-  dashboard: ['--since', '--depth', '--workspace', '--agent', '--output', '-o', '--open', '--redact-paths'],
-  digest: ['--since', '--depth', '--workspace', '--agent', '--format', '--output', '-o', '--redact-paths'],
+  dashboard: [
+    '--since',
+    '--depth',
+    '--workspace',
+    '--agent',
+    '--output',
+    '-o',
+    '--open',
+    '--redact-paths',
+    '--config',
+  ],
+  digest: [
+    '--since',
+    '--depth',
+    '--workspace',
+    '--agent',
+    '--format',
+    '--output',
+    '-o',
+    '--redact-paths',
+    '--config',
+  ],
   'share-pack': [
     '--since',
     '--depth',
@@ -45,6 +66,7 @@ export const COMMAND_FLAGS: Readonly<Record<string, readonly string[]>> = Object
     '--output',
     '-o',
     '--archive',
+    '--config',
   ],
   export: [
     '--out',
@@ -55,13 +77,14 @@ export const COMMAND_FLAGS: Readonly<Record<string, readonly string[]>> = Object
     '--category',
     '--redact-paths',
     '--privacy-dry-run',
+    '--config',
   ],
   'ingest-ci': ['--file', '--format', '--commit'],
   'ingest-pr': ['--file', '--github', '--pr'],
   'ingest-revert': ['--since'],
   precommit: [],
   postcommit: [],
-  prune: ['--days', '--profile', '--dry-run', '--vacuum'],
+  prune: ['--days', '--profile', '--dry-run', '--vacuum', '--config'],
   failures: [],
   classify: ['--yes', '--transport', '--limit', '--model', '--redo'],
   eval: [

@@ -32,6 +32,12 @@ describe('completion catalog', () => {
     );
   });
 
+  it('lists --config for config-aware commands', () => {
+    for (const name of ['report', 'digest', 'prune', 'doctor', 'dashboard', 'export', 'share-pack'] as const) {
+      expect(COMMAND_FLAGS[name]).toEqual(expect.arrayContaining(['--config']));
+    }
+  });
+
   it('README documents eval/source install for three shells', async () => {
     const readme = await readFile(join(import.meta.dirname, '../../README.md'), 'utf8');
     expect(readme).toContain('nightowl completion');

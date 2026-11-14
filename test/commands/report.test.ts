@@ -76,6 +76,28 @@ describe('nightowl report', () => {
     const command = createReportCommand({ cwd: () => repo.path, now: () => new Date() });
     expect(command.help).toContain('--debug-timing');
     expect(command.help).toMatch(/stderr/i);
+    expect(command.help).toContain('--config');
+    expect(command.help).toMatch(/nightowl\.config|config/i);
+  });
+
+  it('applies failOnRate from config and lets CLI override', async () => {
+    const checks = [
+      { createdAt: '2026-11-04T10:00:00.000Z', outcome: 'failure' as const },
+      { createdAt: '2026-11-04T10:01:00.000Z', outcome: 'failure' as const },
+      { createdAt: '2026-11-04T10:02:00.000Z', outcome: 'not-a-failure' as const },
+      { createdAt: '2026-11-04T10:03:00.000Z', outcome: 'not-a-failure' as const },
+    ];
+    await seed(repo.path, spec, checks);
+    await writeFile(
+      join(repo.path, 'nightowl.config.json'),
+      JSON.stringify({ version: 1, failOnRate: 40 }),
+    );
+    const fromConfig = await run();
+    expect(fromConfig.code).toBe(1);
+    expect(fromConfig.err).toMatch(/exceeds threshold of 40%/i);
+
+    const overridden = await run(['--fail-on-rate', '60']);
+    expect(overridden.code).toBe(0);
   });
 
   it('includes repeat outcomes in JSON and rejects bad --baseline-since', async () => {

@@ -170,7 +170,27 @@ nightowl init
 
 *This non-destructively injects agent hooks (Claude Code, Cursor, and other supported tools) plus Git hooks without modifying existing workflows. Use `--agents cursor,claude-code` to install a subset.*
 
-### 2. Verify environment health
+### 2. Optional: commit team defaults (`nightowl.config.json`)
+
+`nightowl init` creates a minimal `nightowl.config.json` when missing (no overwrite). Commit it for shared defaults; keep secrets out. Machine-only overrides go in `.nightowl/config.local.json` (already gitignored with `.nightowl/`).
+
+**Precedence:** CLI flags > `.nightowl/config.local.json` > `nightowl.config.json` > built-in defaults. Local-only — no cloud sync.
+
+```json
+{
+  "version": 1,
+  "failOnRate": 25,
+  "agents": ["claude-code"],
+  "workspaces": ["packages/app"],
+  "digest": { "lookbackDays": 7 },
+  "prune": { "profile": "default" },
+  "privacy": { "redactPaths": true }
+}
+```
+
+Use `--config <path>` on `report` / `digest` / `prune` / `doctor` / `dashboard` / `export` / `share-pack` to point at another project file (tests/CI).
+
+### 3. Verify environment health
 
 ```bash
 nightowl doctor
@@ -186,13 +206,13 @@ NightOwl Doctor: 5 checks
 Ready to record AI edits.
 ```
 
-### 3. Code normally with Claude Code & Commit
+### 4. Code normally with Claude Code & Commit
 
 Prompt Claude Code to write a feature. If it makes a mistake:
 - **Case A (Manual fix)**: You edit the code to fix the logic, then run `git commit`.
 - **Case B (AI self-fix)**: You prompt Claude *"That function has an off-by-one bug"*, Claude fixes it, then you commit.
 
-### 4. View your analytics
+### 5. View your analytics
 
 ```bash
 nightowl report

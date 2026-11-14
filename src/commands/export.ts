@@ -4,6 +4,7 @@ import { parseArgs } from 'node:util';
 import { errorMessage } from '../cli/errors.js';
 import { renderCommandHelp } from '../cli/help.js';
 import type { Io } from '../cli/io.js';
+import { loadConfigFromCwd, pickRedactPaths, PROJECT_CONFIG_FILE } from '../config/index.js';
 import { CATEGORIES } from '../classify/prompt.js';
 import { EVAL_SCHEMA, evalId, toEvalCase } from '../export/eval-case.js';
 import { fileBeforeKey, readFilesBefore } from '../export/file-before.js';
@@ -51,6 +52,8 @@ interface Options {
   readonly regressionsDir: string | null;
   readonly redactPaths: boolean;
   readonly privacyDryRun: boolean;
+  readonly configPath?: string;
+  readonly redactPathsExplicit?: boolean | undefined;
 }
 
 function parseOptions(args: readonly string[]): Options | string {
@@ -67,6 +70,7 @@ function parseOptions(args: readonly string[]): Options | string {
         'regressions-dir': { type: 'string' },
         'redact-paths': { type: 'boolean' },
         'privacy-dry-run': { type: 'boolean' },
+        config: { type: 'string' },
       },
       strict: true,
       allowPositionals: false,
@@ -84,6 +88,7 @@ function parseOptions(args: readonly string[]): Options | string {
   if (!isExportFormat(formatRaw)) {
     return `unknown --format: ${formatRaw} (use one of ${EXPORT_FORMATS.join(', ')})`;
   }
+  const configPath = values.config;
   return {
     out: values.out ?? null,
     force: values.force === true,
@@ -93,6 +98,8 @@ function parseOptions(args: readonly string[]): Options | string {
     regressionsDir: values['regressions-dir'] ?? null,
     redactPaths: values['redact-paths'] === true,
     privacyDryRun: values['privacy-dry-run'] === true,
+    redactPathsExplicit: values['redact-paths'] === undefined ? undefined : values['redact-paths'] === true,
+    ...(configPath === undefined ? {} : { configPath }),
   };
 }
 
@@ -252,6 +259,7 @@ export function createExportCommand(deps: ExportDeps = { cwd: () => process.cwd(
         'Formats: jsonl (nightowl.eval/v1), swe-bench (compatible fields), promptfoo (YAML config).',
         'The file contains code from this project; keep it private.',
         'Text fields are redacted for secrets/emails; use --redact-paths to coarsen file paths.',
+        `privacy.redactPaths from ${PROJECT_CONFIG_FILE} applies when --redact-paths is omitted.`,
         '--privacy-dry-run reports redaction counts without writing an export file (never prints secret plaintext).',
       ],
       options: [
@@ -266,6 +274,7 @@ export function createExportCommand(deps: ExportDeps = { cwd: () => process.cwd(
         ['--category <name>', `Only this category; repeatable (${[...CATEGORY_NAMES].join(', ')})`],
         ['--redact-paths', 'Coarsen file paths in the export (e.g. src/a/b.ts → src/**/b.ts)'],
         ['--privacy-dry-run', 'Count privacy hits and skip writing the export file'],
+        ['--config <path>', `Override project config file (default: ${PROJECT_CONFIG_FILE})`],
       ],
     }),
     run: async (args, io) => {
@@ -275,6 +284,15 @@ export function createExportCommand(deps: ExportDeps = { cwd: () => process.cwd(
         return 1;
       }
       const cwd = deps.cwd();
+      const loaded = await loadConfigFromCwd({
+        cwd,
+        ...(parsed.configPath === undefined ? {} : { configPath: parsed.configPath }),
+      });
+      if (!loaded.ok) {
+        io.stderr(`nightowl export: ${loaded.error}\n`);
+        return 1;
+      }
+      const redactPaths = pickRedactPaths(parsed.redactPathsExplicit, loaded.config, false);
       let options: Options;
       try {
         const dirResult = await resolveRegressionsDir(cwd, parsed.regressionsDir);
@@ -282,7 +300,7 @@ export function createExportCommand(deps: ExportDeps = { cwd: () => process.cwd(
           io.stderr(`nightowl export: ${dirResult.error}\n`);
           return 1;
         }
-        options = { ...parsed, regressionsDir: dirResult.dir };
+        options = { ...parsed, regressionsDir: dirResult.dir, redactPaths };
       } catch (error) {
         io.stderr(`nightowl export: ${printable(errorMessage(error))}\n`);
         return 1;

@@ -1,5 +1,5 @@
 import { gunzipSync } from 'node:zlib';
-import { mkdir, readFile, readdir } from 'node:fs/promises';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createSharePackCommand } from '../../src/commands/share-pack.js';
@@ -104,6 +104,27 @@ describe('nightowl share-pack', () => {
       },
     ]);
     const outDir = join(repo.path, 'pack-full');
+    const result = await run(['--since', '7d', '--depth', '4', '--no-redact-paths', '-o', outDir]);
+    expect(result.code).toBe(0);
+    const report = await readFile(join(outDir, 'report.md'), 'utf8');
+    expect(report).toContain('src/a/b/c');
+    const manifest = JSON.parse(await readFile(join(outDir, 'manifest.json'), 'utf8'));
+    expect(manifest.redactPaths).toBe(false);
+  });
+
+  it('lets --no-redact-paths win over config redactPaths true', async () => {
+    await writeFile(
+      join(repo.path, 'nightowl.config.json'),
+      JSON.stringify({ version: 1, privacy: { redactPaths: true } }),
+    );
+    await seed(repo.path, [
+      {
+        filePath: 'src/a/b/c/d.ts',
+        category: 'logic',
+        createdAt: '2026-11-10T00:00:00.000Z',
+      },
+    ]);
+    const outDir = join(repo.path, 'pack-cli-wins');
     const result = await run(['--since', '7d', '--depth', '4', '--no-redact-paths', '-o', outDir]);
     expect(result.code).toBe(0);
     const report = await readFile(join(outDir, 'report.md'), 'utf8');

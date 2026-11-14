@@ -6,6 +6,7 @@ import { AGENT_IDS, isAnyAgentId } from '../agents/ids.js';
 import { errorMessage } from '../cli/errors.js';
 import { renderCommandHelp } from '../cli/help.js';
 import type { Io } from '../cli/io.js';
+import { loadConfigFromCwd, pickAgents, pickRedactPaths, PROJECT_CONFIG_FILE } from '../config/index.js';
 import { buildDigest } from '../digest/build.js';
 import { formatDigestMarkdown } from '../digest/format.js';
 import { DEFAULT_DIGEST_LOOKBACK_DAYS, parseDigestSince } from '../digest/since.js';
@@ -40,9 +41,11 @@ interface Options {
   readonly since: string;
   readonly depth: number;
   readonly agents: readonly string[] | null;
-  readonly redactPaths: boolean;
+  /** undefined = flag omitted; false = --no-redact-paths; true would mean forced on (not a CLI flag). */
+  readonly noRedactPathsExplicit: boolean;
   readonly output: string | null;
   readonly archive: boolean;
+  readonly configPath?: string;
 }
 
 function parseOptions(args: readonly string[], now: Date): Options | string {
@@ -57,6 +60,7 @@ function parseOptions(args: readonly string[], now: Date): Options | string {
         'no-redact-paths': { type: 'boolean' },
         output: { type: 'string', short: 'o' },
         archive: { type: 'boolean' },
+        config: { type: 'string' },
       },
       strict: true,
       allowPositionals: false,
@@ -80,14 +84,16 @@ function parseOptions(args: readonly string[], now: Date): Options | string {
 
   const output = values.output === undefined ? null : values.output.trim();
   if (output !== null && output.length === 0) return '--output cannot be empty';
+  const configPath = values.config;
 
   return {
     since: sinceParsed.since,
     depth,
     agents: agentFlags.length === 0 ? null : agentFlags,
-    redactPaths: values['no-redact-paths'] !== true,
+    noRedactPathsExplicit: values['no-redact-paths'] === true,
     output,
     archive: values.archive === true,
+    ...(configPath === undefined ? {} : { configPath }),
   };
 }
 
@@ -95,15 +101,21 @@ function defaultPackDir(root: string, generatedAt: string): string {
   return join(root, DATA_DIR, 'share', stampFromIso(generatedAt));
 }
 
-function buildReportForPack(store: Store, options: Options, generatedAt: string) {
+function buildReportForPack(
+  store: Store,
+  options: Options,
+  generatedAt: string,
+  agents: readonly string[] | null,
+  redactPaths: boolean,
+) {
   const signalCounts = store.countEventsByKind(SIGNAL_KINDS, options.since);
   const report = buildReport({
-    failures: store.countFailuresForReport(options.since, options.agents),
-    checks: store.countChecksForReport(options.since, options.agents),
+    failures: store.countFailuresForReport(options.since, agents),
+    checks: store.countChecksForReport(options.since, agents),
     depth: options.depth,
     since: options.since,
     generatedAt,
-    agents: options.agents,
+    agents,
     signals: {
       ciFail: signalCounts['ci-fail'] ?? 0,
       prReview: signalCounts['pr-review'] ?? 0,
@@ -112,7 +124,7 @@ function buildReportForPack(store: Store, options: Options, generatedAt: string)
     autoNoise: store.countAutoNoiseFailures(options.since),
     clusters: [],
   });
-  return options.redactPaths ? redactPathsInReport(report) : report;
+  return redactPaths ? redactPathsInReport(report) : report;
 }
 
 export function createSharePackCommand(deps: SharePackDeps = { cwd: () => process.cwd(), now: () => new Date() }): Command {
@@ -132,7 +144,8 @@ export function createSharePackCommand(deps: SharePackDeps = { cwd: () => proces
       usage: '[options]',
       description: [
         'Writes a local share-out pack: report.md, digest.md, and manifest.json.',
-        'Path redaction is on by default (share-safe). Does not call the network or include developer names.',
+        'Path redaction is on by default (share-safe); privacy.redactPaths in config can change the default.',
+        '--no-redact-paths always wins. Does not call the network or include developer names.',
         'Optional --archive writes a .tar.gz beside the pack directory (Node zlib; not zip).',
       ],
       options: [
@@ -145,6 +158,7 @@ export function createSharePackCommand(deps: SharePackDeps = { cwd: () => proces
         ['--no-redact-paths', 'Keep full module/path labels (default: paths are coarsened)'],
         ['-o, --output <dir>', `Pack directory (default: ${DATA_DIR}/share/<stamp>/)`],
         ['--archive', 'Also write <dir>.tar.gz locally (no upload)'],
+        ['--config <path>', `Override project config file (default: ${PROJECT_CONFIG_FILE})`],
       ],
     }),
     run: async (args, io) => {
@@ -153,6 +167,21 @@ export function createSharePackCommand(deps: SharePackDeps = { cwd: () => proces
         io.stderr(`nightowl share-pack: ${options}\n`);
         return 1;
       }
+
+      const loaded = await loadConfigFromCwd({
+        cwd: deps.cwd(),
+        ...(options.configPath === undefined ? {} : { configPath: options.configPath }),
+      });
+      if (!loaded.ok) {
+        io.stderr(`nightowl share-pack: ${loaded.error}\n`);
+        return 1;
+      }
+      const agents = pickAgents(options.agents, loaded.config);
+      const redactPaths = pickRedactPaths(
+        options.noRedactPathsExplicit ? false : undefined,
+        loaded.config,
+        true,
+      );
 
       const store = await openExistingStore(deps.cwd());
       if (typeof store === 'string') {
@@ -167,20 +196,20 @@ export function createSharePackCommand(deps: SharePackDeps = { cwd: () => proces
             ? defaultPackDir(store.root, generatedAt)
             : resolve(deps.cwd(), options.output);
 
-        const report = buildReportForPack(store, options, generatedAt);
+        const report = buildReportForPack(store, options, generatedAt, agents, redactPaths);
         const reportMd = formatText(report);
         const digest = buildDigest({
           store,
           since: options.since,
           depth: options.depth,
-          agents: options.agents,
+          agents,
           generatedAt,
         });
         const digestMd = formatDigestMarkdown(digest);
         const manifest = buildSharePackManifest({
           generatedAt,
           since: options.since,
-          redactPaths: options.redactPaths,
+          redactPaths,
           nightowlVersion: typeof pkg.version === 'string' ? pkg.version : undefined,
         });
         const manifestJson = `${JSON.stringify(manifest, null, 2)}\n`;

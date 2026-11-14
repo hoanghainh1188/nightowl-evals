@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDashboardCommand } from '../../src/commands/dashboard.js';
@@ -130,5 +130,18 @@ describe('nightowl dashboard', () => {
     expect(result.code).toBe(0);
     const html = await readFile(join(repo.path, '.nightowl', 'dashboard.html'), 'utf8');
     expect(html).toContain('Not enough data yet');
+  });
+
+  it('applies privacy.redactPaths from config without --redact-paths', async () => {
+    await seed(repo.path, [{ filePath: 'src/a/b/c/d.ts', category: 'logic' }]);
+    await writeFile(
+      join(repo.path, 'nightowl.config.json'),
+      JSON.stringify({ version: 1, privacy: { redactPaths: true } }),
+    );
+    const result = await run(['--depth', '4', '-o', join(repo.path, 'dash.html')]);
+    expect(result.code).toBe(0);
+    const html = await readFile(join(repo.path, 'dash.html'), 'utf8');
+    expect(html).toContain('src/**/c');
+    expect(html).not.toContain('src/a/b/c');
   });
 });
