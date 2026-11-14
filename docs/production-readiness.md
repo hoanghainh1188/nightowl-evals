@@ -1,8 +1,8 @@
 # Kế Hoạch Chuẩn Bị Cho Sản Phẩm Production-Ready (Production Readiness Roadmap)
 
-Tài liệu này ghi mức độ sẵn sàng kỹ thuật của **NightOwl Evals** (`@hoanghainh/nightowl-evals`) sau Production-Ready gốc (1–17) và ideation **v0.3–v0.6** (ship `0.5.0` / `0.5.1` / `0.6.0` / `0.6.1`). Phạm vi vẫn **open-core / local-first**.
+Tài liệu này ghi mức độ sẵn sàng kỹ thuật của **NightOwl Evals** (`@hoanghainh/nightowl-evals`) sau Production-Ready gốc (1–17) và ideation **v0.3–v0.7 Core** (ship `0.5.0` / `0.5.1` / `0.6.0` / `0.6.1` / `0.7.0`). Phạm vi vẫn **open-core / local-first**.
 
-Hướng tiếp theo: [`v0.7-roadmap-ideas.md`](v0.7-roadmap-ideas.md) (ideation 48+). Lịch sử v0.6: [`v0.6-roadmap-ideas.md`](v0.6-roadmap-ideas.md). Lịch sử v0.5: [`v0.5-roadmap-ideas.md`](v0.5-roadmap-ideas.md).
+Hướng tiếp theo: [`v0.7-roadmap-ideas.md`](v0.7-roadmap-ideas.md) Secondary (#52–55). Lịch sử v0.6: [`v0.6-roadmap-ideas.md`](v0.6-roadmap-ideas.md). Lịch sử v0.5: [`v0.5-roadmap-ideas.md`](v0.5-roadmap-ideas.md).
 
 ---
 
@@ -14,9 +14,9 @@ Hướng tiếp theo: [`v0.7-roadmap-ideas.md`](v0.7-roadmap-ideas.md) (ideation
 | **2. Setup & Hook Injection** | **90%** | Production | Worktree / `core.hooksPath`; Husky & Lefthook; multi-agent `init`. |
 | **3. Ingestion & Hook Capture** | **90%** | Production | Fail-open, timeout; inline secret scan; CI/PR/revert signals. |
 | **4. Storage (`node:sqlite`)** | **90%** | Production | WAL, migrations, `prune` / retention; schema hiện hành trên `main`. |
-| **5. Classification** | **85%** | Production | Claude CLI + tùy chọn API key; LLM opt-in. |
-| **6. Analytics & Review** | **90%** | Production | `report`/`--json`, dashboard, digest, clusters, TUI review, noise estimate. |
-| **7. Export & Eval** | **85%** | Production | JSONL + privacy; eval runner; eval A/B compare local. |
+| **5. Classification** | **90%** | Production | Claude CLI + tùy chọn API key; heuristic offline (`#50`); LLM opt-in. |
+| **6. Analytics & Review** | **90%** | Production | `report`/`--json`, dashboard, digest, clusters, TUI review, noise estimate, repeat outcomes (`#48`). |
+| **7. Export & Eval** | **90%** | Production | JSONL + privacy; eval runner; eval A/B; project eval loop (`#51`). |
 | **8. Cross-Platform & CI** | **90%** | Production | macOS/Linux/Windows path + NTFS best-effort + hook execute-bit skip trên win32 (`#41`). |
 | **9. Team local surfaces** | **85%** | Production | Customer-report, Action CI gate, workspace-aware modules, rule-impact. |
 
@@ -52,14 +52,15 @@ Các mục dưới đây **không** còn là gap Production-Ready gốc; chúng 
 ├── add-eval-test-runner
 └── add-direct-api-classify
 
-Đã xong — Ideation v0.3 / v0.4 / v0.5 / v0.6 (xem roadmap docs)
+Đã xong — Ideation v0.3 / v0.4 / v0.5 / v0.6 / v0.7 Core (xem roadmap docs)
 ├── multi-agent, rules, regressions, TUI, Action, completion, …
 ├── CI/PR signals, rule-impact, customer-report, …
 ├── dashboard, noise, clusters, revert, digest, privacy, eval A/B, workspace
 ├── doctor team, Windows DX, rule feedback loop, deeper multi-agent adapters (`0.6.0`)
-└── prune UX, workspace metrics, share-pack, large-DB timing (`0.6.1`)
+├── prune UX, workspace metrics, share-pack, large-DB timing (`0.6.1`)
+└── repeat outcomes, local config, offline classify, project eval loop (`0.7.0`)
 
-Tiếp theo — v0.7 (ideation 48+)
+Tiếp theo — v0.7 Secondary (#52–55)
 └── docs/v0.7-roadmap-ideas.md
 ```
 
