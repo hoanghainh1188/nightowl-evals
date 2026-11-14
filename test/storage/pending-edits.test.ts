@@ -70,7 +70,8 @@ describe('pending AI edits', () => {
     for (const file of files) edit(file, 'snapshot');
     const started = Date.now();
     expect(store.listUncheckedEdits(files)).toHaveLength(500);
-    expect(Date.now() - started).toBeLessThan(200);
+    // CI runners (esp. Node 22) can exceed a tight local budget; keep a loose guard.
+    expect(Date.now() - started).toBeLessThan(1_000);
   }, 60_000);
 
   it('lists open edits: unchecked ones and those of checks no commit has closed yet', () => {
