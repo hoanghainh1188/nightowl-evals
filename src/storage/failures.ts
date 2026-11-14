@@ -241,6 +241,8 @@ export interface ExportFilter {
   readonly since: string | null;
   // null = every category; 'unclassified' selects failures without one.
   readonly categories: readonly string[] | null;
+  /** null = every non-dismissed status; otherwise only listed statuses (still never dismissed). */
+  readonly statuses?: readonly ('flagged' | 'confirmed')[] | null;
 }
 
 export interface FailureToExport {
@@ -262,6 +264,8 @@ export interface FailureToExport {
 // Failures not dismissed, oldest first, with their prompt and feedback text.
 export function listFailuresToExport(db: DatabaseSync, filter: ExportFilter): readonly FailureToExport[] {
   const categories = filter.categories === null ? null : JSON.stringify(filter.categories);
+  const statuses =
+    filter.statuses === undefined || filter.statuses === null ? null : JSON.stringify(filter.statuses);
   const rows = db
     .prepare(
       `SELECT f.id, f.created_at, f.file_path, f.commit_sha, json_extract(p.payload, '$.prompt') AS prompt,
@@ -270,11 +274,12 @@ export function listFailuresToExport(db: DatabaseSync, filter: ExportFilter): re
        FROM failures f LEFT JOIN events p ON p.id = f.prompt_event_id
          LEFT JOIN events b ON b.id = f.feedback_event_id
        WHERE f.status != 'dismissed'
+         AND (? IS NULL OR f.status IN (SELECT value FROM json_each(?)))
          AND (? IS NULL OR f.created_at >= ?)
          AND (? IS NULL OR COALESCE(f.category, 'unclassified') IN (SELECT value FROM json_each(?)))
        ORDER BY f.id`,
     )
-    .all(filter.since, filter.since, categories, categories) as unknown as Array<{
+    .all(statuses, statuses, filter.since, filter.since, categories, categories) as unknown as Array<{
     id: number;
     created_at: string;
     file_path: string;

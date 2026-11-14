@@ -75,6 +75,7 @@ export const COMMAND_FLAGS: Readonly<Record<string, readonly string[]>> = Object
     '--force',
     '--since',
     '--category',
+    '--status',
     '--redact-paths',
     '--privacy-dry-run',
     '--config',

@@ -77,6 +77,7 @@ describe('formatDashboardHtml', () => {
     expect(html).toContain('Signals');
     expect(html).toContain('revert 4');
     expect(html).toContain('Rule impact (convention-naming): 4 → 1 (delta -3)');
+    expect(html).toContain('Eval loop: none recorded');
     expect(html).not.toMatch(/https?:\/\//);
   });
 
@@ -94,6 +95,17 @@ describe('formatDashboardHtml', () => {
     );
     expect(html).toContain('Not enough data yet');
     expect(html).toContain('Rule impact: none recorded');
+    expect(html).toContain('Eval loop: none recorded');
+  });
+
+  it('renders labeled eval loop line', () => {
+    const html = formatDashboardHtml(sampleReport(), null, {
+      kind: 'ok',
+      label: 'rules-v2',
+      baselineLabel: null,
+      oneLine: 'rules-v2; haiku pass 1/1 mean 0.80',
+    });
+    expect(html).toContain('Eval loop: rules-v2');
   });
 
   it('shows n/a when repeat rate is null', () => {

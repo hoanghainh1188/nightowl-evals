@@ -14,6 +14,7 @@ import {
 } from '../config/index.js';
 import { formatDashboardHtml } from '../dashboard/format.js';
 import { openLocalPath } from '../dashboard/open-local.js';
+import { resolveEvalLoopSummary } from '../eval/loop-summary.js';
 import { resolveRuleImpactSummary } from '../impact/summary.js';
 import { redactPathsInReport } from '../privacy/index.js';
 import { buildReport } from '../report/build.js';
@@ -112,7 +113,8 @@ export function createDashboardCommand(deps: DashboardDeps = { cwd: () => proces
         'Writes a self-contained HTML dashboard from local NightOwl SQLite data.',
         'Local-only: no network, no SaaS team dashboard, no developer names.',
         'Default output: .nightowl/dashboard.html. Use --open to open via the OS file handler.',
-        'Includes repeat outcomes and a rule-impact line when a rule was marked (same semantics as digest).',
+        'Includes repeat outcomes, a rule-impact line when a rule was marked, and a local eval-loop line',
+        'from .nightowl/runs/ (same semantics as digest). Part of the project eval loop after export/eval.',
         'Not a CI gate (use report --fail-on-rate).',
         `privacy.redactPaths from ${PROJECT_CONFIG_FILE} applies when --redact-paths is omitted.`,
       ],
@@ -213,7 +215,8 @@ export function createDashboardCommand(deps: DashboardDeps = { cwd: () => proces
         const report = redactPaths ? redactPathsInReport(built) : built;
         const generatedAt = report.generatedAt;
         const ruleImpact = resolveRuleImpactSummary(store, generatedAt);
-        const html = formatDashboardHtml(report, ruleImpact);
+        const evalLoop = await resolveEvalLoopSummary(store.root);
+        const html = formatDashboardHtml(report, ruleImpact, evalLoop);
         const write =
           deps.writeFile ??
           (async (file, content) => {

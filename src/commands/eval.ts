@@ -18,6 +18,7 @@ import {
   parseRunFile,
   type RunResultRow,
 } from '../eval/compare.js';
+import { evalLoopNextStepsAfterEval } from '../eval/loop-hints.js';
 import { parseGeneratedFile } from '../eval/parse.js';
 import { buildEvalPrompt, GENERATED_FILE_SCHEMA } from '../eval/prompt.js';
 import {
@@ -492,6 +493,7 @@ async function runAll(
     io.stderr(`nightowl eval: ${printable(reportError)}\n`);
     return 1;
   }
+  if (saved !== '') io.stderr(evalLoopNextStepsAfterEval());
   return saved === '' || all.some((r) => r.error !== null) ? 1 : 0;
 }
 
@@ -506,6 +508,7 @@ export function createEvalCommand(deps: EvalDeps = defaultDeps): Command {
         'Gives each exported case to Claude models and scores how close each answer is to your fix.',
         'Without --yes it only says what would be sent. With --yes it sends file content to `claude -p`.',
         'With --test-command, each answer is written into the project file, the command runs, then the file is restored.',
+        'Project eval loop (local): export → eval --label → eval-compare / digest / dashboard. No cloud ranking.',
       ],
       options: [
         ['--yes', 'Actually call Claude (default: dry run)'],

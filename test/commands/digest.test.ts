@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createDigestCommand } from '../../src/commands/digest.js';
@@ -60,6 +60,7 @@ describe('nightowl digest', () => {
     expect(result.out).toContain('convention: 1');
     expect(result.out).toMatch(/Does not email\/Slack/i);
     expect(result.out).toContain('Rule impact: none recorded');
+    expect(result.out).toContain('Eval loop: none recorded');
 
     expect((await readFile(db)).equals(before)).toBe(true);
     expect(await run(['--since', '7d'])).toMatchObject({ code: 0 });
@@ -79,9 +80,43 @@ describe('nightowl digest', () => {
     expect(html).not.toMatch(/https?:\/\//);
   });
 
-  it('help mentions no email/Slack', () => {
+  it('help mentions no email/Slack and eval-loop', () => {
     expect(createDigestCommand().help).toMatch(/email|Slack/i);
     expect(createDigestCommand().help).toContain('--config');
+    expect(createDigestCommand().help).toMatch(/eval-loop|runs/i);
+  });
+
+  it('includes labeled eval loop from .nightowl/runs/', async () => {
+    await seed(repo.path, [
+      { filePath: 'src/a.ts', category: 'logic', status: 'flagged', createdAt: '2026-11-10T00:00:00.000Z' },
+    ]);
+    const runs = join(repo.path, '.nightowl', 'runs');
+    await mkdir(runs, { recursive: true });
+    await writeFile(
+      join(runs, 'run.jsonl'),
+      [
+        JSON.stringify({
+          schema: 'nightowl.eval-run-meta/v1',
+          label: 'prompt-v3',
+          models: ['haiku'],
+          run_at: '2026-11-14T10:00:00.000Z',
+        }),
+        JSON.stringify({
+          run_at: '2026-11-14T10:00:00.000Z',
+          case_id: 'c1',
+          model: 'haiku',
+          coverage: 0.9,
+          repeat: 0,
+          score: 0.9,
+          pass: true,
+          tests_passed: null,
+          error: null,
+        }),
+      ].join('\n') + '\n',
+    );
+    const result = await run(['--since', '7d']);
+    expect(result.code).toBe(0);
+    expect(result.out).toContain('Eval loop: prompt-v3');
   });
 
   it('uses digest.lookbackDays from config when --since is omitted', async () => {

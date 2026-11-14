@@ -16,6 +16,7 @@ const sample: Digest = {
   topAgents: [{ name: 'claude-code', count: 3 }],
   signals: { ciFail: 1, prReview: 0, revert: 0 },
   ruleImpact: { label: 'r1', before: 5, after: 2, delta: -3 },
+  evalLoop: { kind: 'ok', label: 'prompt-v3', baselineLabel: null, oneLine: 'prompt-v3; haiku pass 1/1 mean 0.90' },
   repeat: {
     repeatCount: 1,
     newCount: 2,
@@ -34,12 +35,20 @@ describe('formatDigestMarkdown', () => {
     expect(md).toContain('Repeat outcomes: 1 repeat / 2 new (33%)');
     expect(md).toContain('- logic: 2');
     expect(md).toContain('Rule impact (r1): 5 → 2 (delta -3)');
+    expect(md).toContain('Eval loop: prompt-v3');
     expect(md).toMatch(/Does not email\/Slack/i);
   });
 
   it('says none recorded when no rule impact', () => {
     expect(formatDigestMarkdown({ ...sample, ruleImpact: null })).toContain('Rule impact: none recorded');
     expect(formatDigestMarkdown({ ...sample, ruleImpact: 'unavailable' })).toContain('Rule impact: n/a');
+  });
+
+  it('says none recorded when no eval loop', () => {
+    expect(formatDigestMarkdown({ ...sample, evalLoop: { kind: 'none' } })).toContain(
+      'Eval loop: none recorded',
+    );
+    expect(formatDigestMarkdown({ ...sample, evalLoop: { kind: 'na' } })).toContain('Eval loop: n/a');
   });
 });
 

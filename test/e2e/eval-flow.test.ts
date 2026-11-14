@@ -71,7 +71,8 @@ describe('real commits → export → nightowl eval', () => {
     expect(await claude.calls()).toEqual([]);
 
     const real = nightowl(['eval', '--yes']);
-    expect(real.stderr).toBe('');
+    expect(real.stderr).toContain('Next:');
+    expect(real.stderr).toContain('eval-compare');
     expect(real.status).toBe(0);
     expect(real.stdout).toMatch(/^ {2}haiku +1 +0 +0\.00 +0$/m);
     expect(real.stdout).toMatch(/^ {2}sonnet +1 +1 +1\.00 +0$/m);

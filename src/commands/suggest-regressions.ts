@@ -14,6 +14,7 @@ import {
   runAnthropicApi,
 } from '../classify/run-api.js';
 import { type RunClaude, runClaude } from '../classify/run-claude.js';
+import { evalLoopNextStepsAfterSuggest } from '../eval/loop-hints.js';
 import { fileBeforeKey, readFilesBefore } from '../export/file-before.js';
 import { UNCLASSIFIED } from '../report/build.js';
 import { detectFramework } from '../regressions/detect.js';
@@ -222,7 +223,8 @@ async function writeScaffoldFiles(
     }
   }
   io.stderr(
-    `nightowl suggest-regressions: wrote ${written} file(s) under ${printable(relative(cwd, targetDir) || targetDir)}\n`,
+    `nightowl suggest-regressions: wrote ${written} file(s) under ${printable(relative(cwd, targetDir) || targetDir)}\n` +
+      evalLoopNextStepsAfterSuggest(),
   );
   return written;
 }
@@ -237,6 +239,7 @@ export function createSuggestRegressionsCommand(deps: SuggestRegressionsDeps = d
       description: [
         'Builds nightowl.eval/v1 fixtures (and optional vitest/jest stubs) from recorded failures.',
         'Does not call an LLM unless you pass --yes. Does not write project test files unless --output is set.',
+        'Project eval loop (local): after scaffolds, export --status confirmed → eval --label → digest/dashboard.',
       ],
       options: [
         ['--since <YYYY-MM-DD>', 'Only failures from this date on'],

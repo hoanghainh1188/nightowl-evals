@@ -1,3 +1,5 @@
+import type { EvalLoopView } from '../eval/loop-summary.js';
+import { resolveEvalLoopSummary } from '../eval/loop-summary.js';
 import { resolveRuleImpactSummary, type RuleImpactSummary, type RuleImpactView } from '../impact/summary.js';
 import { buildReport, type ReportSignals } from '../report/build.js';
 import { computeRepeatFromStore } from '../report/compute-repeat.js';
@@ -28,6 +30,7 @@ export interface Digest {
   readonly signals: ReportSignals;
   /** null = none recorded; object = ok; 'unavailable' = compare failed (fail-open). */
   readonly ruleImpact: RuleImpactView;
+  readonly evalLoop: EvalLoopView;
   readonly repeat: RepeatOutcomes;
 }
 
@@ -42,6 +45,8 @@ export interface BuildDigestInput {
   readonly workspaces?: readonly Workspace[];
   /** Selected workspaces for failure filter; null = no filter. */
   readonly workspaceFilter?: readonly Workspace[] | null;
+  /** Override eval-loop view (tests); default resolves from store.root. */
+  readonly evalLoop?: EvalLoopView;
 }
 
 function topRows(map: Readonly<Record<string, number>>, limit: number): readonly DigestTopRow[] {
@@ -110,6 +115,8 @@ export function buildDigest(input: BuildDigestInput): Digest {
         });
 
   const ruleImpact = resolveRuleImpactSummary(input.store, input.nowIso ?? input.generatedAt);
+  // Async resolve happens in the command when not injected (see createDigestCommand).
+  const evalLoop = input.evalLoop ?? Object.freeze({ kind: 'none' as const });
 
   return Object.freeze({
     generatedAt: input.generatedAt,
@@ -122,6 +129,12 @@ export function buildDigest(input: BuildDigestInput): Digest {
     topAgents: topRows(report.byAgent, TOP_DIGEST_ROWS),
     signals,
     ruleImpact,
+    evalLoop,
     repeat: report.repeat,
   });
+}
+
+/** Resolve eval-loop summary for a project root (async filesystem). */
+export async function loadEvalLoopForDigest(projectRoot: string): Promise<EvalLoopView> {
+  return resolveEvalLoopSummary(projectRoot);
 }

@@ -97,6 +97,8 @@ describe('nightowl suggest-regressions', () => {
     const result = await run(['--output', 'test/regressions', '--framework', 'vitest']);
     expect(result.code).toBe(0);
     expect(result.err).toContain('wrote');
+    expect(result.err).toContain('Next:');
+    expect(result.err).toMatch(/export|eval/);
     const files = await import('node:fs/promises').then((fs) => fs.readdir(outDir));
     expect(files.some((f) => f.endsWith('.json'))).toBe(true);
     expect(files.some((f) => f.endsWith('.test.ts'))).toBe(true);
@@ -153,5 +155,6 @@ describe('nightowl suggest-regressions', () => {
     expect(cmd.help).toContain('Does not call an LLM');
     expect(cmd.help).toContain('--output');
     expect(cmd.help).toContain('--yes');
+    expect(cmd.help).toMatch(/Project eval loop|export --status confirmed/i);
   });
 });

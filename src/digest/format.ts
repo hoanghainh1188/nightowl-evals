@@ -1,3 +1,4 @@
+import { formatEvalLoopLine } from '../eval/loop-summary.js';
 import { formatRuleImpactLine } from '../impact/summary.js';
 import { printable } from '../shared/printable.js';
 import type { Digest } from './build.js';
@@ -32,6 +33,7 @@ export function formatDigestMarkdown(digest: Digest): string {
     `Signals: ci-fail ${digest.signals.ciFail}, pr-review ${digest.signals.prReview}, revert ${digest.signals.revert}`,
     formatRepeatLine(digest),
     formatRuleImpactLine(digest.ruleImpact),
+    formatEvalLoopLine(digest.evalLoop),
     '',
     ...listMd('Top categories', digest.topCategories),
     '',
@@ -62,6 +64,7 @@ export function formatDigestHtml(digest: Digest): string {
     `<li><strong>Signals</strong>: ci-fail ${digest.signals.ciFail}, pr-review ${digest.signals.prReview}, revert ${digest.signals.revert}</li>`,
     `<li><strong>Repeat outcomes</strong>: ${digest.repeat.repeatCount} repeat / ${digest.repeat.newCount} new (${digest.repeat.repeatRate === null ? 'n/a' : `${Math.round(digest.repeat.repeatRate * 100)}%`})</li>`,
     `<li>${escapeHtml(formatRuleImpactLine(digest.ruleImpact))}</li>`,
+    `<li>${escapeHtml(formatEvalLoopLine(digest.evalLoop))}</li>`,
     `</ul>`,
     `<h2>Top categories</h2><ul>${rows(digest.topCategories)}</ul>`,
     `<h2>Top agents</h2><ul>${rows(digest.topAgents)}</ul>`,

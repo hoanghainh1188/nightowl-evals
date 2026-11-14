@@ -6,6 +6,7 @@ import { renderCommandHelp } from '../cli/help.js';
 import type { Io } from '../cli/io.js';
 import { loadConfigFromCwd, pickRedactPaths, PROJECT_CONFIG_FILE } from '../config/index.js';
 import { CATEGORIES } from '../classify/prompt.js';
+import { evalLoopNextStepsAfterExport } from '../eval/loop-hints.js';
 import { EVAL_SCHEMA, evalId, toEvalCase } from '../export/eval-case.js';
 import { fileBeforeKey, readFilesBefore } from '../export/file-before.js';
 import {
@@ -36,6 +37,8 @@ import { openExistingStore } from './existing-store.js';
 export const EXPORT_DIR = 'export';
 export const EXPORT_FILE = DEFAULT_FILES.jsonl;
 const CATEGORY_NAMES = new Set([...Object.keys(CATEGORIES), UNCLASSIFIED]);
+const EXPORT_STATUSES = ['flagged', 'confirmed'] as const;
+type ExportStatus = (typeof EXPORT_STATUSES)[number];
 
 export interface ExportDeps {
   readonly cwd: () => string;
@@ -47,6 +50,8 @@ interface Options {
   readonly force: boolean;
   readonly since: string | null;
   readonly categories: readonly string[] | null;
+  /** null = every non-dismissed status. */
+  readonly statuses: readonly ExportStatus[] | null;
   readonly format: ExportFormat;
   // Absolute or cwd-relative path; used only for swe-bench harness fill.
   readonly regressionsDir: string | null;
@@ -66,6 +71,7 @@ function parseOptions(args: readonly string[]): Options | string {
         force: { type: 'boolean' },
         since: { type: 'string' },
         category: { type: 'string', multiple: true },
+        status: { type: 'string', multiple: true },
         format: { type: 'string' },
         'regressions-dir': { type: 'string' },
         'redact-paths': { type: 'boolean' },
@@ -84,6 +90,14 @@ function parseOptions(args: readonly string[]): Options | string {
   if (since === null && values.since !== undefined) return `invalid --since date (use YYYY-MM-DD): ${values.since}`;
   const unknown = (values.category ?? []).find((name) => !CATEGORY_NAMES.has(name));
   if (unknown !== undefined) return `unknown --category: ${unknown} (use one of ${[...CATEGORY_NAMES].join(', ')})`;
+  const statusFlags = values.status ?? null;
+  if (statusFlags !== null) {
+    for (const status of statusFlags) {
+      if (!(EXPORT_STATUSES as readonly string[]).includes(status)) {
+        return `--status must be one of ${EXPORT_STATUSES.join(', ')}`;
+      }
+    }
+  }
   const formatRaw = values.format ?? 'jsonl';
   if (!isExportFormat(formatRaw)) {
     return `unknown --format: ${formatRaw} (use one of ${EXPORT_FORMATS.join(', ')})`;
@@ -94,6 +108,7 @@ function parseOptions(args: readonly string[]): Options | string {
     force: values.force === true,
     since,
     categories: values.category ?? null,
+    statuses: statusFlags as readonly ExportStatus[] | null,
     format: formatRaw,
     regressionsDir: values['regressions-dir'] ?? null,
     redactPaths: values['redact-paths'] === true,
@@ -130,7 +145,11 @@ interface Prepared {
 }
 
 async function prepare(store: Store, options: Options): Promise<Prepared> {
-  const all = store.listFailuresToExport({ since: options.since, categories: options.categories });
+  const all = store.listFailuresToExport({
+    since: options.since,
+    categories: options.categories,
+    statuses: options.statuses,
+  });
   const failures = all.filter(
     (failure) =>
       !isSensitivePath(failure.filePath) &&
@@ -243,7 +262,8 @@ async function write(
     `nightowl export: exported ${count} eval cases${formatNote} to ${shown}\n` +
       skipped +
       '  The file contains code from this project; keep it private.\n' +
-      warning,
+      warning +
+      evalLoopNextStepsAfterExport(shown),
   );
 }
 
@@ -257,7 +277,8 @@ export function createExportCommand(deps: ExportDeps = { cwd: () => process.cwd(
       description: [
         'Writes one case per failure: prompt, file before, AI version and your version.',
         'Formats: jsonl (nightowl.eval/v1), swe-bench (compatible fields), promptfoo (YAML config).',
-        'The file contains code from this project; keep it private.',
+        'Project eval loop (local): review confirm → export [--status confirmed] → eval --label → eval-compare / digest / dashboard.',
+        'The file contains code from this project; keep it private. No cloud sync or SaaS leaderboard.',
         'Text fields are redacted for secrets/emails; use --redact-paths to coarsen file paths.',
         `privacy.redactPaths from ${PROJECT_CONFIG_FILE} applies when --redact-paths is omitted.`,
         '--privacy-dry-run reports redaction counts without writing an export file (never prints secret plaintext).',
@@ -272,6 +293,10 @@ export function createExportCommand(deps: ExportDeps = { cwd: () => process.cwd(
         ['--force', 'Overwrite a file that is not a NightOwl export'],
         ['--since <YYYY-MM-DD>', 'Only failures from this date on'],
         ['--category <name>', `Only this category; repeatable (${[...CATEGORY_NAMES].join(', ')})`],
+        [
+          '--status <name>',
+          `Only this status; repeatable (${EXPORT_STATUSES.join(', ')}; default: all non-dismissed)`,
+        ],
         ['--redact-paths', 'Coarsen file paths in the export (e.g. src/a/b.ts → src/**/b.ts)'],
         ['--privacy-dry-run', 'Count privacy hits and skip writing the export file'],
         ['--config <path>', `Override project config file (default: ${PROJECT_CONFIG_FILE})`],
@@ -312,7 +337,11 @@ export function createExportCommand(deps: ExportDeps = { cwd: () => process.cwd(
       }
       try {
         if (options.privacyDryRun) {
-          const all = store.listFailuresToExport({ since: options.since, categories: options.categories });
+          const all = store.listFailuresToExport({
+            since: options.since,
+            categories: options.categories,
+            statuses: options.statuses,
+          });
           const counts = scanFailuresPrivacy(all, options.redactPaths);
           io.stderr(formatPrivacyDryRun(counts));
           return 0;

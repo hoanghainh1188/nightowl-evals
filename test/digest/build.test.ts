@@ -29,6 +29,31 @@ describe('buildDigest', () => {
       expect(digest.flagged).toBe(2);
       expect(digest.topCategories[0]).toEqual({ name: 'logic', count: 2 });
       expect(digest.ruleImpact).toBeNull();
+      expect(digest.evalLoop).toEqual({ kind: 'none' });
+    } finally {
+      store.close();
+    }
+  });
+
+  it('uses injected labeled eval loop', async () => {
+    await seed(repo.path, [{ filePath: 'src/a.ts', createdAt: '2026-11-10T00:00:00.000Z' }]);
+    const store = await openStore({ cwd: repo.path, readOnly: true });
+    try {
+      const digest = buildDigest({
+        store,
+        since: '2026-11-01T00:00:00.000Z',
+        depth: 2,
+        generatedAt: '2026-11-12T12:00:00.000Z',
+        evalLoop: {
+          kind: 'ok',
+          label: 'prompt-v3',
+          baselineLabel: null,
+          oneLine: 'prompt-v3; haiku pass 1/1 mean 0.90',
+        },
+      });
+      expect(digest.evalLoop.kind).toBe('ok');
+      if (digest.evalLoop.kind !== 'ok') return;
+      expect(digest.evalLoop.label).toBe('prompt-v3');
     } finally {
       store.close();
     }
