@@ -128,3 +128,10 @@ Nếu CLI thêm `--config <path>` (override đường dẫn project config đã 
 #### Scenario: Catalog có --config
 - **WHEN** generate completion sau khi flag `--config` được thêm
 - **THEN** catalog/completion script chứa token `--config` cho ít nhất `report` hoặc `doctor`
+
+### Requirement: Completion gợi ý --offline cho classify
+Completion catalog SHALL liệt kê `--offline` (hoặc cờ offline đã document) trong entry lệnh `classify`, cùng các flag classify hiện có (`--yes`, `--transport`, `--limit`, `--model`, `--redo`).
+
+#### Scenario: Catalog classify có --offline
+- **WHEN** đọc catalog completion lệnh `classify`
+- **THEN** entry gồm `--offline`
