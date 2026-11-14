@@ -20,10 +20,16 @@ describe('parseCases', () => {
   it('reads valid cases in order', () => {
     const loaded = parseCases(`${line()}\n${line({ id: 'c2' }, { file_before: null })}\n`);
     expect(loaded.cases).toEqual([
-      { id: 'c1', filePath: 'src/a.ts', prompt: 'fix it', fileBefore: 'v0\n', rejected: 'v1\n', expected: 'v2\n' },
-      { id: 'c2', filePath: 'src/a.ts', prompt: 'fix it', fileBefore: null, rejected: 'v1\n', expected: 'v2\n' },
+      { id: 'c1', filePath: 'src/a.ts', commitSha: null, prompt: 'fix it', fileBefore: 'v0\n', rejected: 'v1\n', expected: 'v2\n' },
+      { id: 'c2', filePath: 'src/a.ts', commitSha: null, prompt: 'fix it', fileBefore: null, rejected: 'v1\n', expected: 'v2\n' },
     ]);
     expect(Object.values(loaded.skipped).every((n) => n === 0)).toBe(true);
+  });
+
+  it('keeps a commit sha and ignores anything that is not one', () => {
+    const shas: readonly unknown[] = ['abcdef1234567', 'HEAD~1', 42, null, '--upload-pack=x'];
+    const loaded = parseCases(shas.map((sha, i) => line({ id: `c${i}`, commit_sha: sha })).join('\n'));
+    expect(loaded.cases.map((c) => c.commitSha)).toEqual(['abcdef1234567', null, null, null, null]);
   });
 
   it('reads a case with feedback but never hands the feedback to the model', () => {

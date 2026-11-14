@@ -614,11 +614,14 @@ Executes exported test cases against different AI models to measure accuracy and
 ```bash
 nightowl eval [--yes] [--input <file>] [--model <name>] [--limit <1-100>] \
   [--test-command <cmd>] [--test-timeout <1-600>] [--require-tests] \
+  [--isolation worktree|in-place] [--setup-command <cmd>] \
   [--label <id>] [--report md|html] [--baseline <file>] [-o <file>]
 ```
 
 - `--model <name>`: Models to benchmark (repeatable, defaults to `haiku` and `sonnet`).
-- `--test-command <cmd>`: **Execution verifier**: writes the generated output to disk, runs your actual test runner (e.g., `npm test`, `pytest`), and restores the file.
+- `--test-command <cmd>`: **Execution verifier**: writes the generated output into a checkout, runs your actual test runner (e.g., `npm test`, `pytest`) there, and restores the file.
+- `--isolation worktree|in-place`: Where tests run. **`worktree` (default)**: each case gets a temporary `git worktree` at the **parent of the failure commit** (the same state as `input.file_before`) under `.nightowl/worktrees/`, shared by all models of that case and removed afterwards; your working tree is never written. It sits inside the project, so Node/npm still find the root `node_modules`. Cases without `commit_sha` (or whose commit is gone) are not tested (`tests_error` says why; `--require-tests` counts them as not passing). `in-place`: the previous behaviour — write the file in your working tree at `HEAD`, run, restore.
+- `--setup-command <cmd>`: With worktree isolation, run once in each new worktree before its tests (e.g. `npm ci`, `uv sync`). A failing setup marks that case's tests as not passing (`setup failed: …`).
 - `--require-tests`: Declares a test case passing **only** if the test runner exits with code `0`.
 - `--label <id>`: Tag the run in `.nightowl/runs/` metadata (prompt/rules experiment label).
 - `--report md|html`: After `--yes`, also emit a local A/B compare report (Markdown to stdout by default; HTML to a file).

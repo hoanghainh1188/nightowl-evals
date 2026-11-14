@@ -96,6 +96,8 @@ export const COMMAND_FLAGS: Readonly<Record<string, readonly string[]>> = Object
     '--test-command',
     '--test-timeout',
     '--require-tests',
+    '--isolation',
+    '--setup-command',
     '--label',
     '--report',
     '--baseline',

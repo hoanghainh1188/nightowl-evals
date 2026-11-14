@@ -5,6 +5,7 @@ import { ClaudeError } from '../../src/classify/run-claude.js';
 import { createEvalCommand, type EvalDeps } from '../../src/commands/eval.js';
 import type { TestRunResult } from '../../src/eval/run-tests.js';
 import { createFakeIo } from '../helpers/fake-io.js';
+import type { WorktreeDeps } from '../../src/eval/test-site.js';
 import { createFakeRepo, createTempDir, type TempDir } from '../helpers/temp-repo.js';
 
 const evalLine = (id: string, overrides: Record<string, unknown> = {}) =>
@@ -26,13 +27,33 @@ describe('nightowl eval', () => {
   let repo: TempDir;
   let calls: Array<{ model: string; prompt: string; timeoutMs: number | undefined; schema: object }>;
   let shellCalls: Array<{ command: string; cwd: string; timeoutMs: number }>;
+  let worktreeLog: string[];
+  let checkout: TempDir;
 
   beforeEach(async () => {
     repo = await createFakeRepo();
     calls = [];
     shellCalls = [];
+    worktreeLog = [];
+    checkout = await createTempDir();
   });
-  afterEach(() => repo.cleanup());
+  afterEach(async () => {
+    await repo.cleanup();
+    await checkout.cleanup();
+  });
+
+  // Every commit sha has parent `base-of-<sha>`; checkouts land in `checkout`.
+  function fakeWorktrees(overrides: Partial<WorktreeDeps> = {}): WorktreeDeps {
+    return {
+      resolveParent: async (_root, sha) => (sha === null ? null : `base-of-${sha}`),
+      open: async (_root, base) => {
+        worktreeLog.push(`open ${base}`);
+        return { dir: checkout.path, dispose: async () => void worktreeLog.push(`dispose ${base}`) };
+      },
+      cleanStale: async () => void worktreeLog.push('clean'),
+      ...overrides,
+    };
+  }
 
   async function writeSuite(lines: readonly string[], file = '.nightowl/export/evals.jsonl'): Promise<void> {
     await mkdir(join(repo.path, file, '..'), { recursive: true });
@@ -67,6 +88,7 @@ describe('nightowl eval', () => {
         shellCalls.push({ command, cwd: options.cwd, timeoutMs: options.timeoutMs });
         return typeof shell === 'function' ? shell(command) : shell;
       },
+      worktrees: fakeWorktrees(),
       ...overrides,
     };
   }
@@ -264,6 +286,10 @@ describe('nightowl eval', () => {
     [['--weird']],
     [['extra']],
     [['--test-command', '']],
+    [['--test-command', 'npm test', '--isolation', 'docker']],
+    [['--test-command', 'npm test', '--setup-command', '']],
+    [['--setup-command', 'npm ci']],
+    [['--test-command', 'npm test', '--isolation', 'in-place', '--setup-command', 'npm ci']],
     [['--test-timeout', '0']],
     [['--test-timeout', '601']],
     [['--require-tests']],
@@ -278,6 +304,97 @@ describe('nightowl eval', () => {
   });
 
   describe('test command', () => {
+    it('dry-run says tests run in a worktree, with the setup command', async () => {
+      await writeSuite([evalLine('a')]);
+      const result = await run(['--test-command', 'npm test', '--setup-command', 'npm ci'], deps({}));
+      expect(result.code).toBe(0);
+      expect(result.out).toContain("in a git worktree at the parent of each case's commit (.nightowl/worktrees/) after npm ci");
+      expect(result.out).toContain("--test-command 'npm test' --setup-command 'npm ci'");
+      expect(worktreeLog).toEqual([]);
+      expect(shellCalls).toEqual([]);
+    });
+
+    it('dry-run in place keeps the project-root wording and the flag in the hint', async () => {
+      await writeSuite([evalLine('a')]);
+      const result = await run(['--test-command', 'npm test', '--isolation', 'in-place'], deps({}));
+      expect(result.out).toContain('would run npm test in the project root');
+      expect(result.out).toContain('--isolation in-place');
+    });
+
+    it('by default tests each case in its own worktree, shared by the models, and never writes the project file', async () => {
+      await writeSuite([evalLine('a', { commit_sha: 'abcdef1234567' }), evalLine('b', { commit_sha: '7654321fedcba' })]);
+      await mkdir(join(repo.path, 'src'), { recursive: true });
+      await writeFile(join(repo.path, 'src/age.ts'), 'mine\n');
+      const seen: string[] = [];
+      const result = await run(
+        ['--yes', '--model', 'haiku', '--model', 'sonnet', '--test-command', 'npm test', '--setup-command', 'npm ci'],
+        deps({}, {}, async (command) => {
+          if (command === 'npm test') seen.push(await readFile(join(checkout.path, 'src/age.ts'), 'utf8'));
+          expect(await readFile(join(repo.path, 'src/age.ts'), 'utf8')).toBe('mine\n');
+          return { passed: true, exitCode: 0, error: null };
+        }),
+      );
+      expect(result.code).toBe(0);
+      expect(worktreeLog).toEqual([
+        'clean',
+        'open base-of-abcdef1234567',
+        'dispose base-of-abcdef1234567',
+        'open base-of-7654321fedcba',
+        'dispose base-of-7654321fedcba',
+      ]);
+      expect(shellCalls.map((c) => `${c.command}@${c.cwd === checkout.path ? 'worktree' : c.cwd}`)).toEqual([
+        'npm ci@worktree',
+        'npm test@worktree',
+        'npm test@worktree',
+        'npm ci@worktree',
+        'npm test@worktree',
+        'npm test@worktree',
+      ]);
+      expect(seen).toEqual(Array(4).fill('export const isAdult = (age) => age >= 18;\n'));
+      expect(await readFile(join(repo.path, 'src/age.ts'), 'utf8')).toBe('mine\n');
+    });
+
+    it('a case without a commit is not tested and fails --require-tests', async () => {
+      await writeSuite([evalLine('a')]);
+      const result = await run(
+        ['--yes', '--model', 'haiku', '--test-command', 'npm test', '--require-tests'],
+        deps({ haiku: [GOOD] }),
+      );
+      expect(result.code).toBe(0);
+      expect(shellCalls).toEqual([]);
+      const name = (await readdir(runsDir())).find((f) => f.endsWith('.jsonl'));
+      const parsed = (await readFile(join(runsDir(), name as string), 'utf8'))
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(parsed[1]).toMatchObject({
+        score: 1,
+        pass: false,
+        tests_passed: null,
+        tests_exit_code: null,
+        tests_error: 'no base commit for worktree',
+      });
+    });
+
+    it('keeps going when stale worktrees or a finished worktree cannot be removed', async () => {
+      await writeSuite([evalLine('a', { commit_sha: 'abcdef1234567' })]);
+      const worktrees = fakeWorktrees({
+        cleanStale: async () => {
+          throw new Error('busy');
+        },
+        open: async () => ({
+          dir: checkout.path,
+          dispose: async () => {
+            throw new Error('locked');
+          },
+        }),
+      });
+      const result = await run(['--yes', '--model', 'haiku', '--test-command', 'npm test'], deps({}, { worktrees }));
+      expect(result.code).toBe(0);
+      expect(result.err).toContain('could not clean .nightowl/worktrees: busy');
+      expect(result.err).toContain('could not remove the worktree of a: locked');
+      expect(shellCalls).toHaveLength(1);
+    });
     it('dry-run mentions the test command and does not spawn shell', async () => {
       await writeSuite([evalLine('a')]);
       const result = await run(['--test-command', 'npm test', '--test-timeout', '30', '--require-tests'], deps({}));
@@ -294,7 +411,7 @@ describe('nightowl eval', () => {
       await mkdir(join(repo.path, 'src'), { recursive: true });
       await writeFile(join(repo.path, 'src/age.ts'), 'export const isAdult = (age) => false;\n');
       const result = await run(
-        ['--yes', '--model', 'haiku', '--test-command', 'npm test'],
+        ['--yes', '--model', 'haiku', '--test-command', 'npm test', '--isolation', 'in-place'],
         deps({ haiku: [GOOD] }, {}, { passed: true, exitCode: 0, error: null }),
       );
       expect(result.code).toBe(0);
@@ -314,7 +431,7 @@ describe('nightowl eval', () => {
       await mkdir(join(repo.path, 'src'), { recursive: true });
       await writeFile(join(repo.path, 'src/age.ts'), 'keep\n');
       const result = await run(
-        ['--yes', '--model', 'haiku', '--test-command', 'npm test', '--require-tests'],
+        ['--yes', '--model', 'haiku', '--test-command', 'npm test', '--require-tests', '--isolation', 'in-place'],
         deps({ haiku: [GOOD] }, {}, { passed: false, exitCode: 1, error: 'failed' }),
       );
       expect(result.code).toBe(0);

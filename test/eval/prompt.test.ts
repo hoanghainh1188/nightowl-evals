@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseGeneratedFile } from '../../src/eval/parse.js';
 import { buildEvalPrompt } from '../../src/eval/prompt.js';
 
-const evalCase = { id: 'c', filePath: 'src/a.ts', prompt: 'make isAdult inclusive', fileBefore: 'v0\n', rejected: 'r', expected: 'e' };
+const evalCase = { id: 'c', filePath: 'src/a.ts', commitSha: null, prompt: 'make isAdult inclusive', fileBefore: 'v0\n', rejected: 'r', expected: 'e' };
 
 describe('buildEvalPrompt', () => {
   it('sends the path, the request and the current file, and asks for the whole file', () => {

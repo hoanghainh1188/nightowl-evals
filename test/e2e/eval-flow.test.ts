@@ -42,7 +42,8 @@ describe('real commits → export → nightowl eval', () => {
     return spawnSync(process.execPath, [BIN, ...args], { cwd: repo.path, env, input, encoding: 'utf8' });
   }
 
-  it('dry-runs, then scores each model against the developer fix', async () => {
+  // One AI mistake fixed by the developer, committed and exported.
+  async function recordFailure(): Promise<void> {
     expect(nightowl(['init']).status).toBe(0);
     await writeFiles(repo.path, { 'src/age.ts': 'export const isAdult = (age: number) => false;\n' });
     git(repo.path, ['add', '-A'], env);
@@ -59,6 +60,10 @@ describe('real commits → export → nightowl eval', () => {
     git(repo.path, ['add', '-A'], env);
     expect(spawnSync('git', ['commit', '-q', '-m', 'fix'], { cwd: repo.path, env, stdio: 'ignore' }).status).toBe(0);
     expect(nightowl(['export']).status).toBe(0);
+  }
+
+  it('dry-runs, then scores each model against the developer fix', async () => {
+    await recordFailure();
 
     const help = nightowl(['eval', '--yes', '--help']);
     expect(help.status).toBe(0);
@@ -81,6 +86,40 @@ describe('real commits → export → nightowl eval', () => {
     expect(calls).toHaveLength(2);
     expect(calls.every((call) => call.internal === '1' && call.stdin.includes('isAdult is true from 18'))).toBe(true);
     expect(await readdir(join(repo.path, '.nightowl/runs'))).toHaveLength(1);
+    expect(git(repo.path, ['status', '--porcelain'], env)).toBe('');
+  });
+  it('runs --test-command in a worktree at the parent of the failure commit', async () => {
+    await recordFailure();
+    // A later commit the case never saw: absent from the worktree.
+    await writeFiles(repo.path, { 'later.txt': 'after the failure\n' });
+    git(repo.path, ['add', '-A'], env);
+    expect(spawnSync('git', ['commit', '-q', '-m', 'later'], { cwd: repo.path, env, stdio: 'ignore' }).status).toBe(0);
+
+    const log = join(claude.dir.path, 'tests.log');
+    const check = join(claude.dir.path, 'check.mjs');
+    await writeFile(
+      check,
+      [
+        "import { appendFileSync, existsSync, readFileSync } from 'node:fs';",
+        "const fixed = readFileSync('src/age.ts', 'utf8').includes('>=');",
+        `appendFileSync(${JSON.stringify(log)}, JSON.stringify({ cwd: process.cwd(), later: existsSync('later.txt'), fixed }) + '\\n');`,
+        'process.exit(fixed ? 0 : 1);',
+      ].join('\n'),
+    );
+    const real = nightowl(['eval', '--yes', '--test-command', `"${process.execPath}" "${check}"`]);
+    expect(real.status).toBe(0);
+    expect(real.stdout).toMatch(/^ {2}haiku +1 +0 +0\.00 +0 +0 +1$/m);
+    expect(real.stdout).toMatch(/^ {2}sonnet +1 +1 +1\.00 +0 +1 +1$/m);
+
+    const runs = (await readFile(log, 'utf8')).trim().split('\n').map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(runs).toHaveLength(2);
+    for (const run of runs) {
+      expect(String(run.cwd).startsWith(join(repo.path, '.nightowl', 'worktrees'))).toBe(true);
+      expect(run.later).toBe(false);
+    }
+    expect(await readdir(join(repo.path, '.nightowl/worktrees'))).toEqual([]);
+    expect(git(repo.path, ['worktree', 'list', '--porcelain'], env)).not.toContain('.nightowl');
+    expect(await readFile(join(repo.path, 'src/age.ts'), 'utf8')).toBe(FIXED);
     expect(git(repo.path, ['status', '--porcelain'], env)).toBe('');
   });
 });
