@@ -272,7 +272,7 @@ nightowl uninstall [--purge]
 
 #### `nightowl report`
 
-Summarizes AI failures by category, source, agent, module path, and week. JSON includes `by_agent`, `head_to_head` (edit-change rate per agent), and `signals` (`ci_fail` / `pr_review` event counts — separate from failure `total`).
+Summarizes AI failures by category, source, agent, module path, and week. JSON includes `by_agent`, `head_to_head` (edit-change rate per agent), `signals` (`ci_fail` / `pr_review` event counts — separate from failure `total`), and `repeat` (cluster keys that reappear after a baseline window vs new keys).
 
 ```bash
 nightowl report [options]
@@ -281,6 +281,7 @@ nightowl report [options]
 | Option | Description |
 | :--- | :--- |
 | `--since <YYYY-MM-DD>` | Filter records created from this date forward |
+| `--baseline-since <YYYY-MM-DD>` | Baseline start for **repeat outcomes** (default: same-length window before `--since`; empty baseline if `--since` is omitted) |
 | `--depth <1-5>` | Folder levels that make up a module when the path is outside a package (default: `2`) |
 | `--workspace <name\|path>` | Scope failures and `changedRate` (path-bearing checks) to this npm/pnpm package/workspace (repeatable; package `name` or relative path). Signals stay full-window. |
 | `--agent <id>` | Only include this agent (repeatable) |

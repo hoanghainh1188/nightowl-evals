@@ -1,5 +1,7 @@
 import { resolveRuleImpactSummary, type RuleImpactSummary, type RuleImpactView } from '../impact/summary.js';
 import { buildReport, type ReportSignals } from '../report/build.js';
+import { computeRepeatFromStore } from '../report/compute-repeat.js';
+import type { RepeatOutcomes } from '../report/repeat.js';
 import { SIGNAL_KINDS } from '../storage/events.js';
 import type { Store } from '../storage/store.js';
 import { applyWorkspaceFilter, scopeChecksForWorkspace } from '../workspace/for-report.js';
@@ -26,6 +28,7 @@ export interface Digest {
   readonly signals: ReportSignals;
   /** null = none recorded; object = ok; 'unavailable' = compare failed (fail-open). */
   readonly ruleImpact: RuleImpactView;
+  readonly repeat: RepeatOutcomes;
 }
 
 export interface BuildDigestInput {
@@ -70,6 +73,18 @@ export function buildDigest(input: BuildDigestInput): Digest {
     input.workspaceFilter ?? null,
     wsAll,
   ).scoped;
+  const workspaces = input.workspaces ?? wsAll;
+  const now = new Date(input.nowIso ?? input.generatedAt);
+  const repeatResult = computeRepeatFromStore({
+    store: input.store,
+    since: input.since,
+    agents,
+    depth: input.depth,
+    workspaces,
+    workspaceFilter: input.workspaceFilter ?? null,
+    now,
+  });
+  const repeat = 'error' in repeatResult ? undefined : repeatResult;
   const report =
     input.workspaces === undefined
       ? buildReport({
@@ -80,6 +95,7 @@ export function buildDigest(input: BuildDigestInput): Digest {
           generatedAt: input.generatedAt,
           agents,
           signals,
+          ...(repeat === undefined ? {} : { repeat }),
         })
       : buildReport({
           failures,
@@ -90,6 +106,7 @@ export function buildDigest(input: BuildDigestInput): Digest {
           agents,
           signals,
           workspaces: input.workspaces,
+          ...(repeat === undefined ? {} : { repeat }),
         });
 
   const ruleImpact = resolveRuleImpactSummary(input.store, input.nowIso ?? input.generatedAt);
@@ -105,5 +122,6 @@ export function buildDigest(input: BuildDigestInput): Digest {
     topAgents: topRows(report.byAgent, TOP_DIGEST_ROWS),
     signals,
     ruleImpact,
+    repeat: report.repeat,
   });
 }

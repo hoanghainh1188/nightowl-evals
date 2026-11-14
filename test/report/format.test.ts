@@ -84,10 +84,18 @@ describe('formatJson', () => {
       'signals',
       'noise',
       'clusters',
+      'repeat',
     ]);
     expect(json.signals).toEqual({ ci_fail: 0, pr_review: 0, revert: 0 });
     expect(json.noise).toEqual({ review_rate: null, auto_noise: 0, sample: { confirmed: 0, dismissed: 0 } });
     expect(json.clusters).toEqual([]);
+    expect(json.repeat).toEqual({
+      repeat_count: 0,
+      new_count: 0,
+      repeat_rate: null,
+      baseline_since: null,
+      window_since: null,
+    });
     expect(json.by_module).toHaveLength(12);
     expect(json.by_week).toHaveLength(9);
     expect(json.by_week[0]).toEqual({ week: '2026-W03', failures: 2, checked: 0, changed: 0, rate: null });

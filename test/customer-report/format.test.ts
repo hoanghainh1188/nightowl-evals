@@ -5,6 +5,7 @@ import {
   formatCustomerReport,
 } from '../../src/customer-report/format.js';
 import type { Report } from '../../src/report/build.js';
+import { EMPTY_REPEAT } from '../../src/report/repeat.js';
 
 function sampleReport(overrides: Partial<Report> = {}): Report {
   return {
@@ -23,7 +24,7 @@ function sampleReport(overrides: Partial<Report> = {}): Report {
       'missing-context': 0,
       unclassified: 1,
     },
-    bySource: { 'manual-fix': 3, 'ai-self-fix': 0 },
+    bySource: { 'manual-fix': 3, 'ai-self-check': 0 },
     byStatus: { confirmed: 1, dismissed: 0, flagged: 2 },
     byAgent: { 'claude-code': 3 },
     headToHead: [{ agent: 'claude-code', failures: 1, checked: 4, rate: 0.25 }],
@@ -32,6 +33,7 @@ function sampleReport(overrides: Partial<Report> = {}): Report {
     signals: { ciFail: 0, prReview: 0, revert: 0 },
     noise: { reviewRate: null, autoNoise: 0, sample: { confirmed: 1, dismissed: 0 } },
     clusters: [],
+    repeat: EMPTY_REPEAT,
     ...overrides,
   };
 }

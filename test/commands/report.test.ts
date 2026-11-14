@@ -78,6 +78,29 @@ describe('nightowl report', () => {
     expect(command.help).toMatch(/stderr/i);
   });
 
+  it('includes repeat outcomes in JSON and rejects bad --baseline-since', async () => {
+    await seed(repo.path, [
+      { filePath: 'src/a.ts', createdAt: '2026-10-01T00:00:00.000Z', category: 'logic' },
+      { filePath: 'src/a.ts', createdAt: '2026-11-03T00:00:00.000Z', category: 'logic' },
+      { filePath: 'src/b.ts', createdAt: '2026-11-03T00:00:00.000Z', category: 'convention' },
+    ]);
+    const json = JSON.parse((await run(['--json', '--since', '2026-11-01', '--baseline-since', '2026-10-01'])).out);
+    expect(json.repeat).toMatchObject({
+      repeat_count: 1,
+      new_count: 1,
+      repeat_rate: 0.5,
+      baseline_since: '2026-10-01T00:00:00.000Z',
+      window_since: '2026-11-01T00:00:00.000Z',
+    });
+    expect((await run(['--since', '2026-11-01'])).out).toContain('Repeat outcomes:');
+    const bad = await run(['--baseline-since', 'nope']);
+    expect(bad.code).toBe(1);
+    expect(bad.err).toContain('invalid --baseline-since');
+    const command = createReportCommand({ cwd: () => repo.path, now: () => new Date() });
+    expect(command.help).toContain('--baseline-since');
+    expect(command.help).toMatch(/repeat/i);
+  });
+
   it('counts CI/PR signal events separately from failures', async () => {
     await seed(repo.path, []);
     const { openStore } = await import('../../src/storage/store.js');

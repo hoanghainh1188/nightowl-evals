@@ -16,6 +16,13 @@ const sample: Digest = {
   topAgents: [{ name: 'claude-code', count: 3 }],
   signals: { ciFail: 1, prReview: 0, revert: 0 },
   ruleImpact: { label: 'r1', before: 5, after: 2, delta: -3 },
+  repeat: {
+    repeatCount: 1,
+    newCount: 2,
+    repeatRate: 1 / 3,
+    baselineSince: '2026-10-29T00:00:00.000Z',
+    windowSince: '2026-11-05T00:00:00.000Z',
+  },
 };
 
 describe('formatDigestMarkdown', () => {
@@ -24,6 +31,7 @@ describe('formatDigestMarkdown', () => {
     expect(md).toContain('# NightOwl digest since 2026-11-05');
     expect(md).toContain('New failures (not dismissed): **3**');
     expect(md).toContain('Open for review (flagged): **2**');
+    expect(md).toContain('Repeat outcomes: 1 repeat / 2 new (33%)');
     expect(md).toContain('- logic: 2');
     expect(md).toContain('Rule impact (r1): 5 → 2 (delta -3)');
     expect(md).toMatch(/Does not email\/Slack/i);

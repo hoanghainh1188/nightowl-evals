@@ -66,6 +66,11 @@ export function formatDashboardHtml(report: Report, ruleImpact: RuleImpactView =
     parts.push(
       `<li><strong>Noise estimate</strong>: review-dismissed ${escapeHtml(noiseRate)} (${report.noise.sample.dismissed}/${report.noise.sample.confirmed + report.noise.sample.dismissed} reviewed), auto-noise ${report.noise.autoNoise}</li>`,
     );
+    const repeatRate =
+      report.repeat.repeatRate === null ? 'n/a' : `${Math.round(report.repeat.repeatRate * 100)}%`;
+    parts.push(
+      `<li><strong>Repeat outcomes</strong>: ${report.repeat.repeatCount} repeat / ${report.repeat.newCount} new (${escapeHtml(repeatRate)})</li>`,
+    );
     if (report.since !== null) {
       parts.push(`<li><strong>Since</strong>: ${escapeHtml(report.since.slice(0, 10))}</li>`);
     }

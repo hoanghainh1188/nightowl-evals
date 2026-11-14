@@ -39,6 +39,13 @@ function sampleReport(overrides: Partial<Report> = {}): Report {
         samplePaths: ['src/hooks/a.ts'],
       },
     ],
+    repeat: {
+      repeatCount: 1,
+      newCount: 2,
+      repeatRate: 1 / 3,
+      baselineSince: '2026-10-18T00:00:00.000Z',
+      windowSince: '2026-11-01T00:00:00.000Z',
+    },
     ...overrides,
   };
 }
@@ -61,6 +68,8 @@ describe('formatDashboardHtml', () => {
     expect(html).toContain('2026-W45');
     expect(html).toContain('25%');
     expect(html).toContain('Noise estimate');
+    expect(html).toContain('Repeat outcomes');
+    expect(html).toContain('1 repeat / 2 new');
     expect(html).toContain('Auto-noise failures');
     expect(html).toContain('>1<');
     expect(html).toContain('Top clusters');
@@ -84,6 +93,24 @@ describe('formatDashboardHtml', () => {
     );
     expect(html).toContain('Not enough data yet');
     expect(html).toContain('Rule impact: none recorded');
+  });
+
+  it('shows n/a when repeat rate is null', () => {
+    const html = formatDashboardHtml(
+      sampleReport({
+        repeat: {
+          repeatCount: 0,
+          newCount: 0,
+          repeatRate: null,
+          baselineSince: null,
+          windowSince: null,
+        },
+      }),
+      null,
+    );
+    expect(html).toContain('Repeat outcomes');
+    expect(html).toContain('0 repeat / 0 new (n/a)');
+    expect(html).not.toMatch(/Repeat outcomes[^<]*0%/);
   });
 
   it('does not include author-like strings present only in unrelated fixture text', () => {
