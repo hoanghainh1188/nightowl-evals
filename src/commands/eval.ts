@@ -27,10 +27,18 @@ import {
   MIN_TEST_TIMEOUT_SEC,
   type RunShellCommand,
   runShellCommand,
-  type TestRunResult,
-  withSwappedFile,
 } from '../eval/run-tests.js';
 import { type Score, scoreOutput } from '../eval/score.js';
+import {
+  createTestSite,
+  defaultWorktreeDeps,
+  ISOLATION_MODES,
+  type Isolation,
+  type TestSite,
+  type TestsOutcome,
+  type WorktreeDeps,
+} from '../eval/test-site.js';
+import { WORKTREES_DIR } from '../eval/worktree.js';
 import { isOnPath } from '../setup/path.js';
 import { writeFileAtomic } from '../setup/fs-utils.js';
 import { printable } from '../shared/printable.js';
@@ -53,6 +61,7 @@ export interface EvalDeps {
   readonly cwd: () => string;
   readonly runClaude: RunClaude;
   readonly runShell: RunShellCommand;
+  readonly worktrees: WorktreeDeps;
   readonly isOnPath: (command: string) => boolean;
   readonly now: () => Date;
 }
@@ -61,6 +70,7 @@ const defaultDeps: EvalDeps = {
   cwd: () => process.cwd(),
   runClaude,
   runShell: runShellCommand,
+  worktrees: defaultWorktreeDeps,
   isOnPath: (command) => isOnPath(command, process.env.PATH),
   now: () => new Date(),
 };
@@ -74,6 +84,8 @@ interface Options {
   readonly testCommand: string | null;
   readonly testTimeoutSec: number;
   readonly requireTests: boolean;
+  readonly isolation: Isolation;
+  readonly setupCommand: string | null;
   readonly label: string | null;
   readonly report: 'md' | 'html' | null;
   readonly baseline: string | null;
@@ -104,6 +116,8 @@ function parseOptions(args: readonly string[]): Options | string {
         'test-command': { type: 'string' },
         'test-timeout': { type: 'string' },
         'require-tests': { type: 'boolean' },
+        isolation: { type: 'string' },
+        'setup-command': { type: 'string' },
         label: { type: 'string' },
         report: { type: 'string' },
         baseline: { type: 'string' },
@@ -134,6 +148,12 @@ function parseOptions(args: readonly string[]): Options | string {
   }
   const requireTests = values['require-tests'] === true;
   if (requireTests && testCommand === null) return '--require-tests needs --test-command';
+  const isolation = values.isolation ?? 'worktree';
+  if (!(ISOLATION_MODES as readonly string[]).includes(isolation)) return `--isolation must be ${ISOLATION_MODES.join(' or ')}`;
+  const setupCommand = values['setup-command'] ?? null;
+  if (setupCommand === '') return '--setup-command needs a shell command';
+  if (setupCommand !== null && testCommand === null) return '--setup-command needs --test-command';
+  if (setupCommand !== null && isolation === 'in-place') return '--setup-command needs --isolation worktree';
   const label = values.label === undefined ? null : values.label;
   if (label === '') return '--label needs a non-empty id';
   if (label !== null && !EVAL_LABEL_PATTERN.test(label)) {
@@ -158,6 +178,8 @@ function parseOptions(args: readonly string[]): Options | string {
     testCommand,
     testTimeoutSec,
     requireTests,
+    isolation: isolation as Isolation,
+    setupCommand,
     label,
     report: reportRaw === undefined ? null : reportRaw,
     baseline: values.baseline ?? null,
@@ -203,6 +225,8 @@ function rerunHint(options: Options): string {
     ...(options.testCommand === null ? [] : [`--test-command ${shellQuote(options.testCommand)}`]),
     ...(options.testTimeoutSec === DEFAULT_TEST_TIMEOUT_SEC ? [] : [`--test-timeout ${options.testTimeoutSec}`]),
     ...(options.requireTests ? ['--require-tests'] : []),
+    ...(options.isolation === 'worktree' ? [] : [`--isolation ${options.isolation}`]),
+    ...(options.setupCommand === null ? [] : [`--setup-command ${shellQuote(options.setupCommand)}`]),
     ...(options.label === null ? [] : [`--label ${shellQuote(options.label)}`]),
     ...(options.report === null ? [] : [`--report ${options.report}`]),
     ...(options.baseline === null ? [] : [`--baseline ${shellQuote(options.baseline)}`]),
@@ -215,7 +239,7 @@ function dryRun(cases: readonly EvalCase[], loaded: LoadedCases, options: Option
   const testNote =
     options.testCommand === null
       ? ''
-      : `After each answer, would run ${printable(options.testCommand)} in the project root ` +
+      : `After each answer, would run ${printable(options.testCommand)} ${testPlace(options)} ` +
         `(timeout ${options.testTimeoutSec}s${options.requireTests ? '; pass requires tests' : ''}).\n`;
   const labelNote = options.label === null ? '' : `Would tag the run with label ${printable(options.label)}.\n`;
   const reportNote =
@@ -241,33 +265,22 @@ function dryRun(cases: readonly EvalCase[], loaded: LoadedCases, options: Option
   return 0;
 }
 
-function applyRequireTests(score: Score, tests: TestRunResult | null, requireTests: boolean): Score {
+function testPlace(options: Options): string {
+  if (options.isolation === 'in-place') return 'in the project root';
+  const setup = options.setupCommand === null ? '' : ` after ${printable(options.setupCommand)}`;
+  return `in a git worktree at the parent of each case's commit (${DATA_DIR}/${WORKTREES_DIR}/)${setup}`;
+}
+
+function applyRequireTests(score: Score, tests: TestsOutcome | null, requireTests: boolean): Score {
   if (!requireTests || tests === null) return score;
-  return { ...score, pass: score.pass && tests.passed };
+  return { ...score, pass: score.pass && tests.passed === true };
 }
 
 function emptyTests(): Pick<Result, 'testsPassed' | 'testsExitCode' | 'testsError'> {
   return { testsPassed: null, testsExitCode: null, testsError: null };
 }
 
-async function runTestsIfConfigured(
-  evalCase: EvalCase,
-  content: string,
-  root: string,
-  options: Options,
-  deps: EvalDeps,
-): Promise<TestRunResult | null> {
-  if (options.testCommand === null) return null;
-  const absolutePath = join(root, evalCase.filePath);
-  return withSwappedFile(absolutePath, content, () =>
-    deps.runShell(options.testCommand as string, {
-      cwd: root,
-      timeoutMs: options.testTimeoutSec * 1000,
-    }),
-  );
-}
-
-async function runOne(evalCase: EvalCase, model: string, root: string, options: Options, deps: EvalDeps): Promise<Result> {
+async function runOne(evalCase: EvalCase, model: string, site: TestSite | null, options: Options, deps: EvalDeps): Promise<Result> {
   try {
     const stdout = await deps.runClaude(buildEvalPrompt(evalCase), {
       model,
@@ -279,9 +292,9 @@ async function runOne(evalCase: EvalCase, model: string, root: string, options: 
       return { caseId: evalCase.id, model, output: null, score: null, error: generated.error, ...emptyTests() };
     }
     const textual = scoreOutput({ rejected: evalCase.rejected, expected: evalCase.expected, output: generated.content });
-    let tests: TestRunResult | null = null;
+    let tests: TestsOutcome | null = null;
     try {
-      tests = await runTestsIfConfigured(evalCase, generated.content, root, options, deps);
+      tests = site === null ? null : await site.runTests(evalCase.filePath, generated.content);
     } catch (error) {
       return {
         caseId: evalCase.id,
@@ -443,6 +456,27 @@ async function writeReport(
   return null;
 }
 
+function testSiteFor(evalCase: EvalCase, root: string, options: Options, deps: EvalDeps): TestSite | null {
+  if (options.testCommand === null) return null;
+  const config = {
+    isolation: options.isolation,
+    testCommand: options.testCommand,
+    setupCommand: options.setupCommand,
+    timeoutMs: options.testTimeoutSec * 1000,
+  };
+  return createTestSite(root, evalCase.commitSha, config, deps.runShell, deps.worktrees);
+}
+
+// Worktrees an interrupted run left behind; a failure here never stops the run.
+async function cleanStaleSites(root: string, options: Options, deps: EvalDeps, io: Io): Promise<void> {
+  if (options.testCommand === null || options.isolation !== 'worktree') return;
+  try {
+    await deps.worktrees.cleanStale(root);
+  } catch (error) {
+    io.stderr(`nightowl eval: could not clean ${DATA_DIR}/${WORKTREES_DIR}: ${printable(errorMessage(error))}\n`);
+  }
+}
+
 async function runAll(
   cases: readonly EvalCase[],
   loaded: LoadedCases,
@@ -462,12 +496,20 @@ async function runAll(
   const byCase: CaseResults[] = [];
   // Sequential, case by case, so every model sees the same cases in the same conditions
   // and --test-command never races on the same file.
+  await cleanStaleSites(root, options, deps, io);
   for (const evalCase of cases) {
+    const site = testSiteFor(evalCase, root, options, deps);
     const results: Result[] = [];
-    for (const model of options.models) {
-      const result = await runOne(evalCase, model, root, options, deps);
-      if (result.error !== null) io.stderr(`nightowl eval: ${printable(evalCase.id)} with ${model}: ${printable(result.error)}\n`);
-      results.push(result);
+    try {
+      for (const model of options.models) {
+        const result = await runOne(evalCase, model, site, options, deps);
+        if (result.error !== null) io.stderr(`nightowl eval: ${printable(evalCase.id)} with ${model}: ${printable(result.error)}\n`);
+        results.push(result);
+      }
+    } finally {
+      await site?.dispose().catch((error: unknown) => {
+        io.stderr(`nightowl eval: could not remove the worktree of ${printable(evalCase.id)}: ${printable(errorMessage(error))}\n`);
+      });
     }
     byCase.push({ caseId: evalCase.id, results });
   }
@@ -507,7 +549,8 @@ export function createEvalCommand(deps: EvalDeps = defaultDeps): Command {
       description: [
         'Gives each exported case to Claude models and scores how close each answer is to your fix.',
         'Without --yes it only says what would be sent. With --yes it sends file content to `claude -p`.',
-        'With --test-command, each answer is written into the project file, the command runs, then the file is restored.',
+        'With --test-command, each answer is tested in a git worktree at the parent of the case commit (never in your',
+        'working tree); --isolation in-place writes the project file instead, runs the command, then restores it.',
         'Project eval loop (local): export → eval --label → eval-compare / digest / dashboard. No cloud ranking.',
       ],
       options: [
@@ -515,7 +558,9 @@ export function createEvalCommand(deps: EvalDeps = defaultDeps): Command {
         ['--input <file>', `Suite to run (default: ${DATA_DIR}/${EXPORT_DIR}/${EXPORT_FILE})`],
         ['--model <name>', `Model to compare; repeatable (default: ${DEFAULT_MODELS.join(', ')})`],
         [`--limit <1-${MAX_LIMIT}>`, `At most this many cases (default: ${DEFAULT_EVAL_LIMIT})`],
-        ['--test-command <cmd>', 'Shell command to verify each answer in the project root'],
+        ['--test-command <cmd>', 'Shell command to verify each answer (see --isolation)'],
+        ['--isolation worktree|in-place', 'Where tests run: a temporary git worktree (default) or the project root'],
+        ['--setup-command <cmd>', 'With worktree isolation: run once in each new worktree before its tests (e.g. npm ci)'],
         [
           `--test-timeout <${MIN_TEST_TIMEOUT_SEC}-${MAX_TEST_TIMEOUT_SEC}>`,
           `Seconds before the test command is killed (default: ${DEFAULT_TEST_TIMEOUT_SEC})`,

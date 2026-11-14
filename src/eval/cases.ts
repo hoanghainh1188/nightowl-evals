@@ -2,6 +2,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { containsInlineSecret, isSensitivePath } from '../hooks/claude-code/sensitive.js';
 import { isRecord } from '../shared/claude-answer.js';
 import { hasScorableChange } from './score.js';
+import { isCommitSha } from './worktree.js';
 
 export const MAX_EVAL_FILE_BYTES = 64 * 1024;
 export const MAX_PROMPT_BYTES = 64 * 1024;
@@ -12,6 +13,8 @@ const SCHEMA_PREFIX = 'nightowl.eval/v1';
 export interface EvalCase {
   readonly id: string;
   readonly filePath: string;
+  // The commit that recorded the failure; its parent is the state the AI started from.
+  readonly commitSha: string | null;
   readonly prompt: string;
   readonly fileBefore: string | null;
   readonly rejected: string;
@@ -40,7 +43,7 @@ function parseLine(line: string): EvalCase | SkipReason {
     return 'invalid';
   }
   if (!isRecord(value) || typeof value.schema !== 'string' || !value.schema.startsWith(SCHEMA_PREFIX)) return 'invalid';
-  const { id, file_path: filePath, input, rejected, expected } = value;
+  const { id, file_path: filePath, commit_sha: rawSha, input, rejected, expected } = value;
   if (typeof id !== 'string' || typeof filePath !== 'string' || typeof rejected !== 'string' || typeof expected !== 'string') {
     return 'invalid';
   }
@@ -64,7 +67,8 @@ function parseLine(line: string): EvalCase | SkipReason {
   if (tooLarge) return 'too-large';
   // With no line added or removed, any output would pass.
   if (!hasScorableChange(rejected, expected)) return 'no-change';
-  return Object.freeze({ id, filePath, prompt, fileBefore, rejected, expected });
+  const commitSha = typeof rawSha === 'string' && isCommitSha(rawSha) ? rawSha : null;
+  return Object.freeze({ id, filePath, commitSha, prompt, fileBefore, rejected, expected });
 }
 
 export function parseCases(text: string): LoadedCases {

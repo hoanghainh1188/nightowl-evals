@@ -42,6 +42,10 @@ describe('completion catalog', () => {
     expect(COMMAND_FLAGS.classify).toEqual(expect.arrayContaining(['--offline', '--yes', '--redo']));
   });
 
+  it('lists --isolation and --setup-command for eval', () => {
+    expect(COMMAND_FLAGS.eval).toEqual(expect.arrayContaining(['--isolation', '--setup-command']));
+  });
+
   it('lists --status for export', () => {
     expect(COMMAND_FLAGS.export).toEqual(expect.arrayContaining(['--status']));
   });
