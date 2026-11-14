@@ -7,7 +7,7 @@ import { errorMessage } from '../cli/errors.js';
 import { renderCommandHelp } from '../cli/help.js';
 import type { Io } from '../cli/io.js';
 import { loadConfigFromCwd, pickAgents, pickRedactPaths, PROJECT_CONFIG_FILE } from '../config/index.js';
-import { buildDigest } from '../digest/build.js';
+import { buildDigest, loadEvalLoopForDigest } from '../digest/build.js';
 import { formatDigestMarkdown } from '../digest/format.js';
 import { DEFAULT_DIGEST_LOOKBACK_DAYS, parseDigestSince } from '../digest/since.js';
 import { redactPathsInReport } from '../privacy/index.js';
@@ -198,12 +198,14 @@ export function createSharePackCommand(deps: SharePackDeps = { cwd: () => proces
 
         const report = buildReportForPack(store, options, generatedAt, agents, redactPaths);
         const reportMd = formatText(report);
+        const evalLoop = await loadEvalLoopForDigest(store.root);
         const digest = buildDigest({
           store,
           since: options.since,
           depth: options.depth,
           agents,
           generatedAt,
+          evalLoop,
         });
         const digestMd = formatDigestMarkdown(digest);
         const manifest = buildSharePackManifest({

@@ -38,6 +38,9 @@ describe('nightowl export', () => {
     expect(result.code).toBe(0);
     expect(result.out).toBe('');
     expect(result.err).toContain('exported 2 eval cases to .nightowl/export/evals.jsonl');
+    expect(result.err).toContain('Next:');
+    expect(result.err).toContain('nightowl eval');
+    expect(result.err).toContain('--label');
     expect(result.err).toContain('keep it private');
     const cases = await lines();
     expect(cases.map((c) => [c.schema, c.file_path, c.rejected, c.expected])).toEqual([
@@ -122,6 +125,33 @@ describe('nightowl export', () => {
     expect((await lines()).map((c) => c.file_path)).toEqual(['a.ts', 'b.ts']);
     await run(['--since', '2026-11-02', '--category', 'logic', '--category', 'unclassified']);
     expect((await lines()).map((c) => c.file_path)).toEqual(['b.ts', 'd.ts']);
+  });
+
+  it('filters by --status confirmed and keeps default without filter', async () => {
+    await seed(repo.path, [
+      { filePath: 'a.ts', status: 'confirmed' },
+      { filePath: 'b.ts', status: 'flagged' },
+      { filePath: 'c.ts', status: 'dismissed' },
+    ]);
+    await run(['--status', 'confirmed']);
+    expect((await lines()).map((c) => c.file_path)).toEqual(['a.ts']);
+    await run();
+    expect((await lines()).map((c) => c.file_path)).toEqual(['a.ts', 'b.ts']);
+  });
+
+  it('rejects unknown --status', async () => {
+    await seed(repo.path, [{ filePath: 'a.ts' }]);
+    const result = await run(['--status', 'dismissed']);
+    expect(result.code).toBe(1);
+    expect(result.err).toContain('--status must be one of');
+  });
+
+  it('documents project eval loop in --help', () => {
+    const help = createExportCommand().help;
+    expect(help).toMatch(/eval/);
+    expect(help).toMatch(/label|Project eval loop/i);
+    expect(help).toContain('--status');
+    expect(help).not.toMatch(/cloud ranking|SaaS leaderboard sync/i);
   });
 
   it('reads the file before the commit from git', async () => {

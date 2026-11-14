@@ -576,23 +576,36 @@ nightowl classify [--yes] [--transport cli|api] [--model <name>] [--limit <1-100
 - `--transport cli|api`: `cli` (default) spawns local isolated `claude -p`; `api` uses direct Anthropic Messages API (`ANTHROPIC_API_KEY`).
 - `--redo`: Re-analyzes failures that were already classified (including heuristic results).
 
+#### Project eval loop (local)
+
+Weekly habit on this machine only — no cloud sync, no SaaS leaderboard:
+
+1. `nightowl review` → confirm real AI failures  
+2. `nightowl export --status confirmed` (or plain `export` for all non-dismissed)  
+3. `nightowl eval --label <experiment-id> --yes` → writes `.nightowl/runs/*.jsonl`  
+4. `nightowl eval-compare` and/or `nightowl digest` / `nightowl dashboard` (eval-loop line from local runs)
+
+Keep export/run files under `.nightowl/` (gitignored). Suite JSONL contains project code — stay private.
+
 #### `nightowl export`
 
 Compiles recorded failures into evaluation datasets.
 
 ```bash
 nightowl export [--out <file>] [--format jsonl|swe-bench|promptfoo] \
-  [--regressions-dir <dir>] [--since <YYYY-MM-DD>] [--category <name>] [--force] \
-  [--redact-paths] [--privacy-dry-run]
+  [--regressions-dir <dir>] [--since <YYYY-MM-DD>] [--category <name>] \
+  [--status confirmed|flagged] [--force] [--redact-paths] [--privacy-dry-run]
 ```
 
 - `--format jsonl` (default): `nightowl.eval/v1` JSONL → `.nightowl/export/evals.jsonl`.
 - `--format swe-bench`: best-effort SWE-bench-**compatible** JSONL (`instance_id`, `repo`, `base_commit`, `problem_statement`, `patch`, …). Without `--regressions-dir`, harness fields like `FAIL_TO_PASS` / `test_patch` stay empty. With `--regressions-dir` pointing at stubs from `suggest-regressions` (`{id}.test.ts` with the NightOwl marker), matching instances get `FAIL_TO_PASS` (relative stub path) and a `test_patch` that adds that stub. Still **not** the official SWE-bench dataset.
 - `--regressions-dir <dir>`: used for `--format swe-bench` only; directory must exist.
 - `--format promptfoo`: Promptfoo YAML config → `.nightowl/export/promptfooconfig.yaml` (replace the `echo` provider before running Promptfoo).
+- `--status confirmed|flagged`: optional filter (repeatable). Default remains every non-dismissed failure.
 - `--redact-paths`: coarsen `file_path` values (e.g. `src/a/b.ts` → `src/**/b.ts`). Also available on `customer-report` / `dashboard` / `digest` for module labels.
 - `--privacy-dry-run`: print secret/email/path/skip counts on stderr and **do not** write an export file (never prints secret plaintext).
 - Text fields are redacted for secrets/emails on write. Files use mode `0600`. Export never calls the network.
+- After a successful file write, stderr hints the next local step: `eval --label` → digest/dashboard.
 
 #### `nightowl eval` (opt-in)
 

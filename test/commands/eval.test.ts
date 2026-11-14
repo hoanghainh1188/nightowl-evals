@@ -114,6 +114,9 @@ describe('nightowl eval', () => {
       expect(result.out).toContain('Different results (2):');
       expect(result.out).toContain('  b: passed by sonnet; not by haiku');
       expect(result.out).toMatch(/Results saved to \.nightowl\/runs\/2026-11-10T09-30-00-000Z-[0-9a-f]{6}\.jsonl/);
+      expect(result.err).toContain('Next:');
+      expect(result.err).toContain('eval-compare');
+      expect(result.err).toMatch(/digest|dashboard/);
 
       const [name] = await readdir(runsDir());
       const file = join(runsDir(), name as string);
@@ -339,5 +342,10 @@ describe('nightowl eval', () => {
     } finally {
       await outside.cleanup();
     }
+  });
+
+  it('documents project eval loop in --help', () => {
+    expect(createEvalCommand().help).toMatch(/Project eval loop|eval-compare|digest/i);
+    expect(createEvalCommand().help).toMatch(/No cloud ranking/i);
   });
 });

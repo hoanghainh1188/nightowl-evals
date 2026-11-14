@@ -51,7 +51,45 @@ describe('nightowl dashboard', () => {
     expect(html).toContain('logic');
     expect(html).toContain('src/hooks');
     expect(html).toContain('25%');
+    expect(html).toContain('Eval loop: none recorded');
     expect(html).not.toMatch(/https?:\/\//);
+  });
+
+  it('shows labeled eval loop from .nightowl/runs/', async () => {
+    await seed(repo.path, [{ filePath: 'src/a.ts', category: 'logic' }]);
+    const runs = join(repo.path, '.nightowl', 'runs');
+    await mkdir(runs, { recursive: true });
+    await writeFile(
+      join(runs, 'run.jsonl'),
+      [
+        JSON.stringify({
+          schema: 'nightowl.eval-run-meta/v1',
+          label: 'rules-v2',
+          models: ['haiku'],
+          run_at: '2026-11-14T10:00:00.000Z',
+        }),
+        JSON.stringify({
+          run_at: '2026-11-14T10:00:00.000Z',
+          case_id: 'c1',
+          model: 'haiku',
+          coverage: 0.8,
+          repeat: 0,
+          score: 0.8,
+          pass: true,
+          tests_passed: null,
+          error: null,
+        }),
+      ].join('\n') + '\n',
+    );
+    const result = await run();
+    expect(result.code).toBe(0);
+    const html = await readFile(join(repo.path, '.nightowl', 'dashboard.html'), 'utf8');
+    expect(html).toContain('Eval loop: rules-v2');
+  });
+
+  it('documents eval-loop in --help', () => {
+    expect(createDashboardCommand().help).toMatch(/eval-loop|Project eval loop/i);
+    expect(createDashboardCommand().help).not.toMatch(/SaaS team dashboard sync/i);
   });
 
   it('writes --output path and filters --agent', async () => {

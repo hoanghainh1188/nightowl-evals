@@ -12,7 +12,7 @@ import {
   pickWorkspaces,
   PROJECT_CONFIG_FILE,
 } from '../config/index.js';
-import { buildDigest } from '../digest/build.js';
+import { buildDigest, loadEvalLoopForDigest } from '../digest/build.js';
 import { formatDigestHtml, formatDigestMarkdown } from '../digest/format.js';
 import { DEFAULT_DIGEST_LOOKBACK_DAYS, parseDigestSince, sinceDaysAgo } from '../digest/since.js';
 import { printable } from '../shared/printable.js';
@@ -103,7 +103,7 @@ export function createDigestCommand(deps: DigestDeps = { cwd: () => process.cwd(
       description: [
         'Summarizes recent NightOwl failures for standup/weekly: totals, top categories/agents,',
         'open (flagged) reviews, signals, repeat outcomes (cluster keys vs prior baseline window),',
-        'and a short rule-impact line when a rule was marked.',
+        'a short rule-impact line when a rule was marked, and a local eval-loop line from .nightowl/runs/.',
         'Local-only: does not email or Slack, does not call the network, does not show developer names.',
         `Default window: last ${DEFAULT_DIGEST_LOOKBACK_DAYS} days (UTC), or digest.lookbackDays from ${PROJECT_CONFIG_FILE}.`,
         'Markdown prints to stdout; HTML writes a file. CLI flags override config (local-only, no cloud sync).',
@@ -159,6 +159,7 @@ export function createDigestCommand(deps: DigestDeps = { cwd: () => process.cwd(
           return 1;
         }
         const generatedAt = deps.now().toISOString();
+        const evalLoop = await loadEvalLoopForDigest(store.root);
         const digest = buildDigest({
           store,
           since: sinceParsed.since,
@@ -168,6 +169,7 @@ export function createDigestCommand(deps: DigestDeps = { cwd: () => process.cwd(
           nowIso: generatedAt,
           workspaces: ws.all,
           workspaceFilter: ws.filter,
+          evalLoop,
         });
         const content =
           options.format === 'html' ? formatDigestHtml(digest) : formatDigestMarkdown(digest);

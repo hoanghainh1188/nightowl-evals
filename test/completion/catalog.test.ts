@@ -42,6 +42,10 @@ describe('completion catalog', () => {
     expect(COMMAND_FLAGS.classify).toEqual(expect.arrayContaining(['--offline', '--yes', '--redo']));
   });
 
+  it('lists --status for export', () => {
+    expect(COMMAND_FLAGS.export).toEqual(expect.arrayContaining(['--status']));
+  });
+
   it('README documents eval/source install for three shells', async () => {
     const readme = await readFile(join(import.meta.dirname, '../../README.md'), 'utf8');
     expect(readme).toContain('nightowl completion');
