@@ -112,7 +112,11 @@ export interface Store {
   readonly listFailuresToExport: (filter: ExportFilter) => readonly FailureToExport[];
   readonly countFailuresForReport: (since: string | null, agents?: readonly string[] | null) => readonly FailureCountRow[];
   readonly countChecksForReport: (since: string | null, agents?: readonly string[] | null) => readonly CheckCountRow[];
-  readonly listFailuresForClustering: (since: string | null, agents?: readonly string[] | null) => readonly FailureForClusterRow[];
+  readonly listFailuresForClustering: (
+    since: string | null,
+    agents?: readonly string[] | null,
+    until?: string | null,
+  ) => readonly FailureForClusterRow[];
   readonly countAutoNoiseFailures: (since: string | null) => number;
   readonly listNoiseStats: () => readonly NoiseStatRow[];
   readonly listFailuresForReview: (filter: ReviewFilter) => readonly FailureForReview[];
@@ -213,8 +217,11 @@ function storeApi(db: import('node:sqlite').DatabaseSync, root: string): Store {
       countFailuresForReport(db, { since, agents }),
     countChecksForReport: (since: string | null, agents: readonly string[] | null = null) =>
       countChecksForReport(db, { since, agents }),
-    listFailuresForClustering: (since: string | null, agents: readonly string[] | null = null) =>
-      listFailuresForClustering(db, { since, agents }),
+    listFailuresForClustering: (
+      since: string | null,
+      agents: readonly string[] | null = null,
+      until: string | null = null,
+    ) => listFailuresForClustering(db, { since, agents, until }),
     countAutoNoiseFailures: (since: string | null) => countAutoNoiseFailures(db, since),
     listNoiseStats: () => listNoiseStats(db),
     listFailuresForReview: (filter: ReviewFilter) => listFailuresForReview(db, filter),

@@ -93,7 +93,8 @@ export function createDigestCommand(deps: DigestDeps = { cwd: () => process.cwd(
       usage: '[options]',
       description: [
         'Summarizes recent NightOwl failures for standup/weekly: totals, top categories/agents,',
-        'open (flagged) reviews, signals, and a short rule-impact line when a rule was marked.',
+        'open (flagged) reviews, signals, repeat outcomes (cluster keys vs prior baseline window),',
+        'and a short rule-impact line when a rule was marked.',
         'Local-only: does not email or Slack, does not call the network, does not show developer names.',
         `Default window: last ${DEFAULT_DIGEST_LOOKBACK_DAYS} days (UTC). Markdown prints to stdout; HTML writes a file.`,
       ],

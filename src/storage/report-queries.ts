@@ -23,6 +23,8 @@ export interface CheckCountRow {
 export interface ReportQueryFilter {
   readonly since: string | null;
   readonly agents: readonly string[] | null;
+  /** Exclusive upper bound on created_at (for baseline windows). */
+  readonly until?: string | null;
 }
 
 function agentsJson(agents: readonly string[] | null): string | null {
@@ -116,16 +118,18 @@ export interface FailureForClusterRow {
 /** Individual failures (with content) for on-read clustering in a report window. */
 export function listFailuresForClustering(db: DatabaseSync, filter: ReportQueryFilter): readonly FailureForClusterRow[] {
   const agents = agentsJson(filter.agents);
+  const until = filter.until ?? null;
   const rows = db
     .prepare(
       `SELECT id, file_path, category, status, agent, ai_content, final_content
        FROM failures
        WHERE status != 'dismissed'
          AND (? IS NULL OR created_at >= ?)
+         AND (? IS NULL OR created_at < ?)
          AND (? IS NULL OR agent IN (SELECT value FROM json_each(?)))
        ORDER BY id`,
     )
-    .all(filter.since, filter.since, agents, agents) as unknown as Array<{
+    .all(filter.since, filter.since, until, until, agents, agents) as unknown as Array<{
     id: number;
     file_path: string;
     category: string | null;

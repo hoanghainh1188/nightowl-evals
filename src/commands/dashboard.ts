@@ -10,6 +10,7 @@ import { openLocalPath } from '../dashboard/open-local.js';
 import { resolveRuleImpactSummary } from '../impact/summary.js';
 import { redactPathsInReport } from '../privacy/index.js';
 import { buildReport } from '../report/build.js';
+import { computeRepeatFromStore } from '../report/compute-repeat.js';
 import { TOP_CLUSTERS } from '../report/format.js';
 import { parseDateOption } from '../shared/date-option.js';
 import { SIGNAL_KINDS } from '../storage/events.js';
@@ -100,7 +101,7 @@ export function createDashboardCommand(deps: DashboardDeps = { cwd: () => proces
         'Writes a self-contained HTML dashboard from local NightOwl SQLite data.',
         'Local-only: no network, no SaaS team dashboard, no developer names.',
         'Default output: .nightowl/dashboard.html. Use --open to open via the OS file handler.',
-        'Includes a rule-impact line when a rule was marked (same semantics as digest).',
+        'Includes repeat outcomes and a rule-impact line when a rule was marked (same semantics as digest).',
         'Not a CI gate (use report --fail-on-rate).',
       ],
       options: [
@@ -151,6 +152,19 @@ export function createDashboardCommand(deps: DashboardDeps = { cwd: () => proces
           ws.filter,
           ws.all,
         );
+        const repeat = computeRepeatFromStore({
+          store,
+          since: options.since,
+          agents: options.agents,
+          depth: options.depth,
+          workspaces: ws.all,
+          workspaceFilter: ws.filter,
+          now: deps.now(),
+        });
+        if ('error' in repeat) {
+          io.stderr(`nightowl dashboard: ${repeat.error}\n`);
+          return 1;
+        }
         const built = buildReport({
           failures: applyWorkspaceFilter(
             store.countFailuresForReport(options.since, options.agents),
@@ -169,6 +183,7 @@ export function createDashboardCommand(deps: DashboardDeps = { cwd: () => proces
           },
           autoNoise: store.countAutoNoiseFailures(options.since),
           clusters,
+          repeat,
           workspaces: ws.all,
         });
         const report = options.redactPaths ? redactPathsInReport(built) : built;

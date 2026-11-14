@@ -16,6 +16,12 @@ function listMd(title: string, rows: Digest['topCategories']): string[] {
   return [`### ${title}`, ...rows.map((r) => `- ${printable(r.name)}: ${r.count}`)];
 }
 
+function formatRepeatLine(digest: Digest): string {
+  const rate =
+    digest.repeat.repeatRate === null ? 'n/a' : `${Math.round(digest.repeat.repeatRate * 100)}%`;
+  return `Repeat outcomes: ${digest.repeat.repeatCount} repeat / ${digest.repeat.newCount} new (${rate})`;
+}
+
 export function formatDigestMarkdown(digest: Digest): string {
   const since = digest.since.slice(0, 10);
   const lines = [
@@ -24,6 +30,7 @@ export function formatDigestMarkdown(digest: Digest): string {
     `New failures (not dismissed): **${digest.total}**`,
     `Open for review (flagged): **${digest.flagged}**`,
     `Signals: ci-fail ${digest.signals.ciFail}, pr-review ${digest.signals.prReview}, revert ${digest.signals.revert}`,
+    formatRepeatLine(digest),
     formatRuleImpactLine(digest.ruleImpact),
     '',
     ...listMd('Top categories', digest.topCategories),
@@ -53,6 +60,7 @@ export function formatDigestHtml(digest: Digest): string {
     `<li><strong>New failures (not dismissed)</strong>: ${digest.total}</li>`,
     `<li><strong>Open for review (flagged)</strong>: ${digest.flagged}</li>`,
     `<li><strong>Signals</strong>: ci-fail ${digest.signals.ciFail}, pr-review ${digest.signals.prReview}, revert ${digest.signals.revert}</li>`,
+    `<li><strong>Repeat outcomes</strong>: ${digest.repeat.repeatCount} repeat / ${digest.repeat.newCount} new (${digest.repeat.repeatRate === null ? 'n/a' : `${Math.round(digest.repeat.repeatRate * 100)}%`})</li>`,
     `<li>${escapeHtml(formatRuleImpactLine(digest.ruleImpact))}</li>`,
     `</ul>`,
     `<h2>Top categories</h2><ul>${rows(digest.topCategories)}</ul>`,

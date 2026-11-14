@@ -6,6 +6,7 @@ import { errorMessage } from '../cli/errors.js';
 import { renderCommandHelp } from '../cli/help.js';
 import { groupFailures } from '../cluster/group.js';
 import { buildReport } from '../report/build.js';
+import { computeRepeatFromStore } from '../report/compute-repeat.js';
 import { formatJson, formatText, TOP_CLUSTERS } from '../report/format.js';
 import { parseDateOption } from '../shared/date-option.js';
 import { SIGNAL_KINDS } from '../storage/events.js';
@@ -37,6 +38,8 @@ interface Options {
   readonly agents: readonly string[] | null;
   readonly workspaces: readonly string[];
   readonly debugTiming: boolean;
+  /** Raw --baseline-since value when present (YYYY-MM-DD). */
+  readonly baselineSinceOption?: string;
 }
 
 function parseOptions(args: readonly string[]): Options | string {
@@ -53,6 +56,7 @@ function parseOptions(args: readonly string[]): Options | string {
         agent: { type: 'string', multiple: true },
         workspace: { type: 'string', multiple: true },
         'debug-timing': { type: 'boolean' },
+        'baseline-since': { type: 'string' },
       },
       strict: true,
       allowPositionals: false,
@@ -84,6 +88,7 @@ function parseOptions(args: readonly string[]): Options | string {
     if (!isAnyAgentId(id)) return `unknown --agent id: ${id} (known: ${AGENT_IDS.join(', ')}, unknown)`;
   }
   const agents = agentFlags.length === 0 ? null : agentFlags;
+  const baselineSinceOption = values['baseline-since'];
 
   return {
     json: values.json === true,
@@ -94,6 +99,7 @@ function parseOptions(args: readonly string[]): Options | string {
     agents,
     workspaces: values.workspace ?? [],
     debugTiming: values['debug-timing'] === true,
+    ...(baselineSinceOption === undefined ? {} : { baselineSinceOption }),
   };
 }
 
@@ -111,9 +117,14 @@ export function createReportCommand(deps: ReportDeps = { cwd: () => process.cwd(
         'With --workspace, failures and changedRate (path-bearing checks) are scoped to those packages;',
         'CI/PR/revert signals stay full --since window. Combining --workspace with --fail-on-rate may warn if checks lack paths.',
         'With --debug-timing, prints read-step timings to stderr; stdout/JSON stay unchanged.',
+        'Includes repeat outcomes: cluster keys that reappear after a baseline window vs new keys.',
       ],
       options: [
         ['--since <YYYY-MM-DD>', 'Only failures from this date on'],
+        [
+          '--baseline-since <YYYY-MM-DD>',
+          'Baseline start for repeat outcomes (default: same-length window before --since; empty baseline if no --since)',
+        ],
         [`--depth <1-${MAX_DEPTH}>`, `Folder levels that make up a module when outside a package (default: ${DEFAULT_DEPTH})`],
         [
           '--workspace <name|path>',
@@ -170,6 +181,20 @@ export function createReportCommand(deps: ReportDeps = { cwd: () => process.cwd(
         const failuresTimed = measureSync(() =>
           applyWorkspaceFilter(store.countFailuresForReport(options.since, options.agents), ws.filter, ws.all),
         );
+        const repeat = computeRepeatFromStore({
+          store,
+          since: options.since,
+          agents: options.agents,
+          depth: options.depth,
+          workspaces: ws.all,
+          workspaceFilter: ws.filter,
+          now: deps.now(),
+          ...(options.baselineSinceOption === undefined ? {} : { baselineSinceOption: options.baselineSinceOption }),
+        });
+        if ('error' in repeat) {
+          io.stderr(`nightowl report: ${repeat.error}\n`);
+          return 1;
+        }
         const buildTimed = measureSync(() =>
           buildReport({
             failures: failuresTimed.result,
@@ -185,6 +210,7 @@ export function createReportCommand(deps: ReportDeps = { cwd: () => process.cwd(
             },
             autoNoise: store.countAutoNoiseFailures(options.since),
             clusters,
+            repeat,
             workspaces: ws.all,
           }),
         );

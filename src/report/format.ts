@@ -41,8 +41,11 @@ export function formatText(report: Report): string {
   const noiseRate =
     report.noise.reviewRate === null ? 'n/a' : `${Math.round(report.noise.reviewRate * 100)}%`;
   const noiseLine = `Noise estimate: review-dismissed ${noiseRate} (${report.noise.sample.dismissed}/${report.noise.sample.confirmed + report.noise.sample.dismissed} reviewed), auto-noise ${report.noise.autoNoise}`;
+  const repeatRate =
+    report.repeat.repeatRate === null ? 'n/a' : `${Math.round(report.repeat.repeatRate * 100)}%`;
+  const repeatLine = `Repeat outcomes: ${report.repeat.repeatCount} repeat / ${report.repeat.newCount} new cluster keys (${repeatRate})`;
   if (report.total === 0 && report.changedRate.checked === 0) {
-    return `${header}\n${signalsLine}\n${noiseLine}\nNo failures recorded yet. Commit some code Claude Code wrote, then run this again.\n`;
+    return `${header}\n${signalsLine}\n${noiseLine}\n${repeatLine}\nNo failures recorded yet. Commit some code Claude Code wrote, then run this again.\n`;
   }
 
   const modules = report.byModule.slice(0, TOP_MODULES);
@@ -56,6 +59,7 @@ export function formatText(report: Report): string {
     reviewedLine(report.byStatus),
     signalsLine,
     noiseLine,
+    repeatLine,
     '',
     'By category',
     ...rows(Object.entries(report.byCategory)),
@@ -116,6 +120,13 @@ export function formatJson(report: Report): string {
         count: c.count,
         sample_paths: c.samplePaths,
       })),
+      repeat: {
+        repeat_count: report.repeat.repeatCount,
+        new_count: report.repeat.newCount,
+        repeat_rate: report.repeat.repeatRate,
+        baseline_since: report.repeat.baselineSince,
+        window_since: report.repeat.windowSince,
+      },
     },
     null,
     2,

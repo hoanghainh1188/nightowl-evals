@@ -4,6 +4,7 @@ import type { ReportNoise } from '../noise/types.js';
 import type { CheckCountRow, FailureCountRow } from '../storage/report-queries.js';
 import { moduleLabel } from '../workspace/label.js';
 import type { Workspace } from '../workspace/types.js';
+import { EMPTY_REPEAT, type RepeatOutcomes } from './repeat.js';
 import { isoWeek } from './week.js';
 
 export const UNCLASSIFIED = 'unclassified';
@@ -51,6 +52,7 @@ export interface Report {
   readonly signals: ReportSignals;
   readonly noise: ReportNoise;
   readonly clusters: readonly FailureCluster[];
+  readonly repeat: RepeatOutcomes;
 }
 
 export interface ReportInput {
@@ -63,6 +65,7 @@ export interface ReportInput {
   readonly signals?: ReportSignals;
   readonly autoNoise?: number;
   readonly clusters?: readonly FailureCluster[];
+  readonly repeat?: RepeatOutcomes;
   /** When set, module buckets use workspace package labels. */
   readonly workspaces?: readonly Workspace[];
 }
@@ -156,5 +159,6 @@ export function buildReport(input: ReportInput): Report {
       sample: Object.freeze({ confirmed, dismissed }),
     }),
     clusters: Object.freeze([...(input.clusters ?? [])]),
+    repeat: Object.freeze(input.repeat ?? EMPTY_REPEAT),
   });
 }

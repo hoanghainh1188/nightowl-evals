@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { redactPathsInReport } from '../../src/privacy/index.js';
 import type { Report } from '../../src/report/build.js';
+import { EMPTY_REPEAT } from '../../src/report/repeat.js';
 
 const base: Report = {
   generatedAt: '2026-11-12T12:00:00.000Z',
@@ -32,6 +33,7 @@ const base: Report = {
       samplePaths: ['src/hooks/git/run.ts'],
     },
   ],
+  repeat: EMPTY_REPEAT,
 };
 
 describe('redactPathsInReport', () => {
