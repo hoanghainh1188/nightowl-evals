@@ -24,6 +24,7 @@ function sampleReport(overrides: Partial<Report> = {}): Report {
       'missing-context': 0,
       unclassified: 1,
     },
+    byClassifierSource: { heuristic: 0, llm: 2, unclassified: 1 },
     bySource: { 'manual-fix': 3, 'ai-self-check': 0 },
     byStatus: { confirmed: 1, dismissed: 0, flagged: 2 },
     byAgent: { 'claude-code': 3 },

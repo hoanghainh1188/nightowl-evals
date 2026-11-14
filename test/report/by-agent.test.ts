@@ -9,8 +9,26 @@ describe('report by agent', () => {
       since: null,
       generatedAt: '2026-11-09T00:00:00.000Z',
       failures: [
-        { filePath: 'a.ts', category: 'logic', status: 'flagged', source: 'manual-fix', agent: 'cursor', day: '2026-11-09', count: 3 },
-        { filePath: 'b.ts', category: 'logic', status: 'flagged', source: 'manual-fix', agent: 'claude-code', day: '2026-11-09', count: 1 },
+        {
+          filePath: 'a.ts',
+          category: 'logic',
+          classifier: 'claude-code:haiku',
+          status: 'flagged',
+          source: 'manual-fix',
+          agent: 'cursor',
+          day: '2026-11-09',
+          count: 3,
+        },
+        {
+          filePath: 'b.ts',
+          category: 'logic',
+          classifier: 'claude-code:haiku',
+          status: 'flagged',
+          source: 'manual-fix',
+          agent: 'claude-code',
+          day: '2026-11-09',
+          count: 1,
+        },
       ],
       checks: [
         { day: '2026-11-09', outcome: 'failure', agent: 'cursor', filePath: null, count: 3 },

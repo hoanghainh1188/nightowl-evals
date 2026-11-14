@@ -31,6 +31,12 @@ export interface ReportSignals {
   readonly revert: number;
 }
 
+export interface ClassifierSourceCounts {
+  readonly heuristic: number;
+  readonly llm: number;
+  readonly unclassified: number;
+}
+
 export interface Report {
   readonly generatedAt: string;
   readonly since: string | null;
@@ -41,6 +47,7 @@ export interface Report {
   readonly dismissed: number;
   readonly changedRate: Rate;
   readonly byCategory: Readonly<Record<string, number>>;
+  readonly byClassifierSource: ClassifierSourceCounts;
   readonly bySource: Readonly<Record<string, number>>;
   // Dismissed included: how much of the review is done.
   readonly byStatus: Readonly<Record<string, number>>;
@@ -53,6 +60,12 @@ export interface Report {
   readonly noise: ReportNoise;
   readonly clusters: readonly FailureCluster[];
   readonly repeat: RepeatOutcomes;
+}
+
+function classifierSourceOf(category: string | null, classifier: string | null): keyof ClassifierSourceCounts {
+  if (category === null) return 'unclassified';
+  if (classifier !== null && classifier.startsWith('heuristic')) return 'heuristic';
+  return 'llm';
 }
 
 export interface ReportInput {
@@ -85,12 +98,18 @@ export function buildReport(input: ReportInput): Report {
   const byStatus = new Map<string, number>(STATUSES.map((name) => [name, 0]));
   for (const row of input.failures) add(byStatus, row.status, row.count);
   const byCategory = new Map<string, number>([...Object.keys(CATEGORIES), UNCLASSIFIED].map((name) => [name, 0]));
+  const byClassifierSource = new Map<string, number>([
+    ['heuristic', 0],
+    ['llm', 0],
+    ['unclassified', 0],
+  ]);
   const bySource = new Map<string, number>(SOURCES.map((name) => [name, 0]));
   const byAgent = new Map<string, number>();
   const byModule = new Map<string, number>();
   const recordedByWeek = new Map<string, number>();
   for (const row of counted) {
     add(byCategory, row.category ?? UNCLASSIFIED, row.count);
+    add(byClassifierSource, classifierSourceOf(row.category, row.classifier), row.count);
     add(bySource, row.source, row.count);
     add(byAgent, row.agent ?? 'unknown', row.count);
     add(byModule, moduleLabel(row.filePath, input.depth, input.workspaces ?? []), row.count);
@@ -127,6 +146,11 @@ export function buildReport(input: ReportInput): Report {
     dismissed,
     changedRate: rate(sum(failedByWeek), sum(checkedByWeek)),
     byCategory: Object.freeze(Object.fromEntries(byCategory)),
+    byClassifierSource: Object.freeze({
+      heuristic: byClassifierSource.get('heuristic') ?? 0,
+      llm: byClassifierSource.get('llm') ?? 0,
+      unclassified: byClassifierSource.get('unclassified') ?? 0,
+    }),
     bySource: Object.freeze(Object.fromEntries(bySource)),
     byStatus: Object.freeze(Object.fromEntries(byStatus)),
     byAgent: Object.freeze(Object.fromEntries([...byAgent].sort((a, b) => a[0].localeCompare(b[0])))),

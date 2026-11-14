@@ -13,6 +13,7 @@ const base: Report = {
   dismissed: 0,
   changedRate: { failures: 0, checked: 0, rate: null },
   byCategory: { logic: 1 },
+  byClassifierSource: { heuristic: 0, llm: 1, unclassified: 0 },
   bySource: { 'manual-fix': 1, 'ai-self-fix': 0 },
   byStatus: { confirmed: 0, dismissed: 0, flagged: 1 },
   byAgent: { 'claude-code': 1 },

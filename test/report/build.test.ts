@@ -38,10 +38,61 @@ const row = (
   status = 'flagged',
   source = 'manual-fix',
   agent: string | null = 'claude-code',
-): FailureCountRow => ({ filePath, category, status, source, agent, day, count });
+): FailureCountRow => ({ filePath, category, classifier: category === null ? null : 'claude-code:haiku', status, source, agent, day, count });
 
 describe('buildReport', () => {
   const base = { depth: 2, since: null, generatedAt: '2026-11-04T12:00:00.000Z' };
+
+  it('counts by classifier source (heuristic / llm / unclassified), excluding dismissed', () => {
+    const report = buildReport({
+      ...base,
+      failures: [
+        {
+          filePath: 'a.ts',
+          category: 'convention',
+          classifier: 'heuristic:whitespace-only',
+          status: 'flagged',
+          source: 'manual-fix',
+          agent: 'claude-code',
+          day: '2026-11-02',
+          count: 2,
+        },
+        {
+          filePath: 'b.ts',
+          category: 'logic',
+          classifier: 'claude-code:haiku',
+          status: 'flagged',
+          source: 'manual-fix',
+          agent: 'claude-code',
+          day: '2026-11-02',
+          count: 1,
+        },
+        {
+          filePath: 'c.ts',
+          category: null,
+          classifier: null,
+          status: 'flagged',
+          source: 'manual-fix',
+          agent: 'claude-code',
+          day: '2026-11-02',
+          count: 3,
+        },
+        {
+          filePath: 'd.ts',
+          category: 'convention',
+          classifier: 'heuristic:rename-identifier',
+          status: 'dismissed',
+          source: 'manual-fix',
+          agent: 'claude-code',
+          day: '2026-11-02',
+          count: 9,
+        },
+      ],
+      checks: [],
+    });
+    expect(report.byClassifierSource).toEqual({ heuristic: 2, llm: 1, unclassified: 3 });
+    expect(report.total).toBe(6);
+  });
 
   it('counts by category, module and week, without dismissed failures', () => {
     const report = buildReport({

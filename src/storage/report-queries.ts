@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 export interface FailureCountRow {
   readonly filePath: string;
   readonly category: string | null;
+  readonly classifier: string | null;
   readonly status: string;
   readonly source: string;
   readonly agent: string | null;
@@ -36,15 +37,16 @@ export function countFailuresForReport(db: DatabaseSync, filter: ReportQueryFilt
   const agents = agentsJson(filter.agents);
   const rows = db
     .prepare(
-      `SELECT file_path, category, status, source, agent, substr(created_at, 1, 10) AS day, COUNT(*) AS n
+      `SELECT file_path, category, classifier, status, source, agent, substr(created_at, 1, 10) AS day, COUNT(*) AS n
        FROM failures
        WHERE (? IS NULL OR created_at >= ?)
          AND (? IS NULL OR agent IN (SELECT value FROM json_each(?)))
-       GROUP BY file_path, category, status, source, agent, day ORDER BY day, file_path, source, agent`,
+       GROUP BY file_path, category, classifier, status, source, agent, day ORDER BY day, file_path, source, agent`,
     )
     .all(filter.since, filter.since, agents, agents) as unknown as Array<{
     file_path: string;
     category: string | null;
+    classifier: string | null;
     status: string;
     source: string;
     agent: string | null;
@@ -56,6 +58,7 @@ export function countFailuresForReport(db: DatabaseSync, filter: ReportQueryFilt
       Object.freeze({
         filePath: row.file_path,
         category: row.category,
+        classifier: row.classifier,
         status: row.status,
         source: row.source,
         agent: row.agent,

@@ -32,7 +32,11 @@ describe('nightowl classify', () => {
   });
   afterEach(() => repo.cleanup());
 
-  async function addFailures(count: number, prompt: string | null = 'add email validation'): Promise<number[]> {
+  async function addFailures(
+    count: number,
+    prompt: string | null = 'add email validation',
+    contents: { aiContent: string; finalContent: string } = { aiContent: 'ai\n', finalContent: 'dev\n' },
+  ): Promise<number[]> {
     const store = await openStore({ cwd: repo.path });
     try {
       const ids: number[] = [];
@@ -45,7 +49,15 @@ describe('nightowl classify', () => {
           {
             checkId: check.id,
             outcome: 'failure',
-            failures: [{ filePath: `f${i}.ts`, aiEventId: edit.id, promptEventId: promptId, aiContent: 'ai\n', finalContent: 'dev\n' }],
+            failures: [
+              {
+                filePath: `f${i}.ts`,
+                aiEventId: edit.id,
+                promptEventId: promptId,
+                aiContent: contents.aiContent,
+                finalContent: contents.finalContent,
+              },
+            ],
           },
         ]);
       }
@@ -91,6 +103,71 @@ describe('nightowl classify', () => {
     const code = await createClassifyCommand(d).run(args, fake.io);
     return { code, out: fake.out(), err: fake.err() };
   }
+
+  describe('--offline', () => {
+    const whitespace = { aiContent: 'const x = 1;\r\n', finalContent: 'const x = 1;\n' };
+
+    it('writes heuristic categories without --yes and without calling the model', async () => {
+      await addFailures(1, null, whitespace);
+      const result = await run(['--offline'], deps([answer('logic')]));
+      expect(result.code).toBe(0);
+      expect(result.out).toContain('Offline classified 1 of 1 failure');
+      expect(prompts).toEqual([]);
+      expect(rows()[0]).toMatchObject({
+        category: 'convention',
+        classifier: 'heuristic:whitespace-only',
+        classified_at: '2026-11-04T10:00:00.000Z',
+      });
+      expect(await readdir(join(repo.path, '.nightowl'))).not.toContain('classify.lock');
+    });
+
+    it('skips already classified failures unless --redo', async () => {
+      await addFailures(1, null, whitespace);
+      await run(['--offline'], deps([]));
+      const before = rows()[0];
+      expect((await run(['--offline'], deps([]))).out).toBe('No failures to classify.\n');
+      expect(rows()[0]).toEqual(before);
+      await run(['--offline', '--redo'], deps([]));
+      expect(rows()[0]?.classifier).toBe('heuristic:whitespace-only');
+    });
+
+    it('respects --limit', async () => {
+      await addFailures(3, null, whitespace);
+      await run(['--offline', '--limit', '2'], deps([]));
+      expect(rows().map((row) => row.category)).toEqual(['convention', 'convention', null]);
+    });
+
+    it('rejects --offline together with --yes', async () => {
+      await addFailures(1, null, whitespace);
+      const result = await run(['--offline', '--yes'], deps([answer('logic')]));
+      expect(result.code).toBe(1);
+      expect(result.err).toContain('use either --offline or --yes');
+      expect(prompts).toEqual([]);
+      expect(rows()[0]?.category).toBeNull();
+    });
+
+    it('leaves unmatched failures unclassified and exits 0', async () => {
+      await addFailures(1, null, { aiContent: 'return a - b;\n', finalContent: 'return a + b;\n' });
+      const result = await run(['--offline'], deps([]));
+      expect(result.code).toBe(0);
+      expect(result.out).toContain('Offline classified 0 of 1 failure (1 unmatched)');
+      expect(rows()[0]?.category).toBeNull();
+    });
+
+    it('needs nightowl init and creates nothing', async () => {
+      const result = await run(['--offline'], deps([]));
+      expect(result.code).toBe(1);
+      expect(result.err).toContain('nightowl init');
+      expect(await readdir(repo.path)).toEqual(['.git']);
+    });
+  });
+
+  it('mentions --offline and that LLM needs --yes in help', () => {
+    const help = createClassifyCommand().help;
+    expect(help).toContain('--offline');
+    expect(help).toMatch(/--yes/);
+    expect(help).toMatch(/opt-in|needs --yes|LLM/i);
+  });
 
   describe('without --yes', () => {
     it('lists what would be sent, sends nothing and changes nothing', async () => {

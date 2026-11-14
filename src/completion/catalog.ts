@@ -86,7 +86,7 @@ export const COMMAND_FLAGS: Readonly<Record<string, readonly string[]>> = Object
   postcommit: [],
   prune: ['--days', '--profile', '--dry-run', '--vacuum', '--config'],
   failures: [],
-  classify: ['--yes', '--transport', '--limit', '--model', '--redo'],
+  classify: ['--offline', '--yes', '--transport', '--limit', '--model', '--redo'],
   eval: [
     '--yes',
     '--input',

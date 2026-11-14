@@ -44,8 +44,10 @@ export function formatText(report: Report): string {
   const repeatRate =
     report.repeat.repeatRate === null ? 'n/a' : `${Math.round(report.repeat.repeatRate * 100)}%`;
   const repeatLine = `Repeat outcomes: ${report.repeat.repeatCount} repeat / ${report.repeat.newCount} new cluster keys (${repeatRate})`;
+  const src = report.byClassifierSource;
+  const classifierLine = `Classifier source: heuristic ${src.heuristic}, llm ${src.llm}, unclassified ${src.unclassified}`;
   if (report.total === 0 && report.changedRate.checked === 0) {
-    return `${header}\n${signalsLine}\n${noiseLine}\n${repeatLine}\nNo failures recorded yet. Commit some code Claude Code wrote, then run this again.\n`;
+    return `${header}\n${signalsLine}\n${noiseLine}\n${repeatLine}\n${classifierLine}\nNo failures recorded yet. Commit some code Claude Code wrote, then run this again.\n`;
   }
 
   const modules = report.byModule.slice(0, TOP_MODULES);
@@ -60,9 +62,17 @@ export function formatText(report: Report): string {
     signalsLine,
     noiseLine,
     repeatLine,
+    classifierLine,
     '',
     'By category',
     ...rows(Object.entries(report.byCategory)),
+    '',
+    'By classifier source',
+    ...rows([
+      ['heuristic', src.heuristic],
+      ['llm', src.llm],
+      ['unclassified', src.unclassified],
+    ]),
     '',
     'By source',
     ...rows(Object.entries(report.bySource)),
@@ -98,6 +108,7 @@ export function formatJson(report: Report): string {
       dismissed: report.dismissed,
       changed_rate: report.changedRate,
       by_category: report.byCategory,
+      by_classifier_source: report.byClassifierSource,
       by_source: report.bySource,
       by_status: report.byStatus,
       by_agent: report.byAgent,

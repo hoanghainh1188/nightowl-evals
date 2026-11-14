@@ -7,6 +7,7 @@ const base = { depth: 2, since: null, generatedAt: '2026-11-04T12:00:00.000Z' };
 const row = (filePath: string, category: string | null, day: string, count = 1): FailureCountRow => ({
   filePath,
   category,
+  classifier: category === null ? null : 'claude-code:haiku',
   status: 'flagged',
   source: 'manual-fix',
   agent: 'claude-code',
@@ -74,6 +75,7 @@ describe('formatJson', () => {
       'dismissed',
       'changed_rate',
       'by_category',
+      'by_classifier_source',
       'by_source',
       'by_status',
       'by_agent',
